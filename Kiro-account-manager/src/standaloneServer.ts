@@ -75,6 +75,9 @@ const server = new ProxyServer(config, {
         // We already authenticated via API Key since onCustomRoute runs AFTER auth in proxyServer.ts
         const regConfig: Partial<RegistrationConfig> = {
           useTempMailPlus: true,
+          tempMailPlusEmail: Math.random().toString(36).substring(2, 12),
+          tempMailPlusEpin: '123456789',
+          tempMailPlusDomain: 'mailto.plus',
           useGptMail: false
         }
         
