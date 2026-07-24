@@ -205,93 +205,93 @@ const server = new ProxyServer(config, {
   }
 })
 
-// Load accounts
-const pool = server.getAccountPool()
-let loadedAccountsCount = 0
+import { initDB, getAllAccountsFromDB, bulkUpsertAccountsToDB } from './main/proxy/db'
 
-if (ACCOUNTS_JSON) {
+// Start server function
+async function bootstrap() {
+  // Initialize Database
+  const dbEnabled = await initDB()
+  
+  // Load accounts
+  const pool = server.getAccountPool()
+  let loadedAccountsCount = 0
+
+  if (dbEnabled) {
+    const dbAccounts = await getAllAccountsFromDB()
+    for (const acc of dbAccounts) {
+      pool.addAccount(acc)
+      loadedAccountsCount++
+    }
+    console.log(`[Accounts] Loaded ${loadedAccountsCount} accounts from PostgreSQL Database`)
+  }
+  
+  // Seed DB / Pool from JSON if DB was empty or not enabled
+  if (loadedAccountsCount === 0) {
+    const seedAccounts = []
+    if (ACCOUNTS_JSON) {
+      try {
+        let parsed = JSON.parse(ACCOUNTS_JSON) as any
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) parsed = parsed.accounts
+        const accounts = Array.isArray(parsed) ? parsed : [parsed]
+        for (const rawAcc of accounts) {
+          const credentials = rawAcc.credentials || {}
+          seedAccounts.push({
+            id: rawAcc.id, email: rawAcc.email, accessToken: credentials.accessToken || rawAcc.accessToken,
+            refreshToken: credentials.refreshToken || rawAcc.refreshToken, clientId: credentials.clientId || rawAcc.clientId,
+            clientSecret: credentials.clientSecret || rawAcc.clientSecret, region: credentials.region || rawAcc.region,
+            authMethod: credentials.authMethod || rawAcc.authMethod, provider: credentials.provider || rawAcc.provider,
+            expiresAt: credentials.expiresAt || rawAcc.expiresAt, machineId: rawAcc.machineId
+          })
+        }
+      } catch (err) {}
+    }
+    if (seedAccounts.length === 0 && fs.existsSync(ACCOUNTS_FILE)) {
+      try {
+        const content = fs.readFileSync(ACCOUNTS_FILE, 'utf-8')
+        let parsed = JSON.parse(content) as any
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) parsed = parsed.accounts
+        const accounts = Array.isArray(parsed) ? parsed : [parsed]
+        for (const rawAcc of accounts) {
+          const credentials = rawAcc.credentials || {}
+          seedAccounts.push({
+            id: rawAcc.id, email: rawAcc.email, accessToken: credentials.accessToken || rawAcc.accessToken,
+            refreshToken: credentials.refreshToken || rawAcc.refreshToken, clientId: credentials.clientId || rawAcc.clientId,
+            clientSecret: credentials.clientSecret || rawAcc.clientSecret, region: credentials.region || rawAcc.region,
+            authMethod: credentials.authMethod || rawAcc.authMethod, provider: credentials.provider || rawAcc.provider,
+            expiresAt: credentials.expiresAt || rawAcc.expiresAt, machineId: rawAcc.machineId
+          })
+        }
+      } catch (err) {}
+    }
+    
+    if (seedAccounts.length > 0) {
+      if (dbEnabled) {
+        await bulkUpsertAccountsToDB(seedAccounts as any)
+      }
+      for (const acc of seedAccounts) {
+        if (acc.id && acc.accessToken) {
+          pool.addAccount(acc as any)
+          loadedAccountsCount++
+        }
+      }
+      console.log(`[Accounts] Seeded ${loadedAccountsCount} accounts from JSON file/env`)
+    } else {
+      console.warn('[Accounts] WARNING: No accounts loaded! Database is empty and no JSON source found.')
+    }
+  }
+
+  // Start HTTP Proxy Server
   try {
-    let parsed = JSON.parse(ACCOUNTS_JSON) as any
-    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) {
-      parsed = parsed.accounts
-    }
-    const accounts = Array.isArray(parsed) ? parsed : [parsed]
-    for (const rawAcc of accounts) {
-      // Map GUI Account format to ProxyAccount format if needed
-      const credentials = rawAcc.credentials || {}
-      const acc = {
-        id: rawAcc.id,
-        email: rawAcc.email,
-        accessToken: credentials.accessToken || rawAcc.accessToken,
-        refreshToken: credentials.refreshToken || rawAcc.refreshToken,
-        clientId: credentials.clientId || rawAcc.clientId,
-        clientSecret: credentials.clientSecret || rawAcc.clientSecret,
-        region: credentials.region || rawAcc.region,
-        authMethod: credentials.authMethod || rawAcc.authMethod,
-        provider: credentials.provider || rawAcc.provider,
-        expiresAt: credentials.expiresAt || rawAcc.expiresAt,
-        machineId: rawAcc.machineId
-      }
-      
-      if (acc.id && acc.accessToken) {
-        pool.addAccount(acc)
-        loadedAccountsCount++
-      }
-    }
-    console.log(`[Accounts] Loaded ${loadedAccountsCount} accounts from ACCOUNTS_JSON env variable`)
+    await server.start()
+    console.log(`\n✅ Kiro Proxy Headless Server running on http://${HOST}:${PORT}`)
+    console.log(`Health check: http://${HOST}:${PORT}/health\n`)
   } catch (err) {
-    console.error('[Accounts] Failed to parse ACCOUNTS_JSON:', err)
+    console.error('❌ Failed to start Proxy Server:', err)
+    process.exit(1)
   }
 }
 
-if (loadedAccountsCount === 0 && fs.existsSync(ACCOUNTS_FILE)) {
-  try {
-    const content = fs.readFileSync(ACCOUNTS_FILE, 'utf-8')
-    let parsed = JSON.parse(content) as any
-    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) {
-      parsed = parsed.accounts
-    }
-    const accounts = Array.isArray(parsed) ? parsed : [parsed]
-    for (const rawAcc of accounts) {
-      // Map GUI Account format to ProxyAccount format if needed
-      const credentials = rawAcc.credentials || {}
-      const acc = {
-        id: rawAcc.id,
-        email: rawAcc.email,
-        accessToken: credentials.accessToken || rawAcc.accessToken,
-        refreshToken: credentials.refreshToken || rawAcc.refreshToken,
-        clientId: credentials.clientId || rawAcc.clientId,
-        clientSecret: credentials.clientSecret || rawAcc.clientSecret,
-        region: credentials.region || rawAcc.region,
-        authMethod: credentials.authMethod || rawAcc.authMethod,
-        provider: credentials.provider || rawAcc.provider,
-        expiresAt: credentials.expiresAt || rawAcc.expiresAt,
-        machineId: rawAcc.machineId
-      }
-      
-      if (acc.id && acc.accessToken) {
-        pool.addAccount(acc)
-        loadedAccountsCount++
-      }
-    }
-    console.log(`[Accounts] Loaded ${loadedAccountsCount} accounts from ${ACCOUNTS_FILE}`)
-  } catch (err) {
-    console.error(`[Accounts] Failed to read ${ACCOUNTS_FILE}:`, err)
-  }
-}
-
-if (loadedAccountsCount === 0) {
-  console.warn('[Accounts] WARNING: No accounts loaded! Set ACCOUNTS_JSON env or create accounts.json file.')
-}
-
-// Start HTTP Proxy Server
-server.start().then(() => {
-  console.log(`\n✅ Kiro Proxy Headless Server running on http://${HOST}:${PORT}`)
-  console.log(`Health check: http://${HOST}:${PORT}/health\n`)
-}).catch((err) => {
-  console.error('❌ Failed to start Proxy Server:', err)
-  process.exit(1)
-})
+bootstrap()
 
 // Handle process signals for graceful shutdown
 const shutdown = async () => {

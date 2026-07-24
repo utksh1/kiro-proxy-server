@@ -1,7 +1,7 @@
 // 多账号智能轮询管理器
 // 参考 Kiro Gateway 的 Circuit Breaker + Sticky + 指数退避 + 概率重试机制
 import type { ProxyAccount, AccountStats } from './types'
-
+import { upsertAccountToDB, deleteAccountFromDB } from './db'
 // 错误类型分类（决定 failover 策略）
 export enum ErrorType {
   FATAL = 'fatal',           // 请求本身有问题 → 直接返回客户端，不切号
@@ -96,6 +96,8 @@ export class AccountPool {
     } else {
       console.log(`[AccountPool] Added account: ${account.email || account.id}`)
     }
+    // Sync to DB
+    upsertAccountToDB(this.accounts.get(account.id)!).catch(e => console.error(e))
   }
 
   // 移除账号
@@ -103,13 +105,16 @@ export class AccountPool {
     this.accounts.delete(accountId)
     this.accountStats.delete(accountId)
     console.log(`[AccountPool] Removed account: ${accountId}`)
+    deleteAccountFromDB(accountId).catch(e => console.error(e))
   }
 
   // 更新账号
   updateAccount(accountId: string, updates: Partial<ProxyAccount>): void {
     const account = this.accounts.get(accountId)
     if (account) {
-      this.accounts.set(accountId, { ...account, ...updates })
+      const updated = { ...account, ...updates }
+      this.accounts.set(accountId, updated)
+      upsertAccountToDB(updated).catch(e => console.error(e))
     }
   }
 
@@ -257,13 +262,15 @@ export class AccountPool {
       // 已标记过同样原因，不重复记录
       return false
     }
-    this.accounts.set(accountId, {
+    const updated = {
       ...account,
       suspendedAt: Date.now(),
       suspendReason: reason,
       suspendMessage: message,
       isAvailable: false
-    })
+    }
+    this.accounts.set(accountId, updated)
+    upsertAccountToDB(updated).catch(e => console.error(e))
     console.warn(`[AccountPool] Account ${account.email || accountId} SUSPENDED (${reason})`)
     return true
   }
@@ -279,7 +286,9 @@ export class AccountPool {
       suspendMessage: undefined,
       isAvailable: true,
       errorCount: 0
-    })
+    }
+    this.accounts.set(accountId, updated)
+    upsertAccountToDB(updated).catch(e => console.error(e))
     console.log(`[AccountPool] Account ${account.email || accountId} unsuspended`)
   }
 
@@ -394,13 +403,15 @@ export class AccountPool {
 
     console.log(`[AccountPool] Account ${account.email || accountId} failure #${errorCount}: status=${statusCode || '?'}, cooldown=${cooldownStr}`)
 
-    this.accounts.set(accountId, {
+    const updated = {
       ...account,
       errorCount,
       quotaExhaustedAt,
       quotaResetAt,
       lastUsed: now
-    })
+    }
+    this.accounts.set(accountId, updated)
+    upsertAccountToDB(updated).catch(e => console.error(e))
   }
 
   // 更新账号配额信息
@@ -409,14 +420,16 @@ export class AccountPool {
     if (!account) return
 
     const wasExhausted = this.isQuotaExhausted(account)
-    this.accounts.set(accountId, {
+    const updated = {
       ...account,
       quotaUsed: used,
       quotaLimit: limit,
       quotaResetAt: resetAt,
       // 如果配额从耗尽恢复，清除耗尽标记
       quotaExhaustedAt: (used < limit) ? undefined : account.quotaExhaustedAt
-    })
+    }
+    this.accounts.set(accountId, updated)
+    upsertAccountToDB(updated).catch(e => console.error(e))
 
     if (!wasExhausted && used >= limit) {
       console.log(`[AccountPool] Account ${account.email || accountId} quota reached: ${used}/${limit}`)
@@ -450,10 +463,12 @@ export class AccountPool {
   markNeedsRefresh(accountId: string): void {
     const account = this.accounts.get(accountId)
     if (account) {
-      this.accounts.set(accountId, {
+      const updated = {
         ...account,
         isAvailable: false
-      })
+      }
+      this.accounts.set(accountId, updated)
+      upsertAccountToDB(updated).catch(e => console.error(e))
     }
   }
 
@@ -482,7 +497,7 @@ export class AccountPool {
   // 重置所有账号状态（含封禁标记 — 手动重置表示用户已确认可用）
   reset(): void {
     for (const [id, account] of this.accounts) {
-      this.accounts.set(id, {
+      const updated = {
         ...account,
         isAvailable: true,
         errorCount: 0,
@@ -491,7 +506,9 @@ export class AccountPool {
         suspendedAt: undefined,
         suspendReason: undefined,
         suspendMessage: undefined
-      })
+      }
+      this.accounts.set(id, updated)
+      upsertAccountToDB(updated).catch(e => console.error(e))
     }
     this.currentIndex = 0
   }

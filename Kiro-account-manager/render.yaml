@@ -1,6 +1,13 @@
+databases:
+  - name: kiro-db
+    plan: free
+    databaseName: kiro
+    user: kiro
+
 services:
   - type: web
     name: kiro-proxy-server
+    rootDir: Kiro-account-manager
     runtime: node
     buildCommand: "npm install && npm run build:server"
     startCommand: npm run start:server
@@ -12,3 +19,7 @@ services:
         generateValue: true
       - key: NODE_VERSION
         value: "20"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kiro-db
+          property: connectionString
