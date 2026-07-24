@@ -74,15 +74,11 @@ const server = new ProxyServer(config, {
         const region = account.region || 'us-east-1'
         const url = `https://oidc.${region}.amazonaws.com/token`
         const body: Record<string, string> = {
-          grant_type: 'refresh_token',
           grantType: 'refresh_token',
-          client_id: account.clientId,
           clientId: account.clientId,
-          refresh_token: account.refreshToken,
           refreshToken: account.refreshToken
         }
         if (account.clientSecret) {
-          body.client_secret = account.clientSecret
           body.clientSecret = account.clientSecret
         }
         
@@ -94,12 +90,12 @@ const server = new ProxyServer(config, {
         
         const data = await response.json() as any
         
-        if (response.ok && (data.access_token || data.accessToken)) {
+        if (response.ok && data.accessToken) {
           return {
             success: true,
-            accessToken: data.access_token || data.accessToken,
-            refreshToken: data.refresh_token || data.refreshToken || account.refreshToken,
-            expiresAt: Date.now() + ((data.expires_in || data.expiresIn) * 1000)
+            accessToken: data.accessToken,
+            refreshToken: data.refreshToken || account.refreshToken,
+            expiresAt: Date.now() + (data.expiresIn * 1000)
           }
         } else {
           return { success: false, error: data.error_description || data.message || 'OIDC refresh failed' }
