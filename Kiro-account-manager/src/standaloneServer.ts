@@ -67,7 +67,45 @@ const server = new ProxyServer(config, {
   },
   onTokenRefresh: async (account) => {
     console.log(`[Token Refresh] Refreshing token for account: ${account.id}`)
-    return { success: false, error: 'Automatic refresh not configured in headless mode without refresh secrets' }
+    
+    // Support AWS Builder ID / IdC token refresh natively
+    if (account.refreshToken && account.clientId) {
+      try {
+        const region = account.region || 'us-east-1'
+        const url = `https://oidc.${region}.amazonaws.com/token`
+        const body: Record<string, string> = {
+          grant_type: 'refresh_token',
+          client_id: account.clientId,
+          refresh_token: account.refreshToken
+        }
+        if (account.clientSecret) {
+          body.client_secret = account.clientSecret
+        }
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        })
+        
+        const data = await response.json() as any
+        
+        if (response.ok && data.access_token) {
+          return {
+            success: true,
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token || account.refreshToken,
+            expiresAt: Date.now() + (data.expires_in * 1000)
+          }
+        } else {
+          return { success: false, error: data.error_description || data.message || 'OIDC refresh failed' }
+        }
+      } catch (err: any) {
+        return { success: false, error: err.message }
+      }
+    }
+
+    return { success: false, error: 'Automatic refresh not configured or missing refresh token / client ID' }
   }
 })
 
