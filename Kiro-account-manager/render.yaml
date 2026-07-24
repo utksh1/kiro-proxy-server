@@ -2,7 +2,7 @@ services:
   - type: web
     name: kiro-proxy-server
     runtime: node
-    buildCommand: npm run build:server
+    buildCommand: "npm install && npm run build:server"
     startCommand: npm run start:server
     healthCheckPath: /health
     envVars:
@@ -10,3 +10,5 @@ services:
         value: "0.0.0.0"
       - key: PROXY_API_KEY
         generateValue: true
+      - key: NODE_VERSION
+        value: "20"
