@@ -921,8 +921,7 @@ export function buildKiroPayload(
   images: KiroImage[] = [],
   profileArn?: string,
   inferenceConfig?: { maxTokens?: number; temperature?: number; topP?: number },
-  messageOptions?: { cachePoint?: KiroCachePoint | undefined; clientCacheConfig?: unknown; documents?: KiroDocument[]; conversationId?: string; context?: KiroRequestContext },
-  additionalModelRequestFields?: Record<string, unknown>
+  messageOptions?: { cachePoint?: KiroCachePoint | undefined; clientCacheConfig?: unknown; documents?: KiroDocument[]; conversationId?: string; context?: KiroRequestContext }
 ): KiroPayload {
   // 构建当前消息
   const finalContent = content.trim() || (toolResults.length > 0 ? '' : 'Continue')
@@ -1037,10 +1036,6 @@ export function buildKiroPayload(
     }
   }
 
-  // additionalModelRequestFields（thinking 等模型级参数）
-  if (additionalModelRequestFields && Object.keys(additionalModelRequestFields).length > 0) {
-    payload.additionalModelRequestFields = additionalModelRequestFields
-  }
 
   // ====== 第一阶段：按 token 估算成对裁剪旧 history ======
   // 避免 Kiro 后端 CONTENT_LENGTH_EXCEEDS_THRESHOLD（token 维度的拒绝）
@@ -1097,7 +1092,6 @@ export function buildKiroPayload(
     toolsCount: tools.length,
     toolResultsCount: toolResults.length,
     hasProfileArn: payload.profileArn !== undefined,
-    hasThinking: !!additionalModelRequestFields?.thinking,
     payloadSize: initialPayloadSize
   })
 
@@ -1514,6 +1508,111 @@ async function parseEventStream(
   const leakedTools: Array<{ name: string; input: Record<string, unknown> }> = []
   const seenToolSigs = new Set<string>()
   let leakIdCounter = 0
+
+  // Thinking tag parser state for <thinking>...</thinking> or <think>...</think> in text stream
+  const MAX_TAG_LEN = 10 // length of <thinking>
+  let activeThinkingEnd = '</thinking>'
+  let thinkingBuffer = ''
+  let inThinkingBlock = false
+  let thinkingExtracted = false
+
+  // Process text that may contain <thinking> tags, routing thinking content
+  // through onChunk with isThinking=true
+  const emitWithThinkingParse = async (text: string): Promise<void> => {
+    if (!text) return
+    thinkingBuffer += text
+
+    while (thinkingBuffer.length > 0) {
+      if (!inThinkingBlock && !thinkingExtracted) {
+        let startPos = thinkingBuffer.indexOf('<thinking>')
+        let activeStart = '<thinking>'
+        
+        const altStartPos = thinkingBuffer.indexOf('<think>')
+        if (altStartPos !== -1 && (startPos === -1 || altStartPos < startPos)) {
+          startPos = altStartPos
+          activeStart = '<think>'
+          activeThinkingEnd = '</think>'
+        }
+
+        if (startPos !== -1) {
+          // Emit text before tag as regular text
+          const before = thinkingBuffer.slice(0, startPos).trim()
+          if (before) {
+            await onChunk(before)
+            totalOutputChars += before.length
+            collectedOutputText += before
+          }
+          thinkingBuffer = thinkingBuffer.slice(startPos + activeStart.length)
+          inThinkingBlock = true
+          // Strip leading newline after tag
+          if (thinkingBuffer.startsWith('\n')) {
+            thinkingBuffer = thinkingBuffer.slice(1)
+          }
+          continue
+        }
+        // No tag found yet; hold back enough chars in case tag spans chunks
+        const safeLen = Math.max(0, thinkingBuffer.length - MAX_TAG_LEN)
+        if (safeLen > 0) {
+          const safe = thinkingBuffer.slice(0, safeLen)
+          thinkingBuffer = thinkingBuffer.slice(safeLen)
+          await onChunk(safe)
+          totalOutputChars += safe.length
+          collectedOutputText += safe
+        }
+        break // Wait for more data
+      }
+
+      if (inThinkingBlock) {
+        const endPos = thinkingBuffer.indexOf(activeThinkingEnd)
+        if (endPos !== -1) {
+          // Found end of thinking block
+          const thinkingContent = thinkingBuffer.slice(0, endPos)
+          if (thinkingContent.trim()) {
+            proxyLogger.info('Kiro', `Parsed ${activeThinkingEnd} tag content (${thinkingContent.length} chars)`)
+            await onChunk(thinkingContent, undefined, true)
+            totalOutputChars += thinkingContent.length
+          }
+          thinkingBuffer = thinkingBuffer.slice(endPos + activeThinkingEnd.length)
+          inThinkingBlock = false
+          thinkingExtracted = true
+          // Strip leading newlines after end tag
+          thinkingBuffer = thinkingBuffer.replace(/^\n{1,2}/, '')
+          continue
+        }
+        // No end tag yet; emit thinking content so far (keep enough for end tag detection)
+        const safeLen = Math.max(0, thinkingBuffer.length - activeThinkingEnd.length)
+        if (safeLen > 0) {
+          const safe = thinkingBuffer.slice(0, safeLen)
+          thinkingBuffer = thinkingBuffer.slice(safeLen)
+          await onChunk(safe, undefined, true)
+          totalOutputChars += safe.length
+        }
+        break // Wait for more data
+      }
+
+      // thinkingExtracted is true, no more thinking expected, just emit as text
+      await onChunk(thinkingBuffer)
+      totalOutputChars += thinkingBuffer.length
+      collectedOutputText += thinkingBuffer
+      thinkingBuffer = ''
+      break
+    }
+  }
+
+  // Flush remaining thinking buffer at end of stream
+  const flushThinkingBuffer = async (): Promise<void> => {
+    if (thinkingBuffer) {
+      if (inThinkingBlock) {
+        // Unclosed thinking block - emit as thinking
+        await onChunk(thinkingBuffer, undefined, true)
+      } else {
+        await onChunk(thinkingBuffer)
+        collectedOutputText += thinkingBuffer
+      }
+      totalOutputChars += thinkingBuffer.length
+      thinkingBuffer = ''
+    }
+  }
   const toolSig = (name: string, input: Record<string, unknown>): string => {
     const sortedKeys = Object.keys(input).sort()
     const norm: Record<string, unknown> = {}
@@ -1572,9 +1671,7 @@ async function parseEventStream(
   const filterToolLeak = async (isFlush: boolean): Promise<void> => {
     const emit = async (s: string): Promise<void> => {
       if (!s) return
-      await onChunk(s)
-      totalOutputChars += s.length
-      collectedOutputText += s
+      await emitWithThinkingParse(s)
     }
     // 提取所有已闭合的 invoke
     for (;;) {
@@ -1693,9 +1790,7 @@ async function parseEventStream(
                   // 回退：原逐帧 <tool_use> 过滤
                   const stripped = content.replace(/<tool_use\b[^>]*>[\s\S]*?<\/tool_use>/g, '').trim()
                   if (stripped) {
-                    await onChunk(stripped)
-                    totalOutputChars += stripped.length
-                    collectedOutputText += stripped
+                    await emitWithThinkingParse(stripped)
                   }
                 }
               }
@@ -1714,9 +1809,7 @@ async function parseEventStream(
                 } else {
                   const stripped = content.replace(/<tool_use\b[^>]*>[\s\S]*?<\/tool_use>/g, '').trim()
                   if (stripped) {
-                    await onChunk(stripped)
-                    totalOutputChars += stripped.length
-                    collectedOutputText += stripped
+                    await emitWithThinkingParse(stripped)
                   }
                 }
               }
@@ -2088,6 +2181,8 @@ async function parseEventStream(
     if (toolLeakFixEnabled) {
       try { await filterToolLeak(true) } catch { /* ignore */ }
     }
+    // Flush any remaining thinking buffer
+    try { await flushThinkingBuffer() } catch { /* ignore */ }
 
     // 完成任何未完成的 tool use
     if (currentToolUse && !processedIds.has(currentToolUse.toolUseId)) {
