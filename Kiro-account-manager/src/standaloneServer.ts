@@ -82,7 +82,23 @@ if (ACCOUNTS_JSON) {
       parsed = parsed.accounts
     }
     const accounts = Array.isArray(parsed) ? parsed : [parsed]
-    for (const acc of accounts) {
+    for (const rawAcc of accounts) {
+      // Map GUI Account format to ProxyAccount format if needed
+      const credentials = rawAcc.credentials || {}
+      const acc = {
+        id: rawAcc.id,
+        email: rawAcc.email,
+        accessToken: credentials.accessToken || rawAcc.accessToken,
+        refreshToken: credentials.refreshToken || rawAcc.refreshToken,
+        clientId: credentials.clientId || rawAcc.clientId,
+        clientSecret: credentials.clientSecret || rawAcc.clientSecret,
+        region: credentials.region || rawAcc.region,
+        authMethod: credentials.authMethod || rawAcc.authMethod,
+        provider: credentials.provider || rawAcc.provider,
+        expiresAt: credentials.expiresAt || rawAcc.expiresAt,
+        machineId: rawAcc.machineId
+      }
+      
       if (acc.id && acc.accessToken) {
         pool.addAccount(acc)
         loadedAccountsCount++
@@ -102,7 +118,23 @@ if (loadedAccountsCount === 0 && fs.existsSync(ACCOUNTS_FILE)) {
       parsed = parsed.accounts
     }
     const accounts = Array.isArray(parsed) ? parsed : [parsed]
-    for (const acc of accounts) {
+    for (const rawAcc of accounts) {
+      // Map GUI Account format to ProxyAccount format if needed
+      const credentials = rawAcc.credentials || {}
+      const acc = {
+        id: rawAcc.id,
+        email: rawAcc.email,
+        accessToken: credentials.accessToken || rawAcc.accessToken,
+        refreshToken: credentials.refreshToken || rawAcc.refreshToken,
+        clientId: credentials.clientId || rawAcc.clientId,
+        clientSecret: credentials.clientSecret || rawAcc.clientSecret,
+        region: credentials.region || rawAcc.region,
+        authMethod: credentials.authMethod || rawAcc.authMethod,
+        provider: credentials.provider || rawAcc.provider,
+        expiresAt: credentials.expiresAt || rawAcc.expiresAt,
+        machineId: rawAcc.machineId
+      }
+      
       if (acc.id && acc.accessToken) {
         pool.addAccount(acc)
         loadedAccountsCount++
