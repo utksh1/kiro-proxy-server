@@ -1,4 +1,4 @@
-// Kiro Proxy HTTP/HTTPS 服务器
+// Kiro Proxy HTTP/HTTPS Server
 import http from 'http'
 import https from 'https'
 import fs from 'fs'
@@ -41,17 +41,17 @@ export interface ProxyServerEvents {
   onRequest?: (info: { path: string; method: string; accountId?: string }) => void
   onResponse?: (info: { path: string; model?: string; status: number; tokens?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; reasoningTokens?: number; credits?: number; responseTime?: number; error?: string }) => void
   onError?: (error: Error) => void
-  onConfigChanged?: (config: ProxyConfig) => void  // API Key 用量更新时触发
+  onConfigChanged?: (config: ProxyConfig) => void  // Triggered when API Key usage is updated
   onStatusChange?: (running: boolean, port: number) => void
   onTokenRefresh?: TokenRefreshCallback
   onAccountUpdate?: (account: ProxyAccount) => void
-  // 账号被 Kiro 后端长期封禁（如 TEMPORARILY_SUSPENDED / AccountSuspendedException）
-  // 不同于临时 token 失效，需人工解封
+  // Account is long-term suspended by Kiro backend (e.g. TEMPORARILY_SUSPENDED / AccountSuspendedException)
+  // Different from temporary token expiry, requires manual unsuspension
   onAccountSuspended?: (info: { accountId: string; email?: string; reason: string; message: string }) => void
   onCreditsUpdate?: (totalCredits: number) => void
   onTokensUpdate?: (inputTokens: number, outputTokens: number) => void
   onRequestStatsUpdate?: (totalRequests: number, successRequests: number, failedRequests: number) => void
-  onPoolEmpty?: () => Promise<void> // 账号池为空时触发（冷启动懒加载）
+  onPoolEmpty?: () => Promise<void> // Triggered when the account pool is empty (cold start lazy loading)
 }
 
 type ModelModality = 'text' | 'audio' | 'image' | 'video' | 'pdf'
@@ -92,7 +92,7 @@ type ClientModel = {
   rateUnit?: string
   supportsThinking?: boolean
   thinkingEfforts?: string[]
-  thinkingSchemaPath?: 'output_config' | 'reasoning'
+  thinkingSchemaPath?: 'output_config' | 'reasoning' | 'default'
   supportsPromptCaching?: boolean
   modelProvider?: string
   permission: unknown[]
@@ -151,11 +151,11 @@ function modelCapabilityMap(modalities: ModelModality[]): Record<ModelModality, 
   }
 }
 
-function extractThinkingSchema(schema?: Record<string, unknown> | null): { efforts?: string[]; schemaPath?: 'output_config' | 'reasoning' } | undefined {
+function extractThinkingSchema(schema?: Record<string, unknown> | null): { efforts?: string[]; schemaPath?: 'output_config' | 'reasoning' | 'default' } | undefined {
   if (!schema) return undefined
   const props = schema.properties as Record<string, unknown> | undefined
   if (!props) return undefined
-  // output_config 路径（Claude 4.6+ 新模型）
+  // output_config path(Claude 4.6+ new model)
   if (props.output_config) {
     const effortField = (props.output_config as Record<string, unknown>)?.properties as Record<string, unknown> | undefined
     const effortEnum = (effortField?.effort as Record<string, unknown> | undefined)?.enum as string[] | undefined
@@ -163,13 +163,17 @@ function extractThinkingSchema(schema?: Record<string, unknown> | null): { effor
       return { efforts: effortEnum, schemaPath: 'output_config' }
     }
   }
-  // reasoning 路径（备用）
+  // reasoning path (alternative)
   if (props.reasoning) {
     const reasoningProps = (props.reasoning as Record<string, unknown>)?.properties as Record<string, unknown> | undefined
     const effortEnum = (reasoningProps?.effort as Record<string, unknown> | undefined)?.enum as string[] | undefined
     if (effortEnum && effortEnum.length > 0) {
       return { efforts: effortEnum, schemaPath: 'reasoning' }
     }
+  }
+  // fallback for models with thinking or output_config without effort enum
+  if (props.thinking || props.output_config) {
+    return { efforts: ['low', 'medium', 'high', 'xhigh'], schemaPath: 'default' }
   }
   return undefined
 }
@@ -194,7 +198,14 @@ function buildClientModel(input: {
   const outputModalities: ModelModality[] = ['text']
   const output = modelOutputLimit(input.id, input.maxOutputTokens)
   const context = typeof input.maxInputTokens === 'number' && input.maxInputTokens > 0 ? input.maxInputTokens : 200000
-  const hasThinking = !!(input.additionalModelRequestFieldsSchema?.properties as Record<string, unknown> | undefined)?.thinking || !!(input.additionalModelRequestFieldsSchema?.properties as Record<string, unknown> | undefined)?.output_config
+  
+  const lowerId = input.id.toLowerCase()
+  let extractedThinking = extractThinkingSchema(input.additionalModelRequestFieldsSchema)
+  if (!extractedThinking && (lowerId.includes('claude-3-7-sonnet') || lowerId.includes('claude-sonnet-3.7') || lowerId.includes('claude-sonnet-4.5') || lowerId.includes('claude-4-5-sonnet'))) {
+    extractedThinking = { schemaPath: 'default', efforts: ['low', 'medium', 'high', 'xhigh'] }
+  }
+  
+  const hasThinking = !!extractedThinking
   const reasoning = hasThinking
   const interleaved = hasThinking ? { field: 'reasoning_content' as const } : false
 
@@ -236,9 +247,9 @@ function buildClientModel(input: {
     inputTypes: input.supportedInputTypes,
     rateMultiplier: input.rateMultiplier,
     rateUnit: input.rateUnit,
-    supportsThinking: !!(input.additionalModelRequestFieldsSchema?.properties as Record<string, unknown> | undefined)?.thinking || !!(input.additionalModelRequestFieldsSchema?.properties as Record<string, unknown> | undefined)?.output_config,
-    thinkingEfforts: extractThinkingSchema(input.additionalModelRequestFieldsSchema)?.efforts,
-    thinkingSchemaPath: extractThinkingSchema(input.additionalModelRequestFieldsSchema)?.schemaPath,
+    supportsThinking: !!extractedThinking,
+    thinkingEfforts: extractedThinking?.efforts,
+    thinkingSchemaPath: extractedThinking?.schemaPath,
     supportsPromptCaching: input.promptCaching?.supportsPromptCaching || false,
     modelProvider: input.modelProvider || undefined,
     permission: [],
@@ -247,7 +258,7 @@ function buildClientModel(input: {
   }
 }
 
-// 请求体超限错误（统一识别用，触发 413 响应）
+// Request body over-limit error (used for unified identification, triggered 413 response)
 class BodyTooLargeError extends Error {
   constructor(public readonly received: number, public readonly limit: number) {
     super(`Request body too large: ${received} bytes exceeds limit of ${limit} bytes`)
@@ -257,38 +268,38 @@ class BodyTooLargeError extends Error {
 
 export class ProxyServer {
   private server: http.Server | https.Server | null = null
-  private fallbackServer: http.Server | null = null  // HTTPS 启用时同时监听 HTTP（可选）
+  private fallbackServer: http.Server | null = null  // HTTPS Listen simultaneously when enabled HTTP(optional)
   private accountPool: AccountPool
   private config: ProxyConfig
   private stats: ProxyStats
   private sessionStats: { totalRequests: number; successRequests: number; failedRequests: number; startTime: number }
   private events: ProxyServerEvents
-  private refreshingTokens: Map<string, Promise<boolean>> = new Map() // 在途刷新去重（并发方共享同一结果）
+  private refreshingTokens: Map<string, Promise<boolean>> = new Map() // Refresh in transit to remove duplicates (concurrent parties share the same result)
   private isHttps: boolean = false
   private isStopping: boolean = false
   private activeRequests: Set<AbortController> = new Set()
   private sockets: Set<Socket> = new Set()
-  /** P1-7 按 API Key/IP 的滑动窗口限流（每分钟桶） */
+  /** P1-7 according to API Key/IP Sliding window current limit (buckets per minute) */
   private rateLimitBuckets: Map<string, { count: number; windowStart: number }> = new Map()
-  /** P1-8 会话粘性：session hint → accountId 的映射（10 分钟 TTL） */
+  /** P1-8 Session stickiness:session hint → accountId The mapping of (10 minute TTL） */
   private sessionAffinity: Map<string, { accountId: string; lastAt: number }> = new Map()
-  /** P2-17 审计日志（最近 200 条） */
+  /** P2-17 Audit log (most recent 200 strip) */
   private auditLog: Array<{ ts: number; type: string; data: Record<string, unknown> }> = []
-  /** Webhook 触发回调（由外部注入，避免 main → renderer 循环依赖） */
+  /** Webhook Trigger callback (injected from outside, avoid main → renderer circular dependencies) */
   private webhookTrigger?: (event: string, payload: Record<string, unknown>) => void
-  /** 定期清理 timer */
+  /** Clean regularly timer */
   private cleanupTimer: NodeJS.Timeout | null = null
 
   /**
-   * 从请求中提取 session hint，用于稳定 conversationId
-   * 优先级 1：显式稳定 ID（header）
-   * 优先级 2：请求体中的会话相关字段（body）
-   * 优先级 3：返回 undefined（由 kiroApi 用 history fingerprint 兜底）
+   * Extract from request session hint, used to stabilize conversationId
+   * priority 1: Explicitly stable ID（header）
+   * priority 2: Session-related fields in the request body (body）
+   * priority 3:return undefined(Depend on kiroApi use history fingerprint reveal all the details)
    */
   static extractSessionHint(req: http.IncomingMessage, body: unknown): string | undefined {
     const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>
     const h = req.headers
-    // 优先级 1：显式稳定 header
+    // priority 1: Explicitly stable header
     const headerHint =
       (h['x-claude-code-session-id'] as string) ||
       (h['x-opencode-session'] as string) ||
@@ -296,7 +307,7 @@ export class ProxyServer {
       (h['x-conversation-id'] as string)
     if (headerHint) return headerHint
 
-    // 优先级 2：body 中可靠的会话字段
+    // priority 2：body Reliable session fields in
     const bodyHint =
       (b.prompt_cache_key as string) ||
       (b.promptCacheKey as string) ||
@@ -308,7 +319,7 @@ export class ProxyServer {
       (b.sessionId as string)
     if (bodyHint) return bodyHint
 
-    // 优先级 2.5：metadata 中的 session/conversation
+    // priority 2.5：metadata in session/conversation
     const metadata = b.metadata as Record<string, unknown> | undefined
     if (metadata) {
       const metaHint =
@@ -317,7 +328,7 @@ export class ProxyServer {
       if (metaHint) return metaHint
     }
 
-    // 优先级 3：无显式 ID，返回 undefined（kiroApi 用 history fingerprint 兜底）
+    // priority 3: no explicit ID,return undefined（kiroApi use history fingerprint reveal all the details)
     return undefined
   }
 
@@ -332,8 +343,8 @@ export class ProxyServer {
       maxConcurrent: 10,
       maxRetries: 3,
       retryDelayMs: 1000,
-      tokenRefreshBeforeExpiry: 300, // 5分钟提前刷新
-      autoStart: false, // 是否自动启动
+      tokenRefreshBeforeExpiry: 300, // 5Refresh minutes in advance
+      autoStart: false, // Whether to start automatically
       clientDrivenToolExecution: true,
       ...config
     }
@@ -366,8 +377,8 @@ export class ProxyServer {
   }
 
   /**
-   * 检测当前绑定地址是否会暴露到本机以外
-   * 0.0.0.0 / :: / 网卡地址 → true；127.0.0.1 / ::1 / localhost → false
+   * Detect whether the current binding address will be exposed outside the local machine
+   * 0.0.0.0 / :: / Network card address → true；127.0.0.1 / ::1 / localhost → false
    */
   private isBindingExternal(host?: string): boolean {
     if (!host) return false
@@ -377,14 +388,14 @@ export class ProxyServer {
     )
   }
 
-  // 启动服务器
+  // Start the server
   async start(): Promise<void> {
     if (this.server) {
       console.log('[ProxyServer] Server already running')
       return
     }
 
-    // P0-2 安全护栏：外网绑定 + 无 API Key → 拒绝启动（用户可以显式 allowExternalWithoutApiKey 解除）
+    // P0-2 Security guardrail: External network binding + none API Key → Deny startup (the user can explicitly allowExternalWithoutApiKey Lift)
     if (this.isBindingExternal(this.config.host)) {
       const hasAnyKey = (this.config.apiKeys?.some(k => k.enabled && k.key) ?? false) || !!this.config.apiKey
       if (!hasAnyKey && !this.config.allowExternalWithoutApiKey) {
@@ -406,7 +417,7 @@ export class ProxyServer {
       const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse) => 
         this.handleRequest(req, res)
 
-      // 检查是否启用 TLS
+      // Check if enabled TLS
       if (this.config.tls?.enabled) {
         try {
           const tlsOptions = this.getTlsOptions()
@@ -435,7 +446,7 @@ export class ProxyServer {
       this.server.on('connection', (socket: Socket) => {
         this.sockets.add(socket)
         socket.on('close', () => this.sockets.delete(socket))
-        // P1-10 backpressure 监控：socket 写入缓冲区超过 1MB 时记录警告
+        // P1-10 backpressure monitor:socket Write buffer exceeded 1MB Log warning when
         socket.on('drain', () => {
           if (socket.writableLength > 0) {
             proxyLogger.debug('ProxyServer', `Socket drain: bufferedLen=${socket.writableLength}`)
@@ -443,7 +454,7 @@ export class ProxyServer {
         })
       })
 
-      // 服务器关闭时尝试自动重启
+      // Attempt to automatically restart when server is shut down
       this.server.on('close', () => {
         if (!this.isStopping && this.config.autoStart && this.config.enabled) {
           console.log('[ProxyServer] Server closed unexpectedly, attempting restart in 3s...')
@@ -458,24 +469,25 @@ export class ProxyServer {
         }
       })
 
-      // P1-11 keep-alive / headers 空闲超时（避免长连接占用资源）
-      const keepAliveMs = this.config.keepAliveTimeoutMs ?? 65_000
-      const headersMs = this.config.headersTimeoutMs ?? 60_000
+      // P1-11 keep-alive / headers Idle timeout (to avoid long connections occupying resources)
+      // Increased default timeout to 5 minutes for long streaming responses (e.g., Codex)
+      const keepAliveMs = this.config.keepAliveTimeoutMs ?? 300_000  // 5 minutes instead of 65 seconds
+      const headersMs = this.config.headersTimeoutMs ?? 295_000      // Slightly less than keepAlive
       this.server.keepAliveTimeout = keepAliveMs
-      this.server.headersTimeout = Math.max(headersMs, keepAliveMs + 1000) // headers 必须 > keepAlive，否则 Node 会 warn
-      this.server.requestTimeout = 0  // 流式响应可能很长，禁用 request 总超时
+      this.server.headersTimeout = Math.max(headersMs, keepAliveMs + 1000) // headers must > keepAlive,otherwise Node meeting warn
+      this.server.requestTimeout = 0  // Streaming responses may be long, disabled request total timeout
 
-      // 启动定期清理（每 5 分钟）
+      // Start regular cleanup (every 5 minute)
       if (this.cleanupTimer) clearInterval(this.cleanupTimer)
       this.cleanupTimer = setInterval(() => this.cleanupExpiredCaches(), 5 * 60_000)
-      // 让 timer 在 Node 退出时不阻塞
+      // let timer exist Node No blocking on exit
       this.cleanupTimer.unref?.()
 
       const protocol = this.isHttps ? 'https' : 'http'
       this.server.listen(this.config.port, this.config.host, () => {
         proxyLogger.info('ProxyServer', `Started on ${protocol}://${this.config.host}:${this.config.port} (keepAlive=${keepAliveMs}ms)`)
         this.stats.startTime = Date.now()
-        // 重置会话统计
+        // Reset session statistics
         this.sessionStats = {
           totalRequests: 0,
           successRequests: 0,
@@ -486,7 +498,7 @@ export class ProxyServer {
         resolve()
       })
 
-      // D4 启用 TLS 时同时监听 HTTP fallback 端口（如果配置了 fallbackPort）
+      // D4 enable TLS Monitor at the same time HTTP fallback port (if configured fallbackPort）
       if (this.isHttps && this.config.fallbackPort && this.config.fallbackPort !== this.config.port) {
         const fallback = http.createServer(requestHandler)
         fallback.keepAliveTimeout = keepAliveMs
@@ -505,24 +517,24 @@ export class ProxyServer {
     })
   }
 
-  // 获取 TLS 配置选项
-  // P1-13 当 tls.enabled 但未提供 cert/key 时，自动生成自签证书
+  // get TLS Configuration options
+  // P1-13 when tls.enabled but not provided cert/key When, a self-signed certificate is automatically generated
   private getTlsOptions(): https.ServerOptions {
     const tls = this.config.tls!
     
     let cert: string
     let key: string
 
-    // 优先使用直接提供的 PEM 内容
+    // Priority is given to directly provided PEM content
     if (tls.cert && tls.key) {
       cert = tls.cert
       key = tls.key
     } else if (tls.certPath && tls.keyPath) {
-      // 从文件读取
+      // read from file
       cert = fs.readFileSync(tls.certPath, 'utf8')
       key = fs.readFileSync(tls.keyPath, 'utf8')
     } else {
-      // 自动生成自签证书（位于 userData/proxy-tls/）
+      // Automatically generate a self-signed certificate (located at userData/proxy-tls/）
       try {
         const { app } = require('electron')
         const { ensureProxySelfSignedCert } = require('./selfSignedCert')
@@ -540,7 +552,7 @@ export class ProxyServer {
   }
 
   /**
-   * 获取（或生成）反代自签证书信息（供 UI 显示/导出 PEM）
+   * Obtain (or generate) anti-generation self-signed certificate information (for UI show/Export PEM）
    */
   getSelfSignedCertInfo(): import('./selfSignedCert').ProxySelfSignedCert | null {
     try {
@@ -553,7 +565,7 @@ export class ProxyServer {
     }
   }
 
-  /** 强制重新生成自签证书（用户在 UI 上点"重新生成"） */
+  /** Force regeneration of self-signed certificates (users are UI On point"Regenerate"） */
   regenerateSelfSignedCert(): import('./selfSignedCert').ProxySelfSignedCert | null {
     try {
       const { app } = require('electron')
@@ -567,10 +579,10 @@ export class ProxyServer {
   }
 
   /**
-   * 优雅停止服务器
-   * - 立刻拒绝新连接（server.close）
-   * - 给正在进行中的请求 5 秒完成；超时后强制 destroy socket
-   * - 同时停 fallback HTTP 服务器
+   * Stop the server gracefully
+   * - Immediately reject new connections (server.close）
+   * - For requests in progress 5 Completed in seconds; forced after timeout destroy socket
+   * - Stop at the same time fallback HTTP server
    */
   async stop(gracefulMs: number = 5000): Promise<void> {
     if (!this.server) {
@@ -598,19 +610,19 @@ export class ProxyServer {
         resolve()
       }
 
-      // 先停止接受新连接
+      // Stop accepting new connections first
       main.close(() => {
         fallback?.close(() => finish()) || finish()
       })
       fallback?.close()
 
-      // P1-14 优雅停止：给正在进行中的请求时间完成，超时再强制
+      // P1-14 Graceful stop: Give the ongoing request time to complete, and then force it after timeout
       this.activeRequests.forEach(controller => {
-        // 给客户端一个明确的 stop 信号，但不立即中断已发送的响应流
+        // Give the client a clear stop Signal, but do not immediately interrupt the flow of sent responses
         try { controller.abort(new Error('Proxy server stopped')) } catch { /* ignore */ }
       })
 
-      // 超时强制 destroy
+      // timeout enforcement destroy
       setTimeout(() => {
         this.sockets.forEach(socket => { try { socket.destroy() } catch { /* ignore */ } })
         finish()
@@ -618,11 +630,11 @@ export class ProxyServer {
     })
   }
 
-  // 更新配置
-  // P2-18 检测到 port/host/tls 变更时，标记 needsRestart=true，UI 可读取并提示
+  // Update configuration
+  // P2-18 detected port/host/tls When changing, mark needsRestart=true，UI Can read and prompt
   private _needsRestart = false
   updateConfig(config: Partial<ProxyConfig>): void {
-    // 标记需要重启的字段
+    // Mark fields that need to be restarted
     const restartTriggerFields: Array<keyof ProxyConfig> = ['port', 'host', 'tls', 'fallbackPort']
     const willRestart = restartTriggerFields.some(k => k in config && JSON.stringify(this.config[k]) !== JSON.stringify(config[k]))
     if (willRestart && this.isRunning()) {
@@ -631,18 +643,18 @@ export class ProxyServer {
     }
     this.appendAuditLog('config_changed', { fields: Object.keys(config), needsRestart: willRestart })
     this.config = { ...this.config, ...config }
-    // 同步账号选择策略到 accountPool
+    // Synchronize account selection strategy to accountPool
     if (config.accountSelectionStrategy !== undefined) {
       this.accountPool.setStrategy(this.config.accountSelectionStrategy || 'round-robin')
     }
   }
 
-  /** UI 可用此判断是否需提示用户重启 */
+  /** UI This can be used to determine whether the user needs to be prompted to restart. */
   needsRestart(): boolean {
     return this._needsRestart
   }
 
-  /** 重启后调用清除 needsRestart 标记 */
+  /** Call clear after reboot needsRestart mark */
   async restartServer(): Promise<void> {
     if (!this.isRunning()) {
       await this.start()
@@ -654,7 +666,7 @@ export class ProxyServer {
     this._needsRestart = false
   }
 
-  // 获取配置
+  // Get configuration
   getConfig(): ProxyConfig {
     return { ...this.config }
   }
@@ -812,9 +824,9 @@ export class ProxyServer {
     return request
   }
 
-  // 获取统计信息
+  // Get statistics
   getStats(): ProxyStats {
-    // 返回可序列化的统计信息（Map 对象在 IPC 中无法正确序列化）
+    // Returns serializable statistics (Map The object is in IPC cannot be serialized correctly)
     return {
       totalRequests: this.stats.totalRequests,
       successRequests: this.stats.successRequests,
@@ -834,44 +846,44 @@ export class ProxyServer {
     }
   }
 
-  // 获取账号池
+  // Get account pool
   getAccountPool(): AccountPool {
     return this.accountPool
   }
 
-  // 设置初始累计 credits（用于从持久化存储恢复）
+  // Set initial accumulation credits(for restoring from persistent storage)
   setTotalCredits(credits: number): void {
     this.stats.totalCredits = credits
   }
 
-  // 重置累计 credits
+  // reset total credits
   resetTotalCredits(): void {
     this.stats.totalCredits = 0
     this.events.onCreditsUpdate?.(0)
   }
 
-  // 设置初始累计 tokens（用于从持久化存储恢复）
+  // Set initial accumulation tokens(for restoring from persistent storage)
   setTotalTokens(inputTokens: number, outputTokens: number): void {
     this.stats.inputTokens = inputTokens
     this.stats.outputTokens = outputTokens
     this.stats.totalTokens = inputTokens + outputTokens
   }
 
-  // 重置累计 tokens
+  // reset total tokens
   resetTotalTokens(): void {
     this.stats.inputTokens = 0
     this.stats.outputTokens = 0
     this.stats.totalTokens = 0
   }
 
-  // 设置请求统计（用于从持久化存储恢复）
+  // Set request statistics (for recovery from persistent storage)
   setRequestStats(totalRequests: number, successRequests: number, failedRequests: number): void {
     this.stats.totalRequests = totalRequests
     this.stats.successRequests = successRequests
     this.stats.failedRequests = failedRequests
   }
 
-  // 重置请求统计
+  // Reset request statistics
   resetRequestStats(): void {
     this.stats.totalRequests = 0
     this.stats.successRequests = 0
@@ -879,7 +891,7 @@ export class ProxyServer {
     this.notifyRequestStatsUpdate()
   }
 
-  // 通知请求统计更新
+  // Notification request statistics update
   private notifyRequestStatsUpdate(): void {
     this.events.onRequestStatsUpdate?.(
       this.stats.totalRequests,
@@ -888,33 +900,33 @@ export class ProxyServer {
     )
   }
 
-  // 记录请求成功
+  // Record request successful
   private recordRequestSuccess(): void {
     this.stats.successRequests++
     this.sessionStats.successRequests++
     this.notifyRequestStatsUpdate()
   }
 
-  // 记录请求失败
+  // Logging request failed
   private recordRequestFailed(): void {
     this.stats.failedRequests++
     this.sessionStats.failedRequests++
     this.notifyRequestStatsUpdate()
   }
 
-  // 记录新请求
+  // Log new requests
   private recordNewRequest(): void {
     this.stats.totalRequests++
     this.sessionStats.totalRequests++
     this.notifyRequestStatsUpdate()
   }
 
-  // 获取会话统计（当前服务运行期间的统计）
+  // Get session statistics (statistics during the current service run)
   getSessionStats(): { totalRequests: number; successRequests: number; failedRequests: number; startTime: number } {
     return { ...this.sessionStats }
   }
 
-  // 是否运行中
+  // Is it running?
   isRunning(): boolean {
     return this.server !== null
   }
@@ -944,10 +956,10 @@ export class ProxyServer {
   }
 
   /**
-   * SSE 背压：res.write 缓冲打满（writableNeedDrain）时返回等待 drain 的 promise，
-   * 上游流解析 await 它暂停拉取，避免慢客户端导致内存无限堆积。
-   * 同时监听 close/error，客户端断开时立刻放行（防止 promise 永久挂起）。
-   * 缓冲未满时返回 undefined（零开销快路径）。
+   * SSE Back pressure:res.write The buffer is full (writableNeedDrain) returns to wait drain of promise，
+   * Upstream flow analysis await It pauses pulls to prevent slow clients from causing infinite memory accumulation.
+   * Monitor simultaneously close/error, immediately release the client when it disconnects (to prevent promise hangs permanently).
+   * Return when buffer is not full undefined(zero-overhead fast path).
    */
   private waitForDrain(res: http.ServerResponse): Promise<void> | undefined {
     if (!res.writableNeedDrain || res.destroyed || res.writableEnded) return undefined
@@ -964,24 +976,24 @@ export class ProxyServer {
     })
   }
 
-  // 检测错误消息中是否包含账号被长期封禁的特征
-  // 返回 { reason, message } 表示需要标记 suspended；返回 null 表示非封禁错误
-  // 覆盖：
-  //   - Kiro 后端 HTTP 403 + body: { reason: "TEMPORARILY_SUSPENDED", message: "..." }
+  // Detect whether the error message contains characteristics indicating that the account has been banned for a long time
+  // return { reason, message } Indicates the need for marking suspended;return null Indicates non-ban error
+  // cover:
+  //   - Kiro rear end HTTP 403 + body: { reason: "TEMPORARILY_SUSPENDED", message: "..." }
   //   - CodeWhisperer AccountSuspendedException
   //   - 423 Locked
   private detectSuspendedError(errMsg: string): { reason: string; message: string } | null {
     if (!errMsg) return null
 
-    // 1) 显式 reason: "TEMPORARILY_SUSPENDED" (Kiro 风控)
+    // 1) explicit reason: "TEMPORARILY_SUSPENDED" (Kiro Risk control)
     const reasonMatch = errMsg.match(/"reason"\s*:\s*"(TEMPORARILY_SUSPENDED|ACCOUNT_SUSPENDED|PERMANENTLY_SUSPENDED)"/i)
     if (reasonMatch) {
-      // 尝试提取 message 字段
+      // Try to extract message Field
       const msgMatch = errMsg.match(/"message"\s*:\s*"([^"]+)"/)
       return { reason: reasonMatch[1].toUpperCase(), message: msgMatch?.[1] || errMsg }
     }
 
-    // 2) 文本特征 "temporarily suspended" / "user id is ... suspended"
+    // 2) text features "temporarily suspended" / "user id is ... suspended"
     if (/User\s+ID\s+is\s+(temporarily\s+)?suspended/i.test(errMsg) || /temporarily\s+suspended/i.test(errMsg)) {
       const msgMatch = errMsg.match(/"message"\s*:\s*"([^"]+)"/)
       return { reason: 'TEMPORARILY_SUSPENDED', message: msgMatch?.[1] || errMsg }
@@ -1032,24 +1044,87 @@ export class ProxyServer {
     ])
   }
 
-  // 清除模型缓存，强制下次请求重新获取
+  // Clear the model cache and force re-fetching on the next request
   clearModelCache(): void {
     this.modelCache = null
     console.log('[ProxyServer] Model cache cleared')
   }
 
-  // 从模型缓存查找指定模型的 thinking 配置
+  // Find the specified model from the model cache thinking Configuration
   private getThinkingConfig(modelId: string): ThinkingConfig | undefined {
-    if (!this.modelCache) return undefined
+    // Debug to file
+    try {
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `\n[${new Date().toISOString()}] getThinkingConfig CALLED for model: ${modelId}\n`)
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  modelCache exists: ${!!this.modelCache}\n`)
+    } catch(e) {}
+    
+    const logMsg = `[getThinkingConfig] model=${modelId}, cacheExists=${!!this.modelCache}`
+    console.log(logMsg)
+    proxyLogger.info('ThinkingConfig', logMsg)
+    
+    if (!this.modelCache) {
+      const errMsg = `modelCache is null for model ${modelId}`
+      console.log(`[ERROR] ${errMsg}`)
+      proxyLogger.error('ThinkingConfig', errMsg)
+      try {
+        require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: undefined (modelCache is null)\n`)
+      } catch(e) {}
+      return undefined
+    }
+    
+    try {
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  modelCache has ${this.modelCache.models.length} models\n`)
+    } catch(e) {}
+    
+    proxyLogger.info('ThinkingConfig', `modelCache has ${this.modelCache.models.length} models`)
+    
     const lower = modelId.toLowerCase()
     const model = this.modelCache.models.find(m => m.modelId.toLowerCase() === lower)
-    if (!model) return undefined
-    const schema = extractThinkingSchema(model.additionalModelRequestFieldsSchema)
-    if (!schema?.schemaPath || !schema.efforts?.length) return undefined
-    return { schemaPath: schema.schemaPath, efforts: schema.efforts }
+    
+    if (!model) {
+      const errMsg = `model ${modelId} not found in cache`
+      console.log(`[ERROR] ${errMsg}`)
+      proxyLogger.error('ThinkingConfig', errMsg)
+      try {
+        require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: undefined (model not found in cache)\n`)
+      } catch(e) {}
+      return undefined
+    }
+    
+    try {
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  Found model, hasSchema: ${!!model.additionalModelRequestFieldsSchema}\n`)
+    } catch(e) {}
+    
+    proxyLogger.info('ThinkingConfig', `Found model ${modelId}, hasSchema=${!!model.additionalModelRequestFieldsSchema}`)
+    
+    let schema = extractThinkingSchema(model.additionalModelRequestFieldsSchema)
+    
+    // Fallback for models known to support thinking but Kiro backend hasn't updated their schema yet
+    if (!schema && (lower.includes('claude-3-7-sonnet') || lower.includes('claude-sonnet-3.7') || lower.includes('claude-sonnet-4.5') || lower.includes('claude-4-5-sonnet'))) {
+      schema = { schemaPath: 'default', efforts: ['low', 'medium', 'high', 'xhigh'] }
+      proxyLogger.info('ThinkingConfig', `Applied hardcoded thinking fallback for known model ${modelId}`)
+    }
+    
+    if (!schema?.schemaPath || !schema.efforts?.length) {
+      const errMsg = `model ${modelId} has no valid thinking schema`
+      console.log(`[ERROR] ${errMsg}`)
+      proxyLogger.error('ThinkingConfig', errMsg)
+      try {
+        require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: undefined (no valid schema - schemaPath: ${schema?.schemaPath}, efforts: ${schema?.efforts})\n`)
+      } catch(e) {}
+      return undefined
+    }
+    
+    const successMsg = `model ${modelId} supports thinking: schema=${schema.schemaPath}, efforts=${schema.efforts.join(',')}`
+    console.log(`[SUCCESS] ${successMsg}`)
+    proxyLogger.info('ThinkingConfig', successMsg)
+    try {
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: ThinkingConfig { schemaPath: ${schema.schemaPath}, efforts: [${schema.efforts.join(',')}], defaultEffort: 'high' }\n`)
+    } catch(e) {}
+    return { schemaPath: schema.schemaPath, efforts: schema.efforts, defaultEffort: 'high' }
   }
 
-  // 获取可用模型列表
+  // Get a list of available models
   private static mapKiroModelToApi(m: KiroModel) {
     return {
       id: m.modelId,
@@ -1089,7 +1164,7 @@ export class ProxyServer {
         kiroModels = await fetchKiroModels(account, signal)
         if (kiroModels.length > 0) {
           this.modelCache = { models: kiroModels, timestamp: now }
-          // 同步到 kiroApi 的 ctx cache, 供 token 裁剪逻辑使用
+          // Sync to kiroApi of ctx cache, for token Clipping logic usage
           for (const m of kiroModels) {
             if (m.tokenLimits?.maxInputTokens) {
               setModelContextWindow(m.modelId, m.tokenLimits.maxInputTokens)
@@ -1103,7 +1178,7 @@ export class ProxyServer {
       }
     }
 
-    // 合并隐藏模型（与 /v1/models 端点一致）
+    // Merge hidden models (with /v1/models endpoints are consistent)
     const modelIds = new Set(kiroModels.map(m => m.modelId))
     const hiddenModels: KiroModel[] = [
       { modelId: 'claude-3.7-sonnet', modelName: 'Claude 3.7 Sonnet', description: 'Claude 3.7 Sonnet (hidden)', supportedInputTypes: ['TEXT', 'IMAGE'], tokenLimits: { maxInputTokens: 200000, maxOutputTokens: 64000 } } as KiroModel,
@@ -1117,14 +1192,14 @@ export class ProxyServer {
     return { models: merged.map(ProxyServer.mapKiroModelToApi), fromCache }
   }
 
-  // 检查 Token 是否需要刷新
+  // examine Token Do you need to refresh
   private isTokenExpiringSoon(account: ProxyAccount): boolean {
     if (!account.expiresAt) return false
     const refreshBeforeMs = (this.config.tokenRefreshBeforeExpiry || 300) * 1000
     return Date.now() + refreshBeforeMs >= account.expiresAt
   }
 
-  // 刷新 Token
+  // refresh Token
   private async refreshToken(account: ProxyAccount, signal?: AbortSignal): Promise<boolean> {
     this.throwIfAborted(signal)
     if (!this.events.onTokenRefresh) {
@@ -1132,15 +1207,15 @@ export class ProxyServer {
       return false
     }
 
-    // 并发去重：等待在途刷新并复用其真实结果。
-    // 旧实现固定等 1 秒后按过期时间"猜"结果，慢刷新（网络抖动/慢代理）会被误判失败导致多余切号。
+    // Concurrent deduplication: wait for in-flight refresh and reuse its real results.
+    // Old implementation fixed etc. 1 Press expiration time after seconds"Guess"As a result, slow refresh (network jitter/Slow proxy) will be misjudged as failed, resulting in redundant number switching.
     const existing = this.refreshingTokens.get(account.id)
     if (existing) {
       console.log(`[ProxyServer] Token refresh already in progress for ${account.email || account.id}, awaiting result`)
       try {
         return await this.abortable(existing, signal)
       } catch {
-        // 只有"本请求自己"被中止才向上抛；在途刷新因发起方中止/失败时，对本请求按刷新失败处理
+        // only"Ben asks himself"It is thrown upward only when it is interrupted; the refresh in progress is interrupted by the initiator./When it fails, the request will be treated as refresh failure.
         if (signal?.aborted) throw this.getAbortError(signal)
         return false
       }
@@ -1155,24 +1230,24 @@ export class ProxyServer {
     }
   }
 
-  /** 实际执行 Token 刷新（由 refreshToken 包裹在途去重后调用） */
+  /** actual execution Token Refresh (by refreshToken Called after the package is deduplicated in transit) */
   private async doRefreshToken(account: ProxyAccount, signal?: AbortSignal): Promise<boolean> {
     console.log(`[ProxyServer] Refreshing token for ${account.email || account.id}`)
 
     try {
-      // 随机延迟 0-3 秒，避免多账号同时刷新被识别为批量操作
+      // random delay 0-3 seconds to prevent simultaneous refresh of multiple accounts from being recognized as a batch operation.
       const jitter = Math.floor(Math.random() * 3000)
       if (jitter > 0) await this.waitForRetry(jitter, signal)
       
       const result = await this.abortable(this.events.onTokenRefresh!(account), signal)
       if (result.success && result.accessToken) {
-        // 更新账号池中的 Token
+        // Update the account pool Token
         this.accountPool.updateAccount(account.id, {
           accessToken: result.accessToken,
           refreshToken: result.refreshToken || account.refreshToken,
           expiresAt: result.expiresAt
         })
-        // 通知外部更新
+        // Notify external updates
         this.events.onAccountUpdate?.({
           ...account,
           accessToken: result.accessToken,
@@ -1195,8 +1270,8 @@ export class ProxyServer {
   }
 
   /**
-   * 计算 API Key 允许使用的账号 ID 集合（P2-21）
-   * 返回 undefined = 不限制（允许所有账号）
+   * calculate API Key Allowed accounts ID gather(P2-21）
+   * return undefined = Unlimited (all accounts allowed)
    */
   private getAllowedAccountIds(apiKeyId?: string): Set<string> | undefined {
     if (!apiKeyId) return undefined
@@ -1205,18 +1280,18 @@ export class ProxyServer {
     return new Set(bindings)
   }
 
-  // 获取可用账号（包含 Token 刷新检查）
-  // P1-8 sessionHint：相同会话尽量复用同一账号（命中 prompt cache + 防风控）
-  // P2-21 apiKeyId：用于过滤 API Key 允许使用的账号子集
+  // Get available accounts (including Token refresh check)
+  // P1-8 sessionHint: Try to reuse the same account for the same session (hit prompt cache + Risk prevention and control)
+  // P2-21 apiKeyId: used for filtering API Key A subset of accounts allowed to be used
   private async getAvailableAccount(signal?: AbortSignal, sessionHint?: string, apiKeyId?: string): Promise<ProxyAccount | null> {
     const allowedIds = this.getAllowedAccountIds(apiKeyId)
     const groupMode = this.config.multiAccountSelectionMode === 'groups'
     const allowedGroupIds = groupMode ? new Set(this.config.multiAccountGroupIds || []) : null
     const isAllowed = (acc: ProxyAccount | null): boolean => {
       if (!acc) return true
-      // API Key 白名单（apiKeyAccountBindings）
+      // API Key whitelist (apiKeyAccountBindings）
       if (allowedIds && !allowedIds.has(acc.id)) return false
-      // 分组过滤（双保险：即便前端忘了重新同步账号池，这里也能拦住非选中分组的账号）
+      // Group filtering (double insurance: even if the front end forgets to resynchronize the account pool, accounts in non-selected groups can be blocked here)
       if (groupMode && allowedGroupIds) {
         const gid = acc.groupId || '__ungrouped__'
         if (!allowedGroupIds.has(gid)) return false
@@ -1224,19 +1299,19 @@ export class ProxyServer {
       return true
     }
     this.throwIfAborted(signal)
-    // 如果 pool 为空，触发懒加载回调尝试同步账号（冷启动场景）
+    // if pool If it is empty, trigger the lazy loading callback and try to synchronize the account (cold start scenario)
     if (this.accountPool.size === 0 && this.events.onPoolEmpty) {
       console.log('[ProxyServer] Account pool empty, triggering lazy sync...')
       await this.abortable(this.events.onPoolEmpty(), signal)
     }
     this.throwIfAborted(signal)
 
-    // P1-8 会话粘性：优先复用已绑定的账号（同时受 API Key 绑定过滤）
+    // P1-8 Session stickiness: Give priority to reusing bound accounts (also subject to API Key binding filter)
     if (this.config.sessionAffinityEnabled && sessionHint) {
       const sticky = this.pickAccountWithAffinity(sessionHint)
       if (sticky && isAllowed(sticky)) {
         proxyLogger.debug('ProxyServer', `Session affinity hit: ${sessionHint.slice(0, 16)} → ${sticky.email || sticky.id.slice(0, 8)}`)
-        // 仍需检查 token 是否需要刷新
+        // Still need to check token Do you need to refresh
         if (this.isTokenExpiringSoon(sticky)) {
           const refreshed = await this.refreshToken(sticky, signal)
           if (refreshed) {
@@ -1253,7 +1328,7 @@ export class ProxyServer {
     if (this.config.enableMultiAccount) {
       account = this.accountPool.getNextAccount()
       if (account && !isAllowed(account)) {
-        // 尝试找一个允许的账号（白名单 + 分组都已合并进 isAllowed）
+        // Try to find an allowed account (whitelist + Groups have been merged into isAllowed）
         const allAccounts = this.accountPool.getAllAccounts()
         const exclude = new Set<string>()
         for (const a of allAccounts) {
@@ -1268,11 +1343,11 @@ export class ProxyServer {
         }
       }
     } else {
-      // 禁用多账号轮询时，优先使用指定的账号
+      // When multi-account polling is disabled, the specified account will be used first.
       if (this.config.selectedAccountIds && this.config.selectedAccountIds.length > 0) {
-        // 使用指定的第一个账号
+        // Use the first account specified
         account = this.accountPool.getAccount(this.config.selectedAccountIds[0])
-        // 检查指定账号是否配额耗尽，若是则尝试自动切换
+        // Check whether the quota of the specified account is exhausted, and if so, try to automatically switch
         if (account && this.accountPool.isQuotaExhausted(account) && this.config.autoSwitchOnQuotaExhausted) {
           const nextAccount = this.accountPool.getNextAvailableAccount(account.id)
           if (nextAccount) {
@@ -1288,7 +1363,7 @@ export class ProxyServer {
           account = allAccounts.length > 0 ? allAccounts[0] : null
         }
       } else {
-        // 没有指定账号，使用第一个可用账号
+        // If no account is specified, the first available account is used.
         const allAccounts = this.accountPool.getAllAccounts()
         account = allAccounts.length > 0 ? allAccounts[0] : null
       }
@@ -1296,20 +1371,20 @@ export class ProxyServer {
     
     if (!account) return null
 
-    // 自动切换 K-Proxy 设备 ID（如果 K-Proxy 服务可用）
+    // Automatic switching K-Proxy equipment ID(if K-Proxy service available)
     this.syncKProxyDeviceId(account)
 
-    // 检查是否需要刷新 Token
+    // Check if refresh is needed Token
     if (this.isTokenExpiringSoon(account)) {
       const refreshed = await this.refreshToken(account, signal)
       if (!refreshed) {
-        // 刷新失败，如果启用多账号才尝试获取下一个账号
+        // Refresh failed. If multiple accounts are enabled, try to get the next account.
         if (this.config.enableMultiAccount) {
           return this.accountPool.getNextAccount()
         }
         return null
       }
-      // 返回更新后的账号
+      // Return to updated account
       const refreshedAccount = this.accountPool.getAccount(account.id)
       if (refreshedAccount && sessionHint) this.rememberAffinity(sessionHint, refreshedAccount.id)
       return refreshedAccount
@@ -1319,18 +1394,18 @@ export class ProxyServer {
     return account
   }
 
-  // 同步 K-Proxy 设备 ID（根据账号自动切换）
+  // synchronous K-Proxy equipment ID(Automatically switch based on account)
   private syncKProxyDeviceId(account: ProxyAccount): void {
     const kproxyService = getKProxyService()
     if (!kproxyService || !kproxyService.isRunning()) {
-      return // K-Proxy 未初始化或未运行
+      return // K-Proxy Not initialized or not running
     }
 
-    // 尝试切换到账号绑定的设备 ID
+    // Try switching to the device bound to the account ID
     const switched = kproxyService.switchToAccount(account.id)
     
     if (!switched) {
-      // 账号没有绑定设备 ID，自动生成并绑定
+      // The account is not bound to a device ID, automatically generated and bound
       const newDeviceId = generateDeviceId()
       kproxyService.addDeviceIdMapping({
         accountId: account.id,
@@ -1345,7 +1420,7 @@ export class ProxyServer {
     }
   }
 
-  // 带重试的 API 调用
+  // With retry API call
   private async callWithRetry<T>(
     account: ProxyAccount,
     apiCall: (acc: ProxyAccount, endpointIndex: number) => Promise<T>,
@@ -1357,9 +1432,9 @@ export class ProxyServer {
     let lastError: Error | null = null
     let currentAccount = account
     let endpointIndex = 0
-    // 本次请求累计已尝试的账号 ID，避免重试时循环命中已经失败过的账号
+    // The total number of accounts that have been tried for this request ID, to avoid looping through accounts that have failed when retrying.
     const triedIds = new Set<string>([account.id])
-    /** 切到下一个可用账号；多账号模式带 triedIds 排除，单账号场景退化为旧逻辑 */
+    /** Switch to the next available account; multi-account mode with triedIds Excluded, the single-account scenario degrades to the old logic */
     const switchToNextAccount = (): ProxyAccount | null => {
       if (this.config.enableMultiAccount) {
         return this.accountPool.getNextAccount(triedIds)
@@ -1382,8 +1457,8 @@ export class ProxyServer {
 
         console.log(`[ProxyServer] API call failed (attempt ${attempt + 1}/${maxRetries}): ${errMsg}`)
 
-        // 优先检测账号被长期封禁（不是 token 问题，刷新也没用）
-        // 特征：HTTP 403 + reason: "TEMPORARILY_SUSPENDED" 或 AccountSuspendedException / 423
+        // Prioritize detection of accounts that have been banned for a long time (not token Problem, refreshing doesn’t work either)
+        // feature:HTTP 403 + reason: "TEMPORARILY_SUSPENDED" or AccountSuspendedException / 423
         const suspendInfo = this.detectSuspendedError(errMsg)
         if (suspendInfo) {
           const newlyMarked = this.accountPool.markSuspended(currentAccount.id, suspendInfo.reason, suspendInfo.message)
@@ -1394,26 +1469,26 @@ export class ProxyServer {
               reason: suspendInfo.reason,
               message: suspendInfo.message
             })
-            // P1-6 关键事件 → 触发 webhook
+            // P1-6 key events → trigger webhook
             this.appendAuditLog('account_suspended', {
               accountId: currentAccount.id,
               email: currentAccount.email,
               reason: suspendInfo.reason
             })
             this.triggerWebhook('proxy-account-suspended', {
-              title: '反代账号被风控',
-              message: `账号 ${currentAccount.email || currentAccount.id.slice(0, 8)} 被 Kiro 后端标记为 ${suspendInfo.reason}，需要人工解封`,
+              title: 'Anti-generation accounts are subject to risk control',
+              message: `account ${currentAccount.email || currentAccount.id.slice(0, 8)} quilt Kiro The backend is marked as ${suspendInfo.reason}, need to be manually unblocked`,
               level: 'error',
               fields: {
-                邮箱: currentAccount.email || '-',
-                账号ID: currentAccount.id.slice(0, 8),
-                封禁原因: suspendInfo.reason,
-                详情: this.sanitizeErrorMessage(suspendInfo.message || '').slice(0, 200)
+                Mail: currentAccount.email || '-',
+                accountID: currentAccount.id.slice(0, 8),
+                'Ban reason': suspendInfo.reason,
+                Details: this.sanitizeErrorMessage(suspendInfo.message || '').slice(0, 200)
               }
             })
           }
           console.warn(`[ProxyServer] Account ${currentAccount.email || currentAccount.id} suspended (${suspendInfo.reason}), switching to next available account`)
-          // 切到下个可用账号（跳过被 suspended 的 + 本请求已试过的）
+          // Switch to the next available account (skip being suspended of + This request has been tried)
           const nextAccount = switchToNextAccount()
           if (nextAccount && !triedIds.has(nextAccount.id)) {
             currentAccount = nextAccount
@@ -1424,11 +1499,11 @@ export class ProxyServer {
             }
             continue
           }
-          // 无可切换的账号 → 直接抛出错误给客户端
+          // Accounts that cannot be switched → Throw errors directly to the client
           break
         }
 
-        // 401/403: 尝试刷新 Token
+        // 401/403: try to refresh Token
         if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('Auth')) {
           console.log('[ProxyServer] Auth error, attempting token refresh')
           const refreshed = await this.refreshToken(currentAccount, signal)
@@ -1436,7 +1511,7 @@ export class ProxyServer {
             currentAccount = this.accountPool.getAccount(currentAccount.id) || currentAccount
             continue
           }
-          // 刷新失败 → 切到没试过的下个账号
+          // Refresh failed → Switch to the next account you haven’t tried yet
           const nextAccount = switchToNextAccount()
           if (nextAccount && !triedIds.has(nextAccount.id)) {
             currentAccount = nextAccount
@@ -1445,13 +1520,13 @@ export class ProxyServer {
           }
         }
 
-        // 402/429: 额度耗尽，切换端点或账号
+        // 402/429: The quota is exhausted, switch the endpoint or account
         if (errMsg.includes('402') || errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('ThrottlingException') || errMsg.includes('reached the limit') || errMsg.includes('ServiceQuotaExceededException') || errMsg.includes('limit exceeded') || errMsg.includes('rate limit')) {
           console.log('[ProxyServer] Quota/throttle error, switching endpoint or account')
           this.accountPool.recordError(currentAccount.id, ErrorType.RECOVERABLE, 429)
-          endpointIndex = (endpointIndex + 1) % 2 // 切换端点
+          endpointIndex = (endpointIndex + 1) % 2 // Switch endpoint
           if (endpointIndex === 0) {
-            // 已尝试所有端点，切换到没试过的下个账号
+            // All endpoints have been tried, switch to the next account that has not been tried yet
             const nextAccount = switchToNextAccount()
             if (nextAccount && !triedIds.has(nextAccount.id)) {
               console.log(`[ProxyServer] Auto-switching to ${nextAccount.email || nextAccount.id.slice(0, 8)} due to quota exhausted`)
@@ -1466,10 +1541,10 @@ export class ProxyServer {
           continue
         }
 
-        // 5xx: 同账号短退避重试一次；再次 5xx 直接 fallback 到没试过的账号（瞬时故障跨账号绕过）
+        // 5xx: Short backoff and try again with the same account; again 5xx direct fallback to an account that has not been tried before (instantaneous failure can be bypassed across accounts)
         if (errMsg.includes('500') || errMsg.includes('502') || errMsg.includes('503') || errMsg.includes('504')) {
           console.log('[ProxyServer] Server error, retrying')
-          // 第二次及以后的 5xx → 切换账号（旧逻辑会同账号撞死）
+          // the second time and subsequent 5xx → Switch accounts (the old logic will be killed by the same account)
           if (attempt > 0) {
             const nextAccount = switchToNextAccount()
             if (nextAccount && !triedIds.has(nextAccount.id)) {
@@ -1483,7 +1558,7 @@ export class ProxyServer {
           continue
         }
 
-        // 其他错误，不重试
+        // Other errors, no retry
         break
       }
     }
@@ -1492,15 +1567,15 @@ export class ProxyServer {
   }
 
   /**
-   * 常数时间字符串比较（防时序攻击）
-   * 长度不同时返回 false 但仍走一次 timingSafeEqual 防止旁路
+   * Constant time string comparison (anti-timing attacks)
+   * Return if the length is different false But still go once timingSafeEqual prevent bypass
    */
   private safeStringEq(a: string, b: string): boolean {
-    // Buffer.from 处理 UTF-8 编码
+    // Buffer.from deal with UTF-8 coding
     const ab = Buffer.from(a, 'utf8')
     const bb = Buffer.from(b, 'utf8')
     if (ab.length !== bb.length) {
-      // 仍执行一次比较保证常数时间（用 a 自身比，结果不影响）
+      // Still performs a comparison guaranteed to be constant time (using a self-ratio, the result will not be affected)
       try { crypto.timingSafeEqual(ab, ab) } catch { /* ignore */ }
       return false
     }
@@ -1511,38 +1586,38 @@ export class ProxyServer {
     }
   }
 
-  // 验证 API Key 并返回匹配的 Key（用于统计）
-  // P0-3 使用 timingSafeEqual 防止时序攻击逐字猜 Key
+  // verify API Key and return matching Key(for statistics)
+  // P0-3 use timingSafeEqual Prevent timing attacks from word-for-word guessing Key
   private validateApiKey(req: http.IncomingMessage): { valid: boolean; apiKey?: import('./types').ApiKey; reason?: string } {
-    // 如果没有配置任何 API Key，则跳过验证
+    // If not configured any API Key, then skip verification
     const hasApiKeys = this.config.apiKeys && this.config.apiKeys.length > 0
     const hasLegacyKey = !!this.config.apiKey
     if (!hasApiKeys && !hasLegacyKey) return { valid: true }
 
-    // 从 Authorization 头或 X-Api-Key 头获取 API Key
+    // from Authorization head or X-Api-Key Header acquisition API Key
     const authHeader = req.headers['authorization'] || ''
     const apiKeyHeader = (req.headers['x-api-key'] as string) || ''
 
     let providedKey = ''
-    // Bearer token 格式
+    // Bearer token Format
     if (authHeader.startsWith('Bearer ')) {
       providedKey = authHeader.slice(7)
     }
-    // 直接 API Key 格式
+    // direct API Key Format
     if (!providedKey && apiKeyHeader) {
       providedKey = apiKeyHeader
     }
 
     if (!providedKey) return { valid: false }
 
-    // 检查多 API Key（常数时间比较）
+    // Check many API Key(constant time comparison)
     if (hasApiKeys) {
       let matched: import('./types').ApiKey | undefined
       for (const k of this.config.apiKeys!) {
         if (!k.enabled || !k.key) continue
         if (this.safeStringEq(k.key, providedKey)) {
           matched = k
-          // 不 break：继续遍历保持时间一致（小数量数组 OK）
+          // No break: Continue traversing to keep the time consistent (small number of arrays OK）
         }
       }
       if (matched) {
@@ -1553,7 +1628,7 @@ export class ProxyServer {
       }
     }
 
-    // 兼容旧的单 API Key（常数时间比较）
+    // Compatible with old single API Key(constant time comparison)
     if (hasLegacyKey && this.safeStringEq(this.config.apiKey!, providedKey)) {
       return { valid: true }
     }
@@ -1562,15 +1637,15 @@ export class ProxyServer {
   }
 
   /**
-   * P0-4 IP 访问控制
-   * - deniedIPs 优先：命中即拒绝
-   * - allowedIPs 配置后：必须在列表内（白名单模式）
-   * - 都未配置：允许
-   * 支持单 IP 和 CIDR（IPv4 / IPv6 简化处理）
+   * P0-4 IP access control
+   * - deniedIPs Priority: hit and reject
+   * - allowedIPs After configuration: must be in the list (whitelist mode)
+   * - Neither configured: Allowed
+   * Support ticket IP and CIDR（IPv4 / IPv6 simplified processing)
    */
   private isClientIPAllowed(clientIP: string): { allowed: boolean; reason?: string } {
     if (!clientIP) return { allowed: true }
-    // 规范化（::ffff:1.2.3.4 → 1.2.3.4）
+    // normalized (::ffff:1.2.3.4 → 1.2.3.4）
     const ip = clientIP.startsWith('::ffff:') ? clientIP.slice(7) : clientIP
 
     const matchEntry = (entry: string): boolean => {
@@ -1595,8 +1670,8 @@ export class ProxyServer {
   }
 
   /**
-   * 简化 IPv4/IPv6 CIDR 匹配（不依赖外部库）
-   * IPv4 CIDR：1.2.3.0/24；IPv6 CIDR：仅前缀逐 bit 比较
+   * simplify IPv4/IPv6 CIDR Matching (does not rely on external libraries)
+   * IPv4 CIDR：1.2.3.0/24；IPv6 CIDR: Prefix only bit Compare
    */
   private ipInCidr(ip: string, cidr: string): boolean {
     const [range, bitsStr] = cidr.split('/')
@@ -1611,7 +1686,7 @@ export class ProxyServer {
       const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0
       return (ipNum & mask) === (rangeNum & mask)
     }
-    // IPv6 简化：转字节数组 + 前缀逐 bit 比较
+    // IPv6 Simplification: Convert to byte array + Prefix by bit Compare
     const ipBytes = this.ipv6ToBytes(ip)
     const rangeBytes = this.ipv6ToBytes(range)
     if (!ipBytes || !rangeBytes) return false
@@ -1637,7 +1712,7 @@ export class ProxyServer {
 
   private ipv6ToBytes(ip: string): Uint8Array | null {
     try {
-      // 简化处理：支持 :: 缩写
+      // Simplified processing: supported :: abbreviation
       const parts = ip.split('::')
       let head: string[] = []
       let tail: string[] = []
@@ -1665,12 +1740,12 @@ export class ProxyServer {
     }
   }
 
-  /** 取客户端真实 IP（不信任 X-Forwarded-For，仅取 socket address） */
+  /** Get client real IP(distrust X-Forwarded-For, only take socket address） */
   private getClientIP(req: http.IncomingMessage): string {
     return req.socket.remoteAddress || ''
   }
 
-  // 记录 API Key 用量
+  // Record API Key Dosage
   recordApiKeyUsage(apiKeyId: string, credits: number, inputTokens: number, outputTokens: number, model?: string, path?: string): void {
     if (!this.config.apiKeys) return
     const apiKey = this.config.apiKeys.find(k => k.id === apiKeyId)
@@ -1679,14 +1754,14 @@ export class ProxyServer {
     const today = new Date().toISOString().split('T')[0]
     const now = Date.now()
     
-    // 更新总计
+    // Update total
     apiKey.usage.totalRequests++
     apiKey.usage.totalCredits += credits
     apiKey.usage.totalInputTokens += inputTokens
     apiKey.usage.totalOutputTokens += outputTokens
     apiKey.lastUsedAt = now
 
-    // 更新日统计
+    // Update daily statistics
     if (!apiKey.usage.daily[today]) {
       apiKey.usage.daily[today] = { requests: 0, credits: 0, inputTokens: 0, outputTokens: 0 }
     }
@@ -1695,7 +1770,7 @@ export class ProxyServer {
     apiKey.usage.daily[today].inputTokens += inputTokens
     apiKey.usage.daily[today].outputTokens += outputTokens
 
-    // 更新模型统计
+    // Update model statistics
     if (model) {
       if (!apiKey.usage.byModel) {
         apiKey.usage.byModel = {}
@@ -1709,7 +1784,7 @@ export class ProxyServer {
       apiKey.usage.byModel[model].outputTokens += outputTokens
     }
 
-    // 添加用量历史记录（保留最近 100 条）
+    // Add usage history (keep recent 100 strip)
     if (!apiKey.usageHistory) {
       apiKey.usageHistory = []
     }
@@ -1725,40 +1800,40 @@ export class ProxyServer {
       apiKey.usageHistory = apiKey.usageHistory.slice(0, 100)
     }
 
-    // 触发配置保存事件
+    // Trigger configuration save event
     this.events.onConfigChanged?.(this.config)
   }
 
-  // 应用模型映射
+  // Apply model mapping
   private applyModelMapping(requestedModel: string, apiKeyId?: string): string {
     const mappings = this.config.modelMappings
     if (!mappings || mappings.length === 0) return requestedModel
 
-    // 按优先级排序（数字越小优先级越高）
+    // Sort by priority (lower numbers have higher priority)
     const sortedMappings = [...mappings].sort((a, b) => a.priority - b.priority)
 
     for (const rule of sortedMappings) {
-      // 检查规则是否启用
+      // Check if the rule is enabled
       if (!rule.enabled) continue
 
-      // 检查是否适用于当前 API Key
+      // Check if it applies to the current API Key
       if (rule.apiKeyIds && rule.apiKeyIds.length > 0 && apiKeyId) {
         if (!rule.apiKeyIds.includes(apiKeyId)) continue
       }
 
-      // 检查源模型是否匹配（支持通配符 *）
+      // Check if the source model matches (supports wildcards *）
       const sourcePattern = rule.sourceModel.replace(/\*/g, '.*')
       const regex = new RegExp(`^${sourcePattern}$`, 'i')
       if (!regex.test(requestedModel)) continue
 
-      // 匹配成功，根据类型选择目标模型
+      // Match successful, select target model based on type
       const validTargets = rule.targetModels.filter(t => t.trim())
       if (validTargets.length === 0) continue
 
       let targetModel: string
 
       if (rule.type === 'loadbalance' && validTargets.length > 1) {
-        // 负载均衡：根据权重随机选择
+        // Load balancing: random selection based on weight
         const weights = rule.weights || validTargets.map(() => 1)
         const totalWeight = weights.reduce((a, b) => a + b, 0)
         let random = Math.random() * totalWeight
@@ -1772,7 +1847,7 @@ export class ProxyServer {
         }
         targetModel = validTargets[selectedIndex]
       } else {
-        // replace 或 alias：直接使用第一个目标
+        // replace or alias: Use the first target directly
         targetModel = validTargets[0]
       }
 
@@ -1783,7 +1858,7 @@ export class ProxyServer {
     return requestedModel
   }
 
-  // 处理请求
+  // Handle request
   private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const path = req.url || '/'
     const method = req.method || 'GET'
@@ -1799,7 +1874,7 @@ export class ProxyServer {
     req.on('aborted', abortRequest)
     res.on('close', abortRequest)
 
-    // CORS 预检
+    // CORS Preflight
     if (method === 'OPTIONS') {
       this.setCorsHeaders(res)
       res.writeHead(204)
@@ -1813,7 +1888,7 @@ export class ProxyServer {
     try {
       this.setCorsHeaders(res)
 
-      // P0-4 IP 访问控制（健康检查也走，防止扫描器）
+      // P0-4 IP Access control (health checks also go, prevent scanners)
       const ipCheck = this.isClientIPAllowed(clientIP)
       if (!ipCheck.allowed) {
         proxyLogger.warn('ProxyServer', `Blocked request from ${clientIP}: ${ipCheck.reason}`)
@@ -1822,21 +1897,21 @@ export class ProxyServer {
         return
       }
 
-      // API Key 验证（健康检查端点除外）
+      // API Key Authentication (except health check endpoints)
       if (path !== '/health' && path !== '/') {
         const authResult = this.validateApiKey(req)
         if (!authResult.valid) {
           const errorMsg = authResult.reason || 'Invalid or missing API key'
           const statusCode = authResult.reason === 'Credits limit exceeded' ? 429 : 401
-          // 401 不返回 reason 详情（防止指纹爬取）
+          // 401 Do not return reason Details (prevent fingerprint crawling)
           this.sendError(res, statusCode, statusCode === 401 ? 'Unauthorized' : errorMsg,
             this.isAnthropicPath(path) ? 'anthropic' : 'openai')
           return
         }
-        // 将匹配的 API Key 存储到请求对象中，用于后续统计
+        // will match API Key Stored in the request object for subsequent statistics
         ;(req as unknown as { matchedApiKey?: import('./types').ApiKey }).matchedApiKey = authResult.apiKey
 
-        // P1-7 按 API Key（或匿名时按 IP）请求限流
+        // P1-7 according to API Key(or if anonymous, press IP) request current limit
         const rateLimitId = authResult.apiKey?.id || `ip:${clientIP || 'unknown'}`
         const rl = this.checkRateLimit(rateLimitId)
         if (!rl.allowed) {
@@ -1849,12 +1924,12 @@ export class ProxyServer {
         }
       }
 
-      // 记录请求
+      // Logging request
       if (this.config.logRequests) {
         proxyLogger.info('ProxyServer', `${method} ${path}`)
       }
 
-      // 路由（移除查询参数）
+      // Routing (remove query parameters)
       const pathWithoutQuery = path.split('?')[0]
       
       if (pathWithoutQuery === '/v1/models' || pathWithoutQuery === '/models') {
@@ -1866,17 +1941,17 @@ export class ProxyServer {
       } else if (pathWithoutQuery === '/v1/messages' || pathWithoutQuery === '/messages' || pathWithoutQuery === '/anthropic/v1/messages') {
         await this.handleClaudeMessages(req, res, controller.signal)
       } else if (pathWithoutQuery === '/v1/messages/count_tokens' || pathWithoutQuery === '/messages/count_tokens') {
-        // Claude Code token 计数端点 - 返回模拟响应
+        // Claude Code token Count endpoint - Return mock response
         await this.handleCountTokens(req, res, controller.signal)
       } else if (pathWithoutQuery === '/api/event_logging/batch') {
-        // Claude Code 遥测端点 - 直接返回 200 OK
+        // Claude Code telemetry endpoint - Return directly 200 OK
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok' }))
       } else if (pathWithoutQuery.startsWith('/v1beta/models/')) {
-        // Gemini v1beta 兼容路由
+        // Gemini v1beta Compatible routing
         await this.handleGeminiRequest(req, res, pathWithoutQuery, controller.signal)
       } else if (pathWithoutQuery === '/v1beta/models') {
-        // Gemini 模型列表
+        // Gemini Model list
         await this.handleGeminiModels(res, controller.signal)
       } else if (pathWithoutQuery === '/health' || pathWithoutQuery === '/') {
         this.handleHealth(res)
@@ -1885,10 +1960,10 @@ export class ProxyServer {
         res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8' })
         res.end(this.renderPrometheusMetrics())
       } else if (pathWithoutQuery.startsWith('/admin/')) {
-        // 管理 API 端点
+        // manage API endpoint
         await this.handleAdminApi(req, res, pathWithoutQuery, controller.signal)
       } else {
-        // 记录未知路径以便调试
+        // Logging unknown paths for debugging
         console.log(`[ProxyServer] Unknown path: ${path} (method: ${method})`)
         this.sendError(res, 404, `Not Found: ${pathWithoutQuery}`)
       }
@@ -1897,14 +1972,14 @@ export class ProxyServer {
         proxyLogger.info('ProxyServer', `Request aborted: ${method} ${path}`)
         return
       }
-      // P0-1 body 超限 → 413
+      // P0-1 body Over limit → 413
       if (error instanceof BodyTooLargeError) {
         proxyLogger.warn('ProxyServer', `Body too large from ${clientIP}: ${error.received}/${error.limit} bytes (${path})`)
         this.sendError(res, 413, `Request body too large (max ${error.limit} bytes)`,
           this.isAnthropicPath(path) ? 'anthropic' : 'openai')
         return
       }
-      // P0-5 错误响应 sanitize：500 类不吐内部 message
+      // P0-5 error response sanitize：500 Class does not spit internal message
       console.error('[ProxyServer] Request error:', error)
       this.sendError(res, 500, 'Internal server error', this.isAnthropicPath(path) ? 'anthropic' : 'openai')
       this.events.onError?.(error as Error)
@@ -1915,11 +1990,11 @@ export class ProxyServer {
     }
   }
 
-  // 管理 API 端点
+  // manage API endpoint
   private async handleAdminApi(req: http.IncomingMessage, res: http.ServerResponse, path: string, signal?: AbortSignal): Promise<void> {
     const method = req.method || 'GET'
 
-    // 管理 API 需要 API Key 验证
+    // manage API need API Key verify
     const authResult = this.validateApiKey(req)
     if (!authResult.valid) {
       this.sendError(res, 401, 'Admin API requires authentication')
@@ -1927,16 +2002,16 @@ export class ProxyServer {
     }
 
     if (path === '/admin/stats' && method === 'GET') {
-      // 获取详细统计
+      // Get detailed statistics
       this.handleAdminStats(res)
     } else if (path === '/admin/accounts' && method === 'GET') {
-      // 获取账号列表
+      // Get account list
       this.handleAdminAccounts(res)
     } else if (path === '/admin/config' && method === 'GET') {
-      // 获取配置
+      // Get configuration
       this.handleAdminConfig(res)
     } else if (path === '/admin/config' && method === 'POST') {
-      // 更新配置（P1-9 schema 白名单校验，防止任意字段注入）
+      // update configuration (P1-9 schema Whitelist verification to prevent arbitrary field injection)
       const body = await this.readBody(req, signal)
       let parsed: Record<string, unknown>
       try { parsed = JSON.parse(body) } catch {
@@ -1949,14 +2024,14 @@ export class ProxyServer {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true, applied: Object.keys(safeUpdate), config: this.handleAdminConfigPayload() }))
     } else if (path === '/admin/audit' && method === 'GET') {
-      // P2-17 审计日志
+      // P2-17 Audit log
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ entries: this.auditLog.slice(-100) }))
     } else if (path === '/admin/logs' && method === 'GET') {
-      // 获取最近日志
+      // Get recent logs
       this.handleAdminLogs(res)
     } else if (path === '/admin/cache/clear' && method === 'POST') {
-      // 清除内存缓存（conversationId 映射、模型缓存、prompt cache）
+      // Clear memory cache (conversationId Mapping, model caching,prompt cache）
       const { clearAllCaches } = require('./kiroApi')
       const cleared = clearAllCaches()
       const promptCacheCleared = promptCacheTracker.clear()
@@ -1967,7 +2042,7 @@ export class ProxyServer {
     }
   }
 
-  // 管理 API - 详细统计
+  // manage API - Detailed statistics
   private handleAdminStats(res: http.ServerResponse): void {
     const stats = this.getStats()
     const accountStats: Record<string, unknown> = {}
@@ -1988,7 +2063,7 @@ export class ProxyServer {
     }))
   }
 
-  // 管理 API - 账号列表
+  // manage API - Account list
   private handleAdminAccounts(res: http.ServerResponse): void {
     const accounts = this.accountPool.getAllAccounts().map(acc => ({
       id: acc.id,
@@ -2010,8 +2085,8 @@ export class ProxyServer {
   }
 
   /**
-   * P1-12 构造脱敏后的配置（apiKeys[].key 全部脱敏，tls 私钥不返回）
-   * 暴露给 /admin/config GET
+   * P1-12 Construct the configuration after desensitization (apiKeys[].key All desensitized,tls Private key is not returned)
+   * exposed to /admin/config GET
    */
   private handleAdminConfigPayload(): Record<string, unknown> {
     const config = this.getConfig()
@@ -2028,15 +2103,15 @@ export class ProxyServer {
     }
   }
 
-  // 管理 API - 配置
+  // manage API - Configuration
   private handleAdminConfig(res: http.ServerResponse): void {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(this.handleAdminConfigPayload()))
   }
 
   /**
-   * P1-9 admin/config POST 字段白名单过滤
-   * 仅允许"可远程改"的字段；apiKeys/apiKey 等敏感字段必须通过本地 IPC 改
+   * P1-9 admin/config POST Field whitelist filtering
+   * only allowed"Can be changed remotely"fields;apiKeys/apiKey Sensitive fields such as these must be passed through the local IPC change
    */
   private filterAdminConfigUpdate(input: Record<string, unknown>): Partial<ProxyConfig> {
     const allowed: Array<keyof ProxyConfig> = [
@@ -2050,8 +2125,8 @@ export class ProxyServer {
       'rateLimitPerKeyPerMinute', 'sessionAffinityEnabled',
       'keepAliveTimeoutMs', 'headersTimeoutMs', 'recentRequestsLimit',
       'enableMetrics', 'apiKeyGroupBindings', 'enableAuditLog'
-      // 故意排除：port / host / apiKey / apiKeys / tls / fallbackPort / allowExternalWithoutApiKey
-      // 这些字段会改变监听行为或安全策略，必须本地 IPC 改
+      // Deliberately excluded:port / host / apiKey / apiKeys / tls / fallbackPort / allowExternalWithoutApiKey
+      // These fields will change the listening behavior or security policy and must be local IPC change
     ]
     const out: Partial<ProxyConfig> = {}
     for (const key of allowed) {
@@ -2062,7 +2137,7 @@ export class ProxyServer {
     return out
   }
 
-  // 管理 API - 日志
+  // manage API - log
   private handleAdminLogs(res: http.ServerResponse): void {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({
@@ -2070,7 +2145,7 @@ export class ProxyServer {
     }))
   }
 
-  // 设置 CORS 头
+  // set up CORS head
   private setCorsHeaders(res: http.ServerResponse): void {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
@@ -2100,11 +2175,11 @@ export class ProxyServer {
     usage: { inputTokens: number; outputTokens: number; cacheWriteTokens?: number; cacheReadTokens?: number },
     simulatedCache?: { cacheCreationInputTokens: number; cacheReadInputTokens: number }
   ): { input_tokens?: number; output_tokens: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } {
-    // 优先使用 Kiro 后端返回的真实 cache tokens，否则用模拟器的值
+    // priority use Kiro The truth returned by the backend cache tokens, otherwise use the value of the simulator
     const cacheWrite = usage.cacheWriteTokens || simulatedCache?.cacheCreationInputTokens || 0
     const cacheRead = usage.cacheReadTokens || simulatedCache?.cacheReadInputTokens || 0
-    // Kiro 的 inputTokens 是全量（含缓存），Anthropic API 规范中 input_tokens 不含缓存部分
-    // 需要扣除 cache tokens 避免客户端双重计费
+    // Kiro of inputTokens It is the full amount (including cache),Anthropic API In specification input_tokens Without cache part
+    // Need to deduct cache tokens Avoid double billing on the client side
     const adjustedInput = Math.max(0, usage.inputTokens - cacheWrite - cacheRead)
     return {
       input_tokens: adjustedInput,
@@ -2135,7 +2210,7 @@ export class ProxyServer {
     return Object.entries(record).reduce<number>((total, [key, item]) => key === 'cache_control' ? total : total + this.estimateTokenCount(item), 0)
   }
 
-  // 健康检查
+  // health check
   private handleHealth(res: http.ServerResponse): void {
     const stats = this.getStats()
     res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -2154,7 +2229,7 @@ export class ProxyServer {
     }))
   }
 
-  // Claude Code token 计数（模拟响应）
+  // Claude Code token count (analog response)
   private async handleCountTokens(req: http.IncomingMessage, res: http.ServerResponse, signal?: AbortSignal): Promise<void> {
     try {
       this.throwIfAborted(signal)
@@ -2174,7 +2249,7 @@ export class ProxyServer {
     }
   }
 
-  // Gemini v1beta 模型列表
+  // Gemini v1beta Model list
   private async handleGeminiModels(res: http.ServerResponse, signal?: AbortSignal): Promise<void> {
     const result = await this.getAvailableModels(signal)
     const geminiModels = result.models.map(m => ({
@@ -2198,7 +2273,7 @@ export class ProxyServer {
     const geminiReq = JSON.parse(body)
     const matchedApiKey = (req as unknown as { matchedApiKey?: import('./types').ApiKey }).matchedApiKey
 
-    // 解析路径: /v1beta/models/{model}:{method}
+    // parse path: /v1beta/models/{model}:{method}
     const match = path.match(/\/v1beta\/models\/([^:]+):(\w+)/)
     if (!match) {
       this.sendError(res, 400, 'Invalid Gemini endpoint path')
@@ -2207,7 +2282,7 @@ export class ProxyServer {
     const [, modelId, method] = match
     const isStream = method === 'streamGenerateContent'
 
-    // 将 Gemini 请求转为 OpenAI 格式
+    // Will Gemini Request to convert to OpenAI Format
     const messages: OpenAIMessage[] = []
     if (geminiReq.systemInstruction?.parts) {
       const sysText = geminiReq.systemInstruction.parts.map((p: { text?: string }) => p.text || '').join('\n')
@@ -2231,7 +2306,7 @@ export class ProxyServer {
       max_tokens: geminiReq.generationConfig?.maxOutputTokens
     }
 
-    // 复用 OpenAI 流程
+    // Reuse OpenAI process
     const startTime = Date.now()
     this.recordNewRequest()
     this.throwIfAborted(signal)
@@ -2243,11 +2318,14 @@ export class ProxyServer {
     }
 
     try {
+      // Make sure the model cache is loaded to support thinkingConfig Query
+      await this.getAvailableModels(signal)
+
       const toolNameRegistry = new ToolNameRegistry()
       const kiroPayload = openaiToKiro(openaiRequest, account.profileArn, toolNameRegistry, this.getThinkingConfig(openaiRequest.model))
 
       if (isStream) {
-        // SSE 流式
+        // SSE streaming
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' })
         return new Promise<void>((resolve) => {
           callKiroApiStream(
@@ -2299,7 +2377,7 @@ export class ProxyServer {
           })
         })
       } else {
-        // 非流式
+        // non-streaming
         const result = await callKiroApi(account as ProxyAccount, kiroPayload, signal)
         this.throwIfResponseClosed(res, signal)
         this.recordRequestSuccess()
@@ -2315,15 +2393,15 @@ export class ProxyServer {
     }
   }
 
-  // 模型列表缓存
+  // Model list cache
   private modelCache: { models: KiroModel[]; timestamp: number } | null = null
-  private readonly MODEL_CACHE_TTL = 5 * 60 * 1000 // 5 分钟缓存
+  private readonly MODEL_CACHE_TTL = 5 * 60 * 1000 // 5 minutes cache
 
-  // Steering 文件缓存（从 config.workspacePath 加载）
+  // Steering File cache (from config.workspacePath load)
   private steeringDocs: SteeringDocument[] = []
   private steeringPrompt: string = ''
 
-  /** 加载/刷新 steering 文件缓存。config.workspacePath 变化时调用。 */
+  /** load/refresh steering File cache.config.workspacePath Called when changes occur. */
   loadSteering(): void {
     if (!this.config.workspacePath) {
       this.steeringDocs = []
@@ -2337,15 +2415,15 @@ export class ProxyServer {
     }
   }
 
-  /** 获取格式化后的 steering prompt（注入到 system message 前面） */
+  /** Get the formatted steering prompt(injected into system message Front) */
   getSteeringPrompt(): string {
     return this.steeringPrompt
   }
 
-  /** 注入 steering 到 OpenAI 格式请求的 messages（prepend 到 system 消息前面或新增 system 消息） */
+  /** injection steering arrive OpenAI format requested messages（prepend arrive system Before the message or add system information) */
   private injectSteeringOpenAI(messages: OpenAIMessage[]): OpenAIMessage[] {
     if (!this.steeringPrompt) return messages
-    // 找到第一个 system 消息并 prepend
+    // Find the first one system news and prepend
     const sysIdx = messages.findIndex(m => m.role === 'system')
     if (sysIdx >= 0) {
       const sys = messages[sysIdx]
@@ -2356,33 +2434,82 @@ export class ProxyServer {
         ...messages.slice(sysIdx + 1)
       ]
     }
-    // 没有 system 消息，在最前面加一个
+    // No system Message, add one at the beginning
     return [{ role: 'system', content: this.steeringPrompt }, ...messages]
   }
 
-  /** 注入 steering 到 Claude 格式请求的 system 字段 */
+  /** injection steering arrive Claude format requested system Field */
   private injectSteeringClaude(system?: string | ClaudeContentBlock[]): string | ClaudeContentBlock[] | undefined {
     if (!this.steeringPrompt) return system
     if (!system) return this.steeringPrompt
     if (typeof system === 'string') return `${this.steeringPrompt}\n\n${system}`
-    // system 是 content block 数组，prepend 一个 text block
+    // system yes content block array,prepend one text block
     return [{ type: 'text', text: this.steeringPrompt } as ClaudeContentBlock, ...system]
   }
 
-  // 模型列表
+  // Model list
   private async handleModels(res: http.ServerResponse, signal?: AbortSignal): Promise<void> {
     const now = Date.now()
     
-    // Kiro 官方模型（与 UI 保持一致）
+    // Kiro official model (with UI be consistent)
+    // Include thinking Supported default schema（output_config path)
     const kiroOfficialModels = [
       buildClientModel({ id: 'auto', created: now, ownedBy: 'kiro-api', description: 'Auto select best model' }),
-      buildClientModel({ id: 'claude-sonnet-4.5', created: now, ownedBy: 'kiro-api', description: 'The latest Claude Sonnet model' }),
-      buildClientModel({ id: 'claude-sonnet-4', created: now, ownedBy: 'kiro-api', description: 'Hybrid reasoning and coding' }),
+      buildClientModel({ 
+        id: 'claude-sonnet-4.5', 
+        created: now, 
+        ownedBy: 'kiro-api', 
+        description: 'The latest Claude Sonnet model',
+        additionalModelRequestFieldsSchema: {
+          properties: {
+            thinking: { type: 'object' },
+            output_config: {
+              type: 'object',
+              properties: {
+                effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+              }
+            }
+          }
+        }
+      }),
+      buildClientModel({ 
+        id: 'claude-sonnet-4', 
+        created: now, 
+        ownedBy: 'kiro-api', 
+        description: 'Hybrid reasoning and coding',
+        additionalModelRequestFieldsSchema: {
+          properties: {
+            thinking: { type: 'object' },
+            output_config: {
+              type: 'object',
+              properties: {
+                effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+              }
+            }
+          }
+        }
+      }),
       buildClientModel({ id: 'claude-haiku-4.5', created: now, ownedBy: 'kiro-api', description: 'The latest Claude Haiku model' }),
-      buildClientModel({ id: 'claude-opus-4.5', created: now, ownedBy: 'kiro-api', description: 'The most powerful model' })
+      buildClientModel({ 
+        id: 'claude-opus-4.5', 
+        created: now, 
+        ownedBy: 'kiro-api', 
+        description: 'The most powerful model',
+        additionalModelRequestFieldsSchema: {
+          properties: {
+            thinking: { type: 'object' },
+            output_config: {
+              type: 'object',
+              properties: {
+                effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+              }
+            }
+          }
+        }
+      })
     ]
 
-    // 隐藏模型（未在官方 ListAvailableModels 中返回，但后端可能支持）
+    // Hidden model (not in official ListAvailableModels returned, but the backend may support it)
     const hiddenModels = [
       buildClientModel({ id: 'claude-3.7-sonnet', created: now, ownedBy: 'kiro-api', description: 'Claude 3.7 Sonnet (hidden)', modelName: 'Claude 3.7 Sonnet', supportedInputTypes: ['TEXT', 'IMAGE'], maxInputTokens: 200000, maxOutputTokens: 64000 }),
       buildClientModel({ id: 'simple-task', created: now, ownedBy: 'kiro-api', description: 'Kiro fast model for intent classification and lightweight tasks (routes to Haiku)', modelName: 'Simple Task', supportedInputTypes: ['TEXT'], maxInputTokens: 200000, maxOutputTokens: 4096 }),
@@ -2391,7 +2518,7 @@ export class ProxyServer {
       buildClientModel({ id: 'CLAUDE_3_7_SONNET_20250219_V1_0', created: now, ownedBy: 'kiro-api', description: 'Claude 3.7 Sonnet (CodeWhisperer internal ID)', modelName: 'Claude 3.7 Sonnet (CW)', supportedInputTypes: ['TEXT', 'IMAGE'], maxInputTokens: 200000, maxOutputTokens: 64000 })
     ]
 
-    // 预设模型（GPT 兼容别名）
+    // Default model (GPT Compatible with aliases)
     const presetModels = [
       buildClientModel({ id: 'gpt-4o', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' }),
       buildClientModel({ id: 'gpt-4', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' }),
@@ -2399,27 +2526,121 @@ export class ProxyServer {
       buildClientModel({ id: 'gpt-3.5-turbo', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' })
     ]
 
-    // 尝试从 Kiro API 获取动态模型
+    // try to start from Kiro API Get dynamic model
     let kiroModels: KiroModel[] = []
     
-    // 检查缓存
+    // Check cache
     if (this.modelCache && (now - this.modelCache.timestamp) < this.MODEL_CACHE_TTL) {
       kiroModels = this.modelCache.models
     } else {
-      // 获取一个可用账号来请求模型列表
+      // Get an available account to request a list of models
       const account = this.accountPool.getNextAccount()
       if (account) {
         try {
           kiroModels = await fetchKiroModels(account, signal)
           if (kiroModels.length > 0) {
-            this.modelCache = { models: kiroModels, timestamp: now }
-            // 同步到 kiroApi 的 ctx cache, 供 token 裁剪逻辑使用
+            // Build hardcoded model metadata for thinking support
+            const hardcodedThinkingModels: KiroModel[] = [
+              {
+                modelId: 'claude-sonnet-4.5',
+                modelName: 'Claude Sonnet 4.5',
+                description: 'The latest Claude Sonnet model',
+                supportedInputTypes: ['TEXT', 'IMAGE'],
+                tokenLimits: { maxInputTokens: 200000, maxOutputTokens: 64000 },
+                additionalModelRequestFieldsSchema: {
+                  properties: {
+                    thinking: { type: 'object' },
+                    output_config: {
+                      type: 'object',
+                      properties: {
+                        effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                modelId: 'claude-sonnet-4',
+                modelName: 'Claude Sonnet 4',
+                description: 'Hybrid reasoning and coding',
+                supportedInputTypes: ['TEXT', 'IMAGE'],
+                tokenLimits: { maxInputTokens: 200000, maxOutputTokens: 64000 },
+                additionalModelRequestFieldsSchema: {
+                  properties: {
+                    thinking: { type: 'object' },
+                    output_config: {
+                      type: 'object',
+                      properties: {
+                        effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                modelId: 'claude-opus-4.5',
+                modelName: 'Claude Opus 4.5',
+                description: 'The most powerful model',
+                supportedInputTypes: ['TEXT', 'IMAGE'],
+                tokenLimits: { maxInputTokens: 200000, maxOutputTokens: 64000 },
+                additionalModelRequestFieldsSchema: {
+                  properties: {
+                    thinking: { type: 'object' },
+                    output_config: {
+                      type: 'object',
+                      properties: {
+                        effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+            
+            // Merge fetched models with hardcoded thinking models
+            // Strategy: Use API models as base, but if hardcoded model has thinking schema and API model doesn't, use hardcoded schema
+            const modelMap = new Map<string, KiroModel>()
+            const hardcodedMap = new Map<string, KiroModel>()
+            
+            // Build hardcoded lookup
+            for (const m of hardcodedThinkingModels) {
+              hardcodedMap.set(m.modelId.toLowerCase(), m)
+            }
+            
+            // Process API models: use API data but augment with hardcoded thinking schema if missing
             for (const m of kiroModels) {
+              const lower = m.modelId.toLowerCase()
+              const hardcoded = hardcodedMap.get(lower)
+              
+              // If API model has no thinking schema but hardcoded version does, use hardcoded schema
+              if (hardcoded && hardcoded.additionalModelRequestFieldsSchema && !m.additionalModelRequestFieldsSchema) {
+                modelMap.set(lower, {
+                  ...m,
+                  additionalModelRequestFieldsSchema: hardcoded.additionalModelRequestFieldsSchema
+                })
+              } else {
+                modelMap.set(lower, m)
+              }
+            }
+            
+            // Add hardcoded models that don't exist in API response
+            for (const m of hardcodedThinkingModels) {
+              const lower = m.modelId.toLowerCase()
+              if (!modelMap.has(lower)) {
+                modelMap.set(lower, m)
+              }
+            }
+            
+            const mergedModels = Array.from(modelMap.values())
+            this.modelCache = { models: mergedModels, timestamp: now }
+            
+            // Sync to kiroApi of ctx cache, for token Clipping logic usage
+            for (const m of mergedModels) {
               if (m.tokenLimits?.maxInputTokens) {
                 setModelContextWindow(m.modelId, m.tokenLimits.maxInputTokens)
               }
             }
-            proxyLogger.info('ProxyServer', `Fetched ${kiroModels.length} models from Kiro API`)
+            proxyLogger.info('ProxyServer', `Fetched ${kiroModels.length} models from Kiro API, merged with ${hardcodedThinkingModels.length} hardcoded thinking models`)
           }
         } catch (error) {
           if (this.isAbortError(error, signal)) throw error
@@ -2428,7 +2649,7 @@ export class ProxyServer {
       }
     }
 
-    // 转换 Kiro 模型为 OpenAI 格式（保持原始 modelId）
+    // Convert Kiro The model is OpenAI Format (keep original modelId）
     const dynamicModels = kiroModels.map(m => buildClientModel({
       id: m.modelId,
       created: now,
@@ -2445,11 +2666,11 @@ export class ProxyServer {
       modelProvider: m.modelProvider
     }))
 
-    // 合并模型列表，去重
+    // Merge model lists and remove duplicates
     const modelIds = new Set<string>()
     const allModels: ClientModel[] = []
     
-    // 1. 优先添加动态模型（从 API 获取的，包含真实 token limit / input types）
+    // 1. Add dynamic models first (from API Obtained, including true token limit / input types）
     for (const m of dynamicModels) {
       if (!modelIds.has(m.id)) {
         modelIds.add(m.id)
@@ -2457,7 +2678,7 @@ export class ProxyServer {
       }
     }
     
-    // 2. 添加隐藏模型（未在官方 ListAvailableModels 中返回，但后端可能支持）
+    // 2. Added hidden model (not available in official ListAvailableModels returned, but the backend may support it)
     for (const m of hiddenModels) {
       if (!modelIds.has(m.id)) {
         modelIds.add(m.id)
@@ -2465,7 +2686,7 @@ export class ProxyServer {
       }
     }
     
-    // 3. 动态模型缺失时才添加静态兜底
+    // 3. Only add static cover when the dynamic model is missing
     if (dynamicModels.length === 0) {
       for (const m of [...kiroOfficialModels, ...presetModels]) {
         if (!modelIds.has(m.id)) {
@@ -2480,14 +2701,14 @@ export class ProxyServer {
     res.end(JSON.stringify({ object: 'list', data: allModels }))
   }
 
-  // 处理 OpenAI Chat Completions 请求
+  // deal with OpenAI Chat Completions ask
   private async handleOpenAIChat(req: http.IncomingMessage, res: http.ServerResponse, signal?: AbortSignal): Promise<void> {
     const body = await this.readBody(req, signal)
     this.throwIfAborted(signal)
     const request: OpenAIChatRequest = JSON.parse(body)
     const matchedApiKey = (req as unknown as { matchedApiKey?: import('./types').ApiKey }).matchedApiKey
 
-    // 提取 session hint（用于稳定 conversationId），拼入 API Key hash 隔离不同用户
+    // extract session hint(for stable conversationId), spell in API Key hash Isolate different users
     const rawHintChat = ProxyServer.extractSessionHint(req, request)
     if (!request.conversation_id && rawHintChat) {
       const keyPrefix = matchedApiKey?.id?.slice(0, 8) || 'default'
@@ -2495,7 +2716,7 @@ export class ProxyServer {
     }
     const affinityHintChat = request.conversation_id
 
-    // 应用模型映射
+    // Apply model mapping
     request.model = this.applyModelMapping(request.model, matchedApiKey?.id)
 
     const startTime = Date.now()
@@ -2516,7 +2737,7 @@ export class ProxyServer {
       return
     }
 
-    // 获取账号（包含 Token 刷新检查 + 会话粘性 + API Key 账号白名单）
+    // Get an account (including Token refresh check + session stickiness + API Key Account whitelist)
     this.throwIfAborted(signal)
     const account = await this.getAvailableAccount(signal, affinityHintChat, matchedApiKey?.id)
     this.throwIfAborted(signal)
@@ -2537,16 +2758,19 @@ export class ProxyServer {
     try {
       const toolNameRegistry = new ToolNameRegistry()
 
-      // 注入 steering 到 system message
+      // injection steering arrive system message
       if (this.steeringPrompt) {
         processedRequest.messages = this.injectSteeringOpenAI(processedRequest.messages)
       }
 
-      // 转换为 Kiro 格式
+      // Make sure the model cache is loaded to support thinkingConfig Query
+      await this.getAvailableModels(signal)
+
+      // Convert to Kiro Format
       const thinkingConfig = this.getThinkingConfig(processedRequest.model)
       const kiroPayload = openaiToKiro(processedRequest, account.profileArn, toolNameRegistry, thinkingConfig)
 
-      // 记录请求详情到日志
+      // Record request details to log
       if (this.config.logRequests) {
         const userInput = kiroPayload.conversationState.currentMessage?.userInputMessage
         const contentLength = typeof userInput?.content === 'string' ? userInput.content.length : 0
@@ -2566,10 +2790,10 @@ export class ProxyServer {
       }
 
       if (request.stream) {
-        // 流式响应（流式不使用重试机制，错误由流处理）
+        // Streaming response (streaming does not use the retry mechanism, errors are handled by the stream)
         await this.handleOpenAIStream(res, account, kiroPayload, request.model, startTime, 0, undefined, false, matchedApiKey, toolNameRegistry, signal)
       } else {
-        // 非流式响应（带重试机制）
+        // Non-streaming response (with retry mechanism)
         const { result, account: usedAccount } = await this.callWithRetry(
           account,
           async (acc) => {
@@ -2593,7 +2817,7 @@ export class ProxyServer {
         const respTime = Date.now() - startTime
         this.events.onResponse?.({ path: '/v1/chat/completions', model: request.model, status: 200, tokens: result.usage.inputTokens + result.usage.outputTokens, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, cacheReadTokens: result.usage.cacheReadTokens, reasoningTokens: result.usage.reasoningTokens, credits: result.usage.credits, responseTime: respTime })
         this.recordRequest({ path: '/v1/chat/completions', model: request.model, accountId: usedAccount.id, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, credits: result.usage.credits, responseTime: respTime, success: true })
-        // 记录 API Key 用量
+        // Record API Key Dosage
         if (matchedApiKey) {
           this.recordApiKeyUsage(matchedApiKey.id, result.usage.credits || 0, result.usage.inputTokens, result.usage.outputTokens, request.model, '/v1/chat/completions')
         }
@@ -2619,7 +2843,7 @@ export class ProxyServer {
     try {
       responseRequest = JSON.parse(body)
       chatRequest = responsesToOpenAIChat(responseRequest)
-      // session hint：用于会话粘性
+      // session hint: used for session stickiness
       const rawHintResp = ProxyServer.extractSessionHint(req, responseRequest)
       if (rawHintResp) {
         const keyPrefix = matchedApiKey?.id?.slice(0, 8) || 'default'
@@ -2748,7 +2972,7 @@ export class ProxyServer {
     }
   }
 
-  // 处理 OpenAI 流式响应
+  // deal with OpenAI Streaming response
   private async handleOpenAIStream(
     res: http.ServerResponse,
     account: { id: string; accessToken: string; profileArn?: string },
@@ -2774,7 +2998,7 @@ export class ProxyServer {
     let toolCallIndex = 0
     const pendingToolCalls: Map<string, { index: number; name: string; arguments: string }> = new Map()
     let collectedContent = ''
-    // 发送初始 chunk（仅首轮）
+    // Send initial chunk(First round only)
     if (currentRound === 0) {
       const initialChunk = createOpenaiStreamChunk(id, model, { role: 'assistant' })
       res.write(`data: ${JSON.stringify(initialChunk)}\n\n`)
@@ -2788,11 +3012,11 @@ export class ProxyServer {
           if (signal?.aborted || this.isResponseClosed(res)) return
           if (text && text.trim()) {
             if (isThinking) {
-              // 原生 thinking 内容 → 输出为 reasoning_content
+              // Native thinking content → The output is reasoning_content
               const chunk = createOpenaiStreamChunk(id, model, { reasoning_content: text })
               res.write(`data: ${JSON.stringify(chunk)}\n\n`)
             } else {
-              // 普通文本内容
+              // Normal text content
               collectedContent += text
               const chunk = createOpenaiStreamChunk(id, model, { content: text })
               res.write(`data: ${JSON.stringify(chunk)}\n\n`)
@@ -2841,12 +3065,12 @@ export class ProxyServer {
           const oaiRespTime = Date.now() - startTime
           this.events.onResponse?.({ path: '/v1/chat/completions', model, status: 200, tokens: usage.inputTokens + usage.outputTokens, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadTokens: usage.cacheReadTokens, reasoningTokens: usage.reasoningTokens, credits: usage.credits, responseTime: oaiRespTime })
           this.recordRequest({ path: '/v1/chat/completions', model, accountId: account.id, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, credits: usage.credits, responseTime: oaiRespTime, success: true })
-          // 记录 API Key 用量
+          // Record API Key Dosage
           if (matchedApiKey) {
             this.recordApiKeyUsage(matchedApiKey.id, usage.credits || 0, usage.inputTokens, usage.outputTokens, model, '/v1/chat/completions')
           }
 
-          // 发送结束 chunk（包含完整 usage 信息）
+          // End of sending chunk(Includes complete usage information)
           const hasToolCalls = pendingToolCalls.size > 0
           const finishReason = hasToolCalls ? 'tool_calls' : 'stop'
           const usageInfo: {
@@ -2860,11 +3084,11 @@ export class ProxyServer {
             completion_tokens: usage.outputTokens,
             total_tokens: usage.inputTokens + usage.outputTokens
           }
-          // 添加 cache tokens 详情
+          // Add to cache tokens Details
           if (usage.cacheReadTokens && usage.cacheReadTokens > 0) {
             usageInfo.prompt_tokens_details = { cached_tokens: usage.cacheReadTokens }
           }
-          // 添加 reasoning tokens 详情
+          // Add to reasoning tokens Details
           if (usage.reasoningTokens && usage.reasoningTokens > 0) {
             usageInfo.completion_tokens_details = { reasoning_tokens: usage.reasoningTokens }
           }
@@ -2903,23 +3127,23 @@ export class ProxyServer {
     })
   }
 
-  // 处理 Claude Messages 请求
+  // deal with Claude Messages ask
   private async handleClaudeMessages(req: http.IncomingMessage, res: http.ServerResponse, signal?: AbortSignal): Promise<void> {
     const body = await this.readBody(req, signal)
     this.throwIfAborted(signal)
     const request: ClaudeRequest = JSON.parse(body)
     const matchedApiKey = (req as unknown as { matchedApiKey?: import('./types').ApiKey }).matchedApiKey
 
-    // 提取 session hint（用于稳定 conversationId），拼入 API Key hash 隔离不同用户
+    // extract session hint(for stable conversationId), spell in API Key hash Isolate different users
     const rawHint = ProxyServer.extractSessionHint(req, request)
     if (!request.conversation_id && rawHint) {
       const keyPrefix = matchedApiKey?.id?.slice(0, 8) || 'default'
       request.conversation_id = `${keyPrefix}:${rawHint}`
     }
-    // P1-8 会话粘性使用 conversation_id 作为粘性 key（已包含 API Key 前缀）
+    // P1-8 session stickiness usage conversation_id as sticky key(included API Key prefix)
     const affinityHint = request.conversation_id
 
-    // 应用模型映射
+    // Apply model mapping
     request.model = this.applyModelMapping(request.model, matchedApiKey?.id)
 
     const startTime = Date.now()
@@ -2940,7 +3164,7 @@ export class ProxyServer {
       return
     }
 
-    // 获取账号（包含 Token 刷新检查 + 会话粘性 + API Key 账号白名单）
+    // Get an account (including Token refresh check + session stickiness + API Key Account whitelist)
     this.throwIfAborted(signal)
     const account = await this.getAvailableAccount(signal, affinityHint, matchedApiKey?.id)
     this.throwIfAborted(signal)
@@ -2961,15 +3185,18 @@ export class ProxyServer {
     try {
       const toolNameRegistry = new ToolNameRegistry()
 
-      // 注入 steering 到 Claude system
+      // injection steering arrive Claude system
       if (this.steeringPrompt) {
         processedRequest.system = this.injectSteeringClaude(processedRequest.system) as string | undefined
       }
 
+      // Make sure the model cache is loaded to support thinkingConfig Query
+      await this.getAvailableModels(signal)
+
       const claudeThinkingConfig = this.getThinkingConfig(processedRequest.model)
       const kiroPayload = claudeToKiro(processedRequest, account.profileArn, toolNameRegistry, claudeThinkingConfig)
 
-      // 构建 prompt cache profile（用于模拟缓存 usage）
+      // Build prompt cache profile(for simulating caching usage）
       const estimatedInputTokens = Math.max(1, Math.round(JSON.stringify(kiroPayload).length * 0.3))
       const cacheProfile = promptCacheTracker.buildClaudeProfile(
         processedRequest.system,
@@ -2984,7 +3211,7 @@ export class ProxyServer {
         proxyLogger.info('ProxyServer', `Prompt cache: ${cacheProfile.breakpoints.length} breakpoints, creation=${cacheUsage.cacheCreationInputTokens}, read=${cacheUsage.cacheReadInputTokens}`)
       }
 
-      // 记录请求详情到日志
+      // Record request details to log
       if (this.config.logRequests) {
         const userInput = kiroPayload.conversationState.currentMessage?.userInputMessage
         const contentLength = typeof userInput?.content === 'string' ? userInput.content.length : 0
@@ -3004,11 +3231,11 @@ export class ProxyServer {
       }
 
       if (request.stream) {
-        // 流式响应（流式不使用重试机制，错误由流处理）
+        // Streaming response (streaming does not use the retry mechanism, errors are handled by the stream)
         await this.handleClaudeStream(res, account, kiroPayload, request.model, startTime, 0, undefined, false, 0, matchedApiKey, toolNameRegistry, signal,
           cacheProfile ? { ...cacheUsage, cacheProfile, accountId: account.id } : undefined)
       } else {
-        // 非流式响应（带重试机制）
+        // Non-streaming response (with retry mechanism)
         const { result, account: usedAccount } = await this.callWithRetry(
           account,
           async (acc) => {
@@ -3020,7 +3247,7 @@ export class ProxyServer {
         )
         const response = kiroToClaudeResponse(result.content, result.toolUses, result.usage, request.model, toolNameRegistry, result.reasoningContent)
 
-        // 用缓存模拟的 usage 覆盖（如果有 cache profile）
+        // simulated with cache usage override (if any cache profile）
         if (cacheProfile && cacheUsage) {
           if (cacheUsage.cacheCreationInputTokens > 0) response.usage.cache_creation_input_tokens = cacheUsage.cacheCreationInputTokens
           if (cacheUsage.cacheReadInputTokens > 0) response.usage.cache_read_input_tokens = cacheUsage.cacheReadInputTokens
@@ -3045,7 +3272,7 @@ export class ProxyServer {
     }
   }
 
-  // 处理 Claude 流式响应
+  // deal with Claude Streaming response
   private async handleClaudeStream(
     res: http.ServerResponse,
     account: { id: string; accessToken: string; profileArn?: string },
@@ -3087,10 +3314,10 @@ export class ProxyServer {
       pendingThinkingSignature = undefined
     }
 
-    // 估算输入 tokens（基于 payload 大小）
+    // Estimate input tokens(based on payload size)
     const estimatedInputTokens = Math.max(1, Math.round(JSON.stringify(kiroPayload).length / 3))
     
-    // 发送 message_start（仅首轮）
+    // send message_start(First round only)
     if (currentRound === 0) {
       const messageStart = createClaudeStreamEvent('message_start', {
         message: {
@@ -3113,7 +3340,7 @@ export class ProxyServer {
         kiroPayload,
         (text, toolUse, isThinking, reasoningSignature, redactedContent) => {
           if (signal?.aborted || this.isResponseClosed(res)) return
-          // 优先处理 redacted_thinking（加密的 thinking 块，需单独 content_block）
+          // Prioritize processing redacted_thinking(encrypted thinking block, need to be separate content_block）
           if (redactedContent) {
             if (hasStartedTextBlock) {
               const blockStop = createClaudeStreamEvent('content_block_stop', { index: currentBlockIndex })
@@ -3140,7 +3367,7 @@ export class ProxyServer {
           }
           if (text && text.trim()) {
             if (isThinking) {
-              // 原生 thinking 内容 → 输出为 Anthropic thinking block
+              // Native thinking content → The output is Anthropic thinking block
               if (hasStartedTextBlock) {
                 const blockStop = createClaudeStreamEvent('content_block_stop', { index: currentBlockIndex })
                 res.write(`event: content_block_stop\ndata: ${JSON.stringify(blockStop)}\n\n`)
@@ -3164,7 +3391,7 @@ export class ProxyServer {
                 pendingThinkingSignature = reasoningSignature
               }
             } else {
-              // 普通文本内容
+              // Normal text content
               if (hasStartedThinkingBlock) {
                 flushThinkingSignature()
                 const blockStop = createClaudeStreamEvent('content_block_stop', { index: currentBlockIndex })
@@ -3207,28 +3434,28 @@ export class ProxyServer {
               currentBlockIndex++
               hasStartedThinkingBlock = false
             }
-            // 结束之前的文本块
+            // text block before end
             if (hasStartedTextBlock) {
               const blockStop = createClaudeStreamEvent('content_block_stop', { index: currentBlockIndex })
               res.write(`event: content_block_stop\ndata: ${JSON.stringify(blockStop)}\n\n`)
               currentBlockIndex++
               hasStartedTextBlock = false
             }
-            // 记录工具调用
+            // Logging tool calls
             pendingToolCalls.set(toolUse.toolUseId, { name: toolUse.name, input: toolUse.input })
-            // 开始工具块
+            // Start tool block
             const toolBlockStart = createClaudeStreamEvent('content_block_start', {
               index: currentBlockIndex,
               content_block: { type: 'tool_use', id: toolUse.toolUseId, name: restoredToolUse.name, input: {} }
             })
             res.write(`event: content_block_start\ndata: ${JSON.stringify(toolBlockStart)}\n\n`)
-            // 发送工具输入
+            // Send tool input
             const toolDelta = createClaudeStreamEvent('content_block_delta', {
               index: currentBlockIndex,
               delta: { type: 'input_json_delta', partial_json: JSON.stringify(toolUse.input) } as any
             })
             res.write(`event: content_block_delta\ndata: ${JSON.stringify(toolDelta)}\n\n`)
-            // 结束工具块
+            // end tool block
             const toolBlockStop = createClaudeStreamEvent('content_block_stop', { index: currentBlockIndex })
             res.write(`event: content_block_stop\ndata: ${JSON.stringify(toolBlockStop)}\n\n`)
             currentBlockIndex++
@@ -3248,7 +3475,7 @@ export class ProxyServer {
             hasStartedThinkingBlock = false
           }
 
-          // 结束最后的文本块
+          // End last block of text
           if (hasStartedTextBlock) {
             const blockStop = createClaudeStreamEvent('content_block_stop', { index: currentBlockIndex })
             res.write(`event: content_block_stop\ndata: ${JSON.stringify(blockStop)}\n\n`)
@@ -3269,16 +3496,16 @@ export class ProxyServer {
           const respTime = Date.now() - startTime
           this.events.onResponse?.({ path: '/v1/messages', model, status: 200, tokens: usage.inputTokens + usage.outputTokens, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadTokens: usage.cacheReadTokens || simulatedCacheUsage?.cacheReadInputTokens, reasoningTokens: usage.reasoningTokens, credits: usage.credits, responseTime: respTime })
           this.recordRequest({ path: '/v1/messages', model, accountId: account.id, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, credits: usage.credits, responseTime: respTime, success: true })
-          // 记录 API Key 用量
+          // Record API Key Dosage
           if (matchedApiKey) {
             this.recordApiKeyUsage(matchedApiKey.id, usage.credits || 0, usage.inputTokens, usage.outputTokens, model, '/v1/messages')
           }
 
-          // 成功后更新 prompt cache tracker
+          // Update after success prompt cache tracker
           if (simulatedCacheUsage?.cacheProfile && simulatedCacheUsage?.accountId) {
             promptCacheTracker.update(simulatedCacheUsage.accountId, simulatedCacheUsage.cacheProfile as any)
           }
-          // 发送 message_delta（包含完整 usage 信息）
+          // send message_delta(Includes complete usage information)
           const hasToolCalls = pendingToolCalls.size > 0
           const stopReason = hasToolCalls ? 'tool_use' : 'end_turn'
           const messageDelta = createClaudeStreamEvent('message_delta', {
@@ -3286,7 +3513,7 @@ export class ProxyServer {
             usage: this.buildClaudeUsage(usage, simulatedCacheUsage)
           })
           res.write(`event: message_delta\ndata: ${JSON.stringify(messageDelta)}\n\n`)
-          // 发送 message_stop
+          // send message_stop
           const messageStop = createClaudeStreamEvent('message_stop')
           res.write(`event: message_stop\ndata: ${JSON.stringify(messageStop)}\n\n`)
           res.end()
@@ -3327,7 +3554,7 @@ export class ProxyServer {
     })
   }
 
-  // 处理 API 错误
+  // deal with API mistake
   private handleApiError(res: http.ServerResponse, account: { id: string }, error: Error, path: string, model?: string, startTime?: number, signal?: AbortSignal): void {
     if (this.isAbortError(error, signal) || this.isResponseClosed(res)) return
     this.recordRequestFailed()
@@ -3358,17 +3585,17 @@ export class ProxyServer {
     this.recordRequest({ path, model, accountId: account.id, responseTime: startTime ? Date.now() - startTime : 0, success: false, error: error.message })
   }
 
-  // 读取请求体
+  // Read request body
   /**
-   * 读取请求体，限制最大字节数以防 DoS
-   * - Content-Length 头超限：立即 reject
-   * - 流式累加超限：销毁连接并 reject
-   * 触发 BodyTooLarge 错误时上层会发 413 Payload Too Large
+   * Read the request body, limiting the maximum number of bytes to prevent DoS
+   * - Content-Length Head over limit: Immediately reject
+   * - Streaming accumulation exceeds limit: destroy the connection and reject
+   * trigger BodyTooLarge When an error occurs, the upper layer will send 413 Payload Too Large
    */
   private readBody(req: http.IncomingMessage, signal?: AbortSignal): Promise<string> {
     const maxBytes = Math.max(1024, this.config.maxRequestBodyBytes ?? 10 * 1024 * 1024)
 
-    // 优先用 Content-Length 提前拒绝（避免分配缓冲）
+    // priority Content-Length Early rejection (avoid buffer allocation)
     const declaredLen = parseInt(req.headers['content-length'] || '0', 10)
     if (Number.isFinite(declaredLen) && declaredLen > maxBytes) {
       return Promise.reject(new BodyTooLargeError(declaredLen, maxBytes))
@@ -3422,15 +3649,15 @@ export class ProxyServer {
     })
   }
 
-  // 发送错误响应
-  // P0-5 自动 sanitize：500 类不吐 message 详情；4xx 客户端错误正常返回
+  // Send error response
+  // P0-5 automatic sanitize：500 Not vomiting message details;4xx Client error returns normally
   private sendError(res: http.ServerResponse, status: number, message: string, format: 'openai' | 'anthropic' = 'openai'): void {
     if (res.writableEnded || res.destroyed) return
-    // 500-599 强制使用通用消息（防止泄露内部信息）
+    // 500-599 Enforce the use of common messages (prevent leakage of internal information)
     const safeMessage = status >= 500 && status < 600
       ? this.sanitizeErrorMessage(message) || 'Internal server error'
       : message
-    // P1-6 503 → 触发 webhook（已有 5 分钟去重）
+    // P1-6 503 → trigger webhook(Already have 5 minutes to remove duplicates)
     if (status === 503) {
       this.notifyAllAccountsExhausted('unknown')
     }
@@ -3449,28 +3676,28 @@ export class ProxyServer {
   }
 
   /**
-   * P0-5 / P2-19 错误消息脱敏（移除可能含的 Bearer/Token/路径等敏感信息）
-   * 用于错误响应和日志输出
+   * P0-5 / P2-19 Error message desensitization (removal of possible Bearer/Token/Sensitive information such as paths)
+   * for error responses and log output
    */
   private sanitizeErrorMessage(msg: string): string {
     if (!msg) return ''
     return msg
       // Bearer xxxx → Bearer ***
       .replace(/Bearer\s+[A-Za-z0-9\-_.~+/]+=*/gi, 'Bearer ***')
-      // access_token / refresh_token / api_key / x-api-key 字段值
+      // access_token / refresh_token / api_key / x-api-key field value
       .replace(/(access[_-]?token|refresh[_-]?token|api[_-]?key|x-api-key)["'\s:=]+[^"',\s}]+/gi, '$1=***')
-      // 长 base64/JWT（>= 40 chars）替换为占位
+      // long base64/JWT（>= 40 chars) replaced by placeholder
       .replace(/eyJ[A-Za-z0-9\-_]{20,}/g, 'eyJ***')
-      // Windows 用户路径
+      // Windows User path
       .replace(/C:\\Users\\[^\\/\s]+/gi, 'C:\\Users\\***')
-      // Linux/Mac home 路径
+      // Linux/Mac home path
       .replace(/\/home\/[^\s/]+/g, '/home/***')
       .replace(/\/Users\/[^\s/]+/g, '/Users/***')
   }
 
   /**
-   * P1-7 滑动窗口限流：每分钟 N 次（按 API Key id 或 IP）
-   * 0 = 不限制
+   * P1-7 Sliding window current limit: every minute N times (press API Key id or IP）
+   * 0 = no limit
    */
   private checkRateLimit(id: string): { allowed: boolean; retryAfterMs: number } {
     const limit = this.config.rateLimitPerKeyPerMinute || 0
@@ -3489,93 +3716,93 @@ export class ProxyServer {
     return { allowed: true, retryAfterMs: 0 }
   }
 
-  /** 定期清理过期的限流桶 / 会话粘性条目（避免内存泄漏） */
+  /** Clean expired current-limiting buckets regularly / Session sticky entries (to avoid memory leaks) */
   private cleanupExpiredCaches(): void {
     const now = Date.now()
-    // 限流桶过期 2 分钟
+    // Current limiting bucket expires 2 minute
     for (const [key, bucket] of this.rateLimitBuckets) {
       if (now - bucket.windowStart > 120_000) this.rateLimitBuckets.delete(key)
     }
-    // 粘性会话过期 10 分钟
+    // Sticky session expired 10 minute
     for (const [key, entry] of this.sessionAffinity) {
       if (now - entry.lastAt > 600_000) this.sessionAffinity.delete(key)
     }
-    // 审计日志最多 200 条
+    // Most audit logs 200 strip
     if (this.auditLog.length > 200) {
       this.auditLog = this.auditLog.slice(-200)
     }
   }
 
   /**
-   * P1-8 会话粘性账号选择：相同 session hint 优先复用同一账号
-   * 实现方式：用 sessionHint hash 索引到固定账号；账号失效时自动失效粘性
+   * P1-8 Session Sticky Account Selection: Same session hint Prioritize reusing the same account
+   * Implementation method: use sessionHint hash Indexed to a fixed account; stickiness will automatically expire when the account expires
    */
   private pickAccountWithAffinity(sessionHint: string | undefined): ProxyAccount | null {
     if (!this.config.sessionAffinityEnabled || !sessionHint) return null
     const entry = this.sessionAffinity.get(sessionHint)
     if (entry) {
       const account = this.accountPool.getAccount(entry.accountId)
-      // 校验账号仍可用且未被封禁
+      // Verify that the account is still available and has not been banned
       if (account && !this.accountPool.isSuspended(account) && account.isAvailable !== false) {
         entry.lastAt = Date.now()
         return account
       }
-      // 已失效 → 清掉粘性
+      // Expired → Clean off the stickiness
       this.sessionAffinity.delete(sessionHint)
     }
     return null
   }
 
-  /** 记录粘性映射 */
+  /** Record sticky mapping */
   private rememberAffinity(sessionHint: string | undefined, accountId: string): void {
     if (!this.config.sessionAffinityEnabled || !sessionHint) return
     this.sessionAffinity.set(sessionHint, { accountId, lastAt: Date.now() })
   }
 
-  /** P2-17 审计日志 */
+  /** P2-17 Audit log */
   private appendAuditLog(type: string, data: Record<string, unknown>): void {
     if (!this.config.enableAuditLog) return
     this.auditLog.push({ ts: Date.now(), type, data })
     if (this.auditLog.length > 200) this.auditLog.shift()
   }
 
-  /** 获取审计日志（供管理 API） */
+  /** Get audit logs (for management API） */
   getAuditLog(): ReadonlyArray<{ ts: number; type: string; data: Record<string, unknown> }> {
     return this.auditLog
   }
 
-  /** 注入 webhook 触发器（由 main/index.ts 注入，调用 renderer 的 webhook store） */
+  /** injection webhook trigger (consisting of main/index.ts inject, call renderer of webhook store） */
   setWebhookTrigger(fn: (event: string, payload: Record<string, unknown>) => void): void {
     this.webhookTrigger = fn
   }
 
-  /** 关键事件去重时间戳（5 分钟内同事件不重复推） */
+  /** Key event deduplication timestamp (5 The same event will not be pushed repeatedly within minutes) */
   private lastWebhookByEvent: Map<string, number> = new Map()
 
-  /** P1-6 触发 webhook（封装错误处理 + 5 分钟去重） */
+  /** P1-6 trigger webhook(Encapsulation error handling + 5 minutes to remove duplicates) */
   private triggerWebhook(event: string, payload: Record<string, unknown>): void {
     const now = Date.now()
     const last = this.lastWebhookByEvent.get(event) || 0
-    if (now - last < 5 * 60_000) return  // 同事件 5 分钟内不重复推
+    if (now - last < 5 * 60_000) return  // Same event 5 Do not push again within minutes
     this.lastWebhookByEvent.set(event, now)
     try { this.webhookTrigger?.(event, payload) } catch (err) {
       proxyLogger.warn('ProxyServer', `Webhook trigger failed: ${(err as Error).message}`)
     }
   }
 
-  /** 全员配额耗尽 webhook（503 时调用） */
+  /** All quotas exhausted webhook（503 called when) */
   private notifyAllAccountsExhausted(path: string, model?: string): void {
     const quota = this.accountPool.getQuotaStatus()
     this.appendAuditLog('all_accounts_exhausted', { path, model, ...quota })
     this.triggerWebhook('proxy-all-exhausted', {
-      title: '反代账号全部不可用',
-      message: `所有账号配额耗尽或冷却中（exhausted=${quota.exhausted}/${quota.total}，cooldown=${quota.cooldown}）`,
+      title: 'All anti-generation accounts are unavailable',
+      message: `All account quotas are exhausted or on cooling (exhausted=${quota.exhausted}/${quota.total}，cooldown=${quota.cooldown}）`,
       level: 'error',
-      fields: { 端点: path, 模型: model || '-', 总账号: quota.total, 配额耗尽: quota.exhausted, 冷却中: quota.cooldown, 可用: quota.available }
+      fields: { endpoint: path, Model: model || '-', 'total account': quota.total, 'quota exhausted': quota.exhausted, 'Cooling down': quota.cooldown, Available: quota.available }
     })
   }
 
-  /** P2-16 Prometheus metrics 文本 */
+  /** P2-16 Prometheus metrics text */
   private renderPrometheusMetrics(): string {
     const s = this.stats
     const ap = this.accountPool
@@ -3611,7 +3838,7 @@ export class ProxyServer {
     return lines.join('\n') + '\n'
   }
 
-  // 记录请求到 recentRequests
+  // record request to recentRequests
   private recordRequest(log: {
     path: string
     model?: string
@@ -3633,10 +3860,10 @@ export class ProxyServer {
       credits: log.credits,
       responseTime: log.responseTime || 0,
       success: log.success,
-      // P2-19 错误消息脱敏
+      // P2-19 Error message desensitization
       error: log.error ? this.sanitizeErrorMessage(log.error).slice(0, 500) : undefined
     })
-    // P2-15 可配置上限（默认 100，最多 10000）
+    // P2-15 Configurable upper limit (default 100,most 10000）
     const limit = Math.min(10000, Math.max(20, this.config.recentRequestsLimit || 100))
     if (this.stats.recentRequests.length > limit) {
       this.stats.recentRequests = this.stats.recentRequests.slice(-limit)

@@ -1,5 +1,4 @@
 // K-Proxy 模块入口
-import { app } from 'electron'
 import * as path from 'path'
 import { CertManager, createCertManager } from './certManager'
 import { MitmProxy } from './mitmProxy'
@@ -11,6 +10,19 @@ import type {
   DeviceIdMapping
 } from './types'
 import { DEFAULT_KPROXY_CONFIG } from './types'
+
+function getAppUserDataPath(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const electron = require('electron')
+    if (electron && electron.app && typeof electron.app.getPath === 'function') {
+      return electron.app.getPath('userData')
+    }
+  } catch {
+    // Headless or non-Electron environment
+  }
+  return process.env.DATA_DIR || path.join(process.cwd(), '.data')
+}
 
 // 导出类型
 export * from './types'
@@ -33,7 +45,7 @@ export class KProxyService {
   constructor(config: Partial<KProxyConfig> = {}, events: KProxyEvents = {}) {
     this.config = { ...DEFAULT_KPROXY_CONFIG, ...config }
     this.events = events
-    this.dataPath = path.join(app.getPath('userData'), 'kproxy')
+    this.dataPath = path.join(getAppUserDataPath(), 'kproxy')
   }
 
   /**

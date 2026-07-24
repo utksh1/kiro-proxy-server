@@ -1,4 +1,4 @@
-// OpenAI/Claude 格式与 Kiro 格式转换器
+// OpenAI/Claude Format and Kiro format converter
 import { v4 as uuidv4 } from 'uuid'
 import type {
   OpenAIChatRequest,
@@ -32,75 +32,48 @@ import { ToolNameRegistry } from './toolNameRegistry'
 
 const KIRO_CACHE_POINT: KiroCachePoint = { type: 'default' }
 
-/** 模型 thinking 能力元数据（由 proxyServer 从模型缓存中查询后传入） */
+/** Model thinking Capability metadata (provided by proxyServer Passed in after querying from the model cache) */
 export interface ThinkingConfig {
-  schemaPath: 'output_config' | 'reasoning'
+  schemaPath: 'output_config' | 'reasoning' | 'default'
   efforts: string[]
   defaultEffort?: string
 }
 
-/**
- * 将客户端 effort / thinking 参数 + 模型 schema path 映射为 Kiro additionalModelRequestFields。
- * 官方 Kiro IDE 的 kr() 函数逻辑：
- *   output_config → { thinking: { type: 'adaptive', display: 'summarized' }, output_config: { effort } }
- *   reasoning     → { reasoning: { effort } }
- */
-function buildThinkingFields(
-  thinkingConfig: ThinkingConfig | undefined,
-  clientThinking?: { type: string; budget_tokens?: number; display?: string },
-  clientReasoningEffort?: string
-): Record<string, unknown> | undefined {
-  // 客户端明确关闭 thinking
-  if (clientThinking?.type === 'disabled') return undefined
+function generateThinkingPrefix(
+  clientThinking: { type: string; budget_tokens?: number; effort?: string } | undefined,
+  clientReasoningEffort: string | undefined
+): string | null {
+  console.log('[DEBUG] ========== generateThinkingPrefix START ==========')
+  console.log('[DEBUG] clientThinking:', JSON.stringify(clientThinking))
+  console.log('[DEBUG] clientReasoningEffort:', clientReasoningEffort)
 
-  // 没有模型元数据时，回退到旧逻辑：仅传 { thinking: { type: 'adaptive' } }
-  if (!thinkingConfig) {
-    if (clientThinking && clientThinking.type !== 'disabled') {
-      return { thinking: { type: 'adaptive' } }
-    }
-    if (clientReasoningEffort) {
-      return { thinking: { type: 'adaptive' } }
-    }
-    return undefined
+  if (clientThinking?.type === 'disabled') {
+    return null
   }
 
-  // 客户端没请求 thinking 也没请求 reasoning_effort → 不启用
-  const wantsThinking = !!(clientThinking && clientThinking.type !== 'disabled') || !!clientReasoningEffort
-  if (!wantsThinking) return undefined
+  let thinkingPrefix: string | null = null
 
-  // 映射 effort level（直接使用客户端值，不做强制转换）
-  const mapEffort = (input: string): string => input.toLowerCase()
-
-  let effort: string
-  if (clientReasoningEffort) {
-    effort = mapEffort(clientReasoningEffort)
-  } else if (clientThinking?.type === 'enabled' && clientThinking.budget_tokens) {
-    // budget_tokens 粗略映射到 effort level
-    const b = clientThinking.budget_tokens
-    if (b <= 4000) effort = 'low'
-    else if (b <= 16000) effort = 'medium'
-    else if (b <= 64000) effort = 'high'
-    else effort = 'xhigh'
-  } else {
-    effort = thinkingConfig.defaultEffort || 'high'
+  if (clientThinking?.type === 'enabled') {
+    let budget = Number(clientThinking.budget_tokens)
+    if (!Number.isFinite(budget) || budget <= 0) budget = 32000
+    budget = Math.floor(budget)
+    if (budget < 1024) budget = 1024
+    if (budget > 100000) budget = 100000
+    thinkingPrefix = `<thinking_mode>enabled</thinking_mode><max_thinking_length>${budget}</max_thinking_length>`
+  } else if (clientThinking?.type === 'adaptive' || clientReasoningEffort || clientThinking?.effort) {
+    const effortRaw = (clientReasoningEffort || clientThinking?.effort || 'high').toLowerCase().trim()
+    const normalizedEffort = (effortRaw === 'low' || effortRaw === 'medium' || effortRaw === 'high') ? effortRaw : 'high'
+    thinkingPrefix = `<thinking_mode>adaptive</thinking_mode><thinking_effort>${normalizedEffort}</thinking_effort>`
   }
 
-  // 确保 effort 在可用范围内，否则取最接近的
-  if (!thinkingConfig.efforts.includes(effort)) {
-    effort = thinkingConfig.efforts[thinkingConfig.efforts.length - 1] || 'high'
+  if (thinkingPrefix) {
+    console.log(`[SUCCESS] generateThinkingPrefix: Generated XML: ${thinkingPrefix}`)
+    try {
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `[${new Date().toISOString()}] Generated thinking XML: ${thinkingPrefix}\n`)
+    } catch(e) {}
   }
-
-  switch (thinkingConfig.schemaPath) {
-    case 'output_config':
-      return {
-        thinking: { type: 'adaptive', display: 'summarized' },
-        output_config: { effort }
-      }
-    case 'reasoning':
-      return { reasoning: { effort } }
-    default:
-      return { thinking: { type: 'adaptive' } }
-  }
+  
+  return thinkingPrefix
 }
 
 function toKiroCachePoint(cacheControl?: { type: string }): KiroCachePoint | undefined {
@@ -244,13 +217,14 @@ function convertResponseInputContent(content: string | OpenAIResponseContentPart
 }
 
 function convertResponseToolChoice(toolChoice: OpenAIResponsesRequest['tool_choice']): OpenAIChatRequest['tool_choice'] {
-  if (!toolChoice || typeof toolChoice === 'string') return toolChoice
-  if (toolChoice.type === 'none' || toolChoice.type === 'auto') return toolChoice.type
+  if (!toolChoice) return undefined
+  if (typeof toolChoice === 'string') return toolChoice
+  if (toolChoice.type === 'none' || toolChoice.type === 'auto' || toolChoice.type === 'required') return toolChoice.type
   if (toolChoice.type === 'function' && toolChoice.name) {
     return { type: 'function', function: { name: toolChoice.name } }
   }
   if (toolChoice.function?.name) return { type: 'function', function: { name: toolChoice.function.name } }
-  throw new Error('Unsupported responses tool_choice')
+  return undefined
 }
 
 export function openAIChatToResponsesResponse(
@@ -303,18 +277,18 @@ export function openAIChatToResponsesResponse(
   return responsesResponse
 }
 
-// ============ OpenAI -> Kiro 转换 ============
+// ============ OpenAI -> Kiro Convert ============
 
 export function openaiToKiro(
   request: OpenAIChatRequest,
   profileArn?: string,
   toolNameRegistry: ToolNameRegistry = new ToolNameRegistry(),
-  thinkingConfig?: ThinkingConfig
+  _thinkingConfig?: ThinkingConfig
 ): KiroPayload {
   const modelId = mapModelId(request.model)
   const origin = 'AI_EDITOR'
 
-  // 提取系统提示
+  // Extract system prompts
   let systemPrompt = ''
   let systemCachePoint: KiroCachePoint | undefined
   const nonSystemMessages: OpenAIMessage[] = []
@@ -337,25 +311,25 @@ export function openaiToKiro(
     }
   }
 
-  // 注入时间戳
+  // Inject timestamp
   const timestamp = new Date().toISOString()
   systemPrompt = `[Context: Current time is ${timestamp}]\n\n${systemPrompt}`
 
-  // 注入执行导向指令（防止 AI 在探索过程中丢失目标）
+  // Inject execution-directed instructions (prevent AI Lost target during exploration)
   const executionDirective = `
 <execution_discipline>
-当用户要求执行特定任务时，你必须遵循以下纪律：
-1. **目标锁定**：在整个会话中始终牢记用户的原始目标，不要在代码探索过程中迷失方向
-2. **行动优先**：优先执行任务而非仅分析或总结，除非用户明确只要求分析
-3. **计划执行**：为任务创建明确的步骤计划，逐步执行并标记完成状态
-4. **禁止确认性收尾**：在任务未完成前，禁止输出"需要我继续吗？"、"需要深入分析吗？"等确认性问题
-5. **持续推进**：如果发现部分任务已完成，立即继续执行剩余未完成的任务
-6. **完整交付**：直到所有任务步骤都执行完毕才算完成
+When a user asks for a specific task, you must follow these disciplines:
+1. **Targeting**: Keep the user’s original goals in mind throughout the session and don’t get lost in the code exploration process
+2. **Action first**: Prioritize task execution rather than just analysis or summary, unless the user explicitly requests only analysis
+3. **Plan execution**: Create a clear step-by-step plan for tasks, execute them step by step and mark completion status
+4. **Confirmatory closing prohibited**: Disable output before the task is completed"Do you need me to continue?"、"Need a deeper analysis?"Waiting for confirmation questions
+5. **Continue to advance**: If it is found that some tasks have been completed, immediately continue to execute the remaining unfinished tasks.
+6. **Complete delivery**: The task is not complete until all task steps have been executed.
 </execution_discipline>
 `
   systemPrompt = systemPrompt + '\n\n' + executionDirective
 
-  // 构建历史消息（参考 Proxycast 实现）
+  // Build history messages (reference Proxycast accomplish)
   const history: KiroHistoryMessage[] = []
   const toolResults: KiroToolResult[] = []
   let currentContent = ''
@@ -390,10 +364,10 @@ export function openaiToKiro(
         })
       }
     } else if (msg.role === 'assistant') {
-      // Kiro API 要求 content 非空
-      // 注意: 故意不读取 msg.reasoning_content (history 中不传给 Kiro)
-      // Kiro 后端 schema 仅在响应输出中支持 assistantResponseMessage.reasoningContent，
-      // 在请求 history 中传入此字段会触发 400 "Improperly formed request"
+      // Kiro API Require content Not empty
+      // Notice: intentionally not read msg.reasoning_content (history Not passed Kiro)
+      // Kiro rear end schema Only supported in response output assistantResponseMessage.reasoningContent，
+      // in request history Passing this field in will trigger 400 "Improperly formed request"
       let assistantContent = typeof msg.content === 'string' ? msg.content : ''
       if (!assistantContent.trim() && msg.tool_calls && msg.tool_calls.length > 0) {
         assistantContent = ' '
@@ -425,12 +399,12 @@ export function openaiToKiro(
         }
       })
     } else if (msg.role === 'tool') {
-      // Tool result - 收集到待处理列表
+      // Tool result - Collect to be processed list
       if (msg.tool_call_id) {
         let rawText = ''
         let extractedImageCount = 0
-        // content 是数组时（部分客户端把图像/多模态结果挂在这里）：
-        // 提取所有 text 块拼接为文本；image_url 块提取到外层 images，避免被 JSON.stringify 序列化丢失
+        // content When it is an array (some clients put the image/Multimodal results hang here):
+        // Extract all text Blocks are spliced ​​into text;image_url Blocks are extracted to the outer layer images, to avoid being JSON.stringify serialization lost
         if (Array.isArray(msg.content)) {
           const textParts: string[] = []
           for (const part of msg.content) {
@@ -443,7 +417,7 @@ export function openaiToKiro(
           }
           rawText = textParts.join('')
           if (!rawText && extractedImageCount === 0) {
-            // 退化：把不识别的结构 stringify 让模型至少看到原始结构
+            // Degenerate: convert unrecognized structures into stringify Let the model see at least the original structure
             rawText = JSON.stringify(msg.content)
           }
           if (extractedImageCount > 0) {
@@ -460,12 +434,12 @@ export function openaiToKiro(
         })
       }
       
-      // 检查下一条消息：如果不是 tool 消息或已到末尾，将收集的 toolResults 添加为 user 消息
+      // Check next message: if not tool The message may have reached the end and will be collected toolResults Add as user information
       const nextMsg = nonSystemMessages[i + 1]
       const shouldFlush = !nextMsg || nextMsg.role !== 'tool'
       
       if (shouldFlush && toolResults.length > 0 && !isLast) {
-        // 将 toolResults 作为 user 消息添加到 history
+        // Will toolResults as user message added to history
         history.push({
           userInputMessage: {
             content: 'Tool results provided.',
@@ -476,23 +450,33 @@ export function openaiToKiro(
             }
           }
         })
-        // 清空已处理的 toolResults
+        // Clear processed toolResults
         toolResults.length = 0
       }
     }
   }
 
-  // 如果最后一条是 assistant 消息，自动发送 Continue（参考 Proxycast）
+  // If the last item is assistant Message, sent automatically Continue(refer to Proxycast）
   if (history.length > 0 && history[history.length - 1].assistantResponseMessage && !currentContent) {
     currentContent = 'Continue.'
   }
 
-  // 如果没有当前内容但有工具结果（最后一轮的），保留它们传给 currentMessage
+  // If there is no current content but there are tool results (from the last round), keep them and pass them to currentMessage
   if (!currentContent && toolResults.length > 0) {
     currentContent = 'Tool results provided.'
   }
 
-  // System prompt 以 Kiro 官方方式注入：作为 Human/AI pair 插入到 history 头部
+  // Inject thinking config as XML tags in system prompt
+  const thinkingPrefix = generateThinkingPrefix(
+    request.thinking as { type: string; budget_tokens?: number },
+    request.reasoning_effort
+  )
+  
+  if (thinkingPrefix) {
+    systemPrompt = systemPrompt ? `${thinkingPrefix}\n${systemPrompt}` : thinkingPrefix
+  }
+
+  // System prompt by Kiro Official way to inject: as Human/AI pair Insert into history head
   if (systemPrompt) {
     const systemMessages: KiroHistoryMessage[] = [
       {
@@ -513,15 +497,8 @@ export function openaiToKiro(
   }
   const finalContent = currentContent || 'Continue.'
 
-  // 转换工具定义
+  // Conversion tool definition
   const kiroTools = convertOpenAITools(request.tools, toolNameRegistry)
-
-  // OpenAI 兼容请求的 thinking/reasoning_effort 映射到 Kiro additionalModelRequestFields
-  const additionalModelRequestFields = buildThinkingFields(
-    thinkingConfig,
-    request.thinking as { type: string; budget_tokens?: number },
-    request.reasoning_effort
-  )
 
   return buildKiroPayload(
     finalContent,
@@ -542,8 +519,7 @@ export function openaiToKiro(
       documents,
       conversationId: request.conversation_id,
       context: request.kiro_context
-    },
-    additionalModelRequestFields
+    }
   )
 }
 
@@ -587,10 +563,10 @@ function extractOpenAIContent(msg: OpenAIMessage): { content: string; images: Ki
   return { content, images, documents, cachePoint }
 }
 
-// 解析图像 URL（支持 data URL 和 HTTP URL）
+// Parse images URL(support data URL and HTTP URL）
 function parseImageUrl(url: string): KiroImage | null {
   if (url.startsWith('data:')) {
-    // 解析 data URL: data:image/png;base64,xxxxx
+    // parse data URL: data:image/png;base64,xxxxx
     const match = url.match(/^data:image\/(\w+);base64,(.+)$/)
     if (match) {
       return {
@@ -637,7 +613,7 @@ function parseClaudeDocumentSource(source: NonNullable<ClaudeContentBlock['sourc
   throw new Error(`Unsupported document source type: ${source.type}`)
 }
 
-// 标准化图像格式
+// Standardized image format
 function normalizeImageFormat(format: string): string {
   const lower = format.toLowerCase()
   const formatMap: Record<string, string> = {
@@ -670,8 +646,8 @@ function normalizeDocumentFormat(mediaType: string | undefined, name: string): s
 }
 
 
-// Kiro API 工具描述最大长度
-const KIRO_MAX_TOOL_DESC_LEN = 10237 // 留出 "..." 的空间
+// Kiro API tool description maximum length
+const KIRO_MAX_TOOL_DESC_LEN = 10237 // set aside "..." space
 
 function convertOpenAITools(
   tools: OpenAITool[] | undefined,
@@ -681,7 +657,7 @@ function convertOpenAITools(
 
   return tools.flatMap(tool => {
     let description = tool.function.description || `Tool: ${tool.function.name}`
-    // 截断过长的描述
+    // Truncate too long descriptions
     if (description.length > KIRO_MAX_TOOL_DESC_LEN) {
       description = description.substring(0, KIRO_MAX_TOOL_DESC_LEN) + '...'
     }
@@ -701,7 +677,7 @@ function shortenToolName(name: string, toolNameRegistry: ToolNameRegistry): stri
   return toolNameRegistry.toKiroName(name)
 }
 
-// ============ Kiro -> OpenAI 转换 ============
+// ============ Kiro -> OpenAI Convert ============
 
 export function kiroToOpenaiResponse(
   content: string,
@@ -791,18 +767,18 @@ export function createOpenaiStreamChunk(
   return chunk
 }
 
-// ============ Claude -> Kiro 转换 ============
+// ============ Claude -> Kiro Convert ============
 
 export function claudeToKiro(
   request: ClaudeRequest,
   profileArn?: string,
   toolNameRegistry: ToolNameRegistry = new ToolNameRegistry(),
-  thinkingConfig?: ThinkingConfig
+  _thinkingConfig?: ThinkingConfig
 ): KiroPayload {
   const modelId = mapModelId(request.model)
   const origin = 'AI_EDITOR'
 
-  // 提取系统提示
+  // Extract system prompts
   let systemPrompt = ''
   let systemCachePoint: KiroCachePoint | undefined
   if (typeof request.system === 'string') {
@@ -814,33 +790,33 @@ export function claudeToKiro(
     }).join('\n')
   }
 
-  // 注入时间戳
+  // Inject timestamp
   const timestamp = new Date().toISOString()
   systemPrompt = `[Context: Current time is ${timestamp}]\n\n${systemPrompt}`
 
-  // 注入执行导向指令（防止 AI 在探索过程中丢失目标）
+  // Inject execution-directed instructions (prevent AI Lost target during exploration)
   const executionDirective = `
 <execution_discipline>
-当用户要求执行特定任务时，你必须遵循以下纪律：
-1. **目标锁定**：在整个会话中始终牢记用户的原始目标，不要在代码探索过程中迷失方向
-2. **行动优先**：优先执行任务而非仅分析或总结，除非用户明确只要求分析
-3. **计划执行**：为任务创建明确的步骤计划，逐步执行并标记完成状态
-4. **禁止确认性收尾**：在任务未完成前，禁止输出"需要我继续吗？"、"需要深入分析吗？"等确认性问题
-5. **持续推进**：如果发现部分任务已完成，立即继续执行剩余未完成的任务
-6. **完整交付**：直到所有任务步骤都执行完毕才算完成
+When a user asks for a specific task, you must follow these disciplines:
+1. **Targeting**: Keep the user’s original goals in mind throughout the session and don’t get lost in the code exploration process
+2. **Action first**: Prioritize task execution rather than just analysis or summary, unless the user explicitly requests only analysis
+3. **Plan execution**: Create a clear step-by-step plan for tasks, execute them step by step and mark completion status
+4. **Confirmatory closing prohibited**: Disable output before the task is completed"Do you need me to continue?"、"Need a deeper analysis?"Waiting for confirmation questions
+5. **Continue to advance**: If it is found that some tasks have been completed, immediately continue to execute the remaining unfinished tasks.
+6. **Complete delivery**: The task is not complete until all task steps have been executed.
 </execution_discipline>
 `
   systemPrompt = systemPrompt + '\n\n' + executionDirective
 
-  // 构建历史消息 - Kiro API 要求严格的 user -> assistant 交替
+  // Build historical messages - Kiro API demanding user -> assistant alternately
   const history: KiroHistoryMessage[] = []
-  let currentToolResults: KiroToolResult[] = []  // 只保存最后一条消息的 toolResults
+  let currentToolResults: KiroToolResult[] = []  // Only save the last message toolResults
   let currentContent = ''
   let currentCachePoint: KiroCachePoint | undefined
   const images: KiroImage[] = []
   const documents: KiroDocument[] = []
 
-  // 临时存储，用于合并连续的同类型消息
+  // Temporary storage, used to merge consecutive messages of the same type
   let pendingUserContent = ''
   let pendingUserImages: KiroImage[] = []
   let pendingUserDocuments: KiroDocument[] = []
@@ -855,7 +831,7 @@ export function claudeToKiro(
       const { content: userContent, images: userImages, documents: userDocuments, toolResults: userToolResults, cachePoint: userCachePoint } = extractClaudeContent(msg)
 
       if (isLast) {
-        // 最后一条消息：合并之前的 pending 内容，toolResults 放入 currentMessage
+        // Last message: before merge pending content,toolResults put in currentMessage
         currentContent = pendingUserContent ? pendingUserContent + '\n' + userContent : userContent
         images.push(...pendingUserImages, ...userImages)
         documents.push(...pendingUserDocuments, ...userDocuments)
@@ -867,10 +843,10 @@ export function claudeToKiro(
         pendingToolResults = []
         pendingUserCachePoint = undefined
       } else {
-        // 非最后一条：检查下一条是否是 assistant
+        // Not the last item: Check if the next item is assistant
         const nextMsg = request.messages[i + 1]
         if (nextMsg && nextMsg.role === 'assistant') {
-          // 下一条是 assistant，可以安全添加到 history
+          // The next item is assistant, can be safely added to history
           const finalUserContent = pendingUserContent ? pendingUserContent + '\n' + userContent : userContent
           const finalUserImages = [...pendingUserImages, ...userImages]
           const finalUserDocuments = [...pendingUserDocuments, ...userDocuments]
@@ -886,7 +862,7 @@ export function claudeToKiro(
               documents: finalUserDocuments.length > 0 ? finalUserDocuments : undefined,
               ...(finalCachePoint ? { cachePoint: finalCachePoint } : {})
             }
-            // 如果有 toolResults，放入 userInputMessageContext
+            // if there is toolResults, put in userInputMessageContext
             if (finalToolResults.length > 0) {
               userInputMessage.userInputMessageContext = {
                 toolResults: finalToolResults
@@ -900,7 +876,7 @@ export function claudeToKiro(
           pendingToolResults = []
           pendingUserCachePoint = undefined
         } else {
-          // 下一条不是 assistant（可能是连续 user 或结束），累积内容
+          // The next one is not assistant(possibly consecutive user or end), cumulative content
           pendingUserContent = pendingUserContent ? pendingUserContent + '\n' + userContent : userContent
           pendingUserImages.push(...userImages)
           pendingUserDocuments.push(...userDocuments)
@@ -909,13 +885,13 @@ export function claudeToKiro(
         }
       }
     } else if (msg.role === 'assistant') {
-      // 注意: 故意丢弃 reasoningContent (history 中不传给 Kiro)
-      // Kiro 后端 schema 仅在响应输出中支持 assistantResponseMessage.reasoningContent，
-      // 在请求 history 中传入此字段会触发 400 "Improperly formed request"
-      // 当前消息的 thinking 开关由 additionalModelRequestFields.thinking 控制
+      // Notice: deliberately discarded reasoningContent (history Not passed Kiro)
+      // Kiro rear end schema Only supported in response output assistantResponseMessage.reasoningContent，
+      // in request history Passing this field in will trigger 400 "Improperly formed request"
+      // of current news thinking The switch consists of additionalModelRequestFields.thinking control
       const { content: assistantContent, toolUses } = extractClaudeAssistantContent(msg, toolNameRegistry)
 
-      // 如果有 pending 的 user 内容但还没添加到 history，先添加
+      // if there is pending of user content but not added yet history, add first
       if (pendingUserContent.trim() || pendingUserImages.length > 0 || pendingUserDocuments.length > 0 || pendingToolResults.length > 0) {
         const userInputMessage: KiroUserInputMessage = {
           content: pendingUserContent || (pendingToolResults.length > 0 ? 'Tool results provided.' : 'Continue'),
@@ -946,7 +922,7 @@ export function claudeToKiro(
     }
   }
 
-  // 处理剩余的 pending 内容（如果最后几条都是 user 且不是 isLast）
+  // dispose of remaining pending Content (if the last few items are all user and not isLast）
   if (pendingUserContent.trim() || pendingUserImages.length > 0 || pendingUserDocuments.length > 0 || pendingToolResults.length > 0) {
     currentContent = pendingUserContent + (currentContent ? '\n' + currentContent : '')
     images.unshift(...pendingUserImages)
@@ -955,8 +931,8 @@ export function claudeToKiro(
     currentCachePoint = mergeCachePoint(pendingUserCachePoint, currentCachePoint)
   }
 
-  // 确保 history 以 user 开始（Kiro API 要求）
-  // 如果 history 以 assistant 开始，在前面插入一个空的 user 消息
+  // make sure history by user start(Kiro API Require)
+  // if history by assistant To start, insert an empty user information
   if (history.length > 0 && history[0].assistantResponseMessage) {
     history.unshift({
       userInputMessage: {
@@ -967,9 +943,19 @@ export function claudeToKiro(
     })
   }
 
-  // 构建最终内容
-  // System prompt 以 Kiro 官方方式注入：作为 Human/AI pair 插入到 history 头部
-  // 官方 Kiro IDE: [Human(systemPrompt, forcedRole), AI("I will follow these instructions.", forcedRole)]
+  // Inject thinking config as XML tags in system prompt
+  const thinkingPrefix = generateThinkingPrefix(
+    request.thinking as { type: string; budget_tokens?: number; display?: string },
+    undefined
+  )
+  
+  if (thinkingPrefix) {
+    systemPrompt = systemPrompt ? `${thinkingPrefix}\n${systemPrompt}` : thinkingPrefix
+  }
+
+  // Build final content
+  // System prompt by Kiro Official way to inject: as Human/AI pair Insert into history head
+  // official Kiro IDE: [Human(systemPrompt, forcedRole), AI("I will follow these instructions.", forcedRole)]
   if (systemPrompt) {
     const systemMessages: KiroHistoryMessage[] = [
       {
@@ -990,15 +976,8 @@ export function claudeToKiro(
   }
   const finalContent = currentContent || (currentToolResults.length > 0 ? 'Tool results provided.' : 'Continue')
 
-  // 转换工具定义
+  // Conversion tool definition
   const kiroTools = convertClaudeTools(request.tools, toolNameRegistry)
-
-  // 将 Claude thinking 参数映射为 Kiro additionalModelRequestFields
-  const additionalModelRequestFields = buildThinkingFields(
-    thinkingConfig,
-    request.thinking as { type: string; budget_tokens?: number; display?: string },
-    undefined
-  )
 
   return buildKiroPayload(
     finalContent,
@@ -1019,8 +998,7 @@ export function claudeToKiro(
       documents,
       conversationId: request.conversation_id,
       context: request.kiro_context
-    },
-    additionalModelRequestFields
+    }
   )
 }
 
@@ -1055,8 +1033,8 @@ function extractClaudeContent(msg: ClaudeMessage): { content: string; images: Ki
         documents.push(parseClaudeDocumentSource(block.source, block.name))
       } else if (block.type === 'tool_result' && block.tool_use_id) {
         let resultContent = ''
-        // Kiro tool_result.content 只支持 text，但用户层 images 可以承载图片。
-        // 把内嵌 image block 提取到外层 images，避免「读取本地图片」这类场景图像内容被静默丢弃。
+        // Kiro tool_result.content Only supports text, but the user layer images Can host pictures.
+        // put inline image block Extract to outer layer images, to avoid scene image content such as "reading local images" from being silently discarded.
         let extractedImageCount = 0
         if (typeof block.content === 'string') {
           resultContent = block.content || '(empty)'
@@ -1076,7 +1054,7 @@ function extractClaudeContent(msg: ClaudeMessage): { content: string; images: Ki
                   })
                   extractedImageCount++
                 } catch {
-                  // 不支持的格式：跳过但不抛错（保留旧行为，避免整轮失败）
+                  // Unsupported format: skip but don't throw an error (keep old behavior, avoid whole round failure)
                 }
               }
             }
@@ -1087,7 +1065,7 @@ function extractClaudeContent(msg: ClaudeMessage): { content: string; images: Ki
               ? `(tool returned ${extractedImageCount} image${extractedImageCount > 1 ? 's' : ''}, attached to this message)`
               : '(no text output)'
           } else if (extractedImageCount > 0) {
-            // 既有文本又有图片：在文本末尾提示模型有附图
+            // Both text and pictures: prompt at the end of the text that the model has pictures attached
             resultContent += `\n\n[Tool also returned ${extractedImageCount} image${extractedImageCount > 1 ? 's' : ''}, attached to this message]`
           }
         } else if (block.content === undefined || block.content === null) {
@@ -1127,7 +1105,7 @@ function extractClaudeAssistantContent(
         thinking += block.thinking
         signature = block.signature || signature
       } else if (block.type === 'redacted_thinking' && block.data) {
-        // redacted_thinking 是加密的思考内容，原样保留
+        // redacted_thinking It is the encrypted thinking content and should be kept as it is.
         redactedContent = (redactedContent || '') + block.data
       } else if (block.type === 'tool_use' && block.id && block.name) {
         if (!block.input || typeof block.input !== 'object' || Array.isArray(block.input)) {
@@ -1142,7 +1120,7 @@ function extractClaudeAssistantContent(
     }
   }
 
-  // Kiro API 要求 content 非空
+  // Kiro API Require content Not empty
   if (!content.trim() && toolUses.length > 0) {
     content = ' '
   }
@@ -1169,7 +1147,7 @@ function convertClaudeTools(
 
   return tools.flatMap(tool => {
     let description = tool.description || `Tool: ${tool.name}`
-    // 截断过长的描述
+    // Truncate too long descriptions
     if (description.length > KIRO_MAX_TOOL_DESC_LEN) {
       description = description.substring(0, KIRO_MAX_TOOL_DESC_LEN) + '...'
     }
@@ -1185,7 +1163,7 @@ function convertClaudeTools(
   })
 }
 
-// ============ Kiro -> Claude 转换 ============
+// ============ Kiro -> Claude Convert ============
 
 export function kiroToClaudeResponse(
   content: string,
@@ -1215,7 +1193,7 @@ export function kiroToClaudeResponse(
     })
   }
 
-  // 仅在有实际文本内容时添加 text block
+  // Only added if there is actual text content text block
   if (content && content.trim()) {
     contentBlocks.push({ type: 'text', text: content })
   }

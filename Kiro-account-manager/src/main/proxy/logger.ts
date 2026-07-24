@@ -1,8 +1,20 @@
 // 代理服务器日志模块
 import * as fs from 'fs'
 import * as path from 'path'
-import { app } from 'electron'
 import { redactString, redactValue } from '../utils/redact'
+
+function getAppUserDataPath(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const electron = require('electron')
+    if (electron && electron.app && typeof electron.app.getPath === 'function') {
+      return electron.app.getPath('userData')
+    }
+  } catch {
+    // Headless or non-Electron environment
+  }
+  return process.env.DATA_DIR || path.join(process.cwd(), '.data')
+}
 
 export interface LogEntry {
   timestamp: string
@@ -42,7 +54,7 @@ class ProxyLogger {
     
     if (this.config.enabled && !this.config.logDir) {
       // 默认日志目录
-      this.config.logDir = path.join(app.getPath('userData'), 'logs', 'proxy')
+      this.config.logDir = path.join(getAppUserDataPath(), 'logs', 'proxy')
     }
 
     if (this.config.enabled) {

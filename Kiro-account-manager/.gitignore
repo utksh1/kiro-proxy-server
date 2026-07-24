@@ -10,3 +10,6 @@ out
 
 # 编辑器/插件工作区配置
 .cursor/
+dist-server
+accounts.json
+

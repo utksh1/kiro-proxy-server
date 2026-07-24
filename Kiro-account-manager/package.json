@@ -21,7 +21,9 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "test:e2e": "node test/e2e-fullsuite/run.mjs",
-    "test:e2e:only": "node test/e2e-fullsuite/run.mjs --only"
+    "test:e2e:only": "node test/e2e-fullsuite/run.mjs --only",
+    "build:server": "tsc src/standaloneServer.ts --outDir dist-server --module CommonJS --target ES2022 --moduleResolution node --skipLibCheck --esModuleInterop",
+    "start:server": "node dist-server/standaloneServer.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
