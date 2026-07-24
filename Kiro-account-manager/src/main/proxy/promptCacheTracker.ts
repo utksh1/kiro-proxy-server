@@ -1,25 +1,25 @@
-// Prompt Cache 模拟器
-// 在反代侧追踪 cache_control 断点，模拟 Anthropic 的 prompt caching 行为
-// 让 Claude Code 的 cache_control 字段产生实际效果的 usage 统计
+// Prompt Cache emulator
+// Tracking on the anti-generational side cache_control breakpoint, simulation Anthropic of prompt caching Behavior
+// let Claude Code of cache_control fields produce actual effects usage statistics
 
 import { createHash } from 'crypto'
 import { estimateTokens } from './kiroApi'
 
-// 常量
-const DEFAULT_CACHE_TTL = 5 * 60 * 1000       // 5 分钟（Anthropic 默认 ephemeral TTL）
-const ONE_HOUR_CACHE_TTL = 60 * 60 * 1000     // 1 小时
-const DEFAULT_MIN_CACHEABLE_TOKENS = 1024      // 最小可缓存 token 数
-const OPUS_MIN_CACHEABLE_TOKENS = 4096         // Opus 模型最小缓存阈值
-const MAX_CACHE_RATIO = 0.85                   // 最新内容不可能 100% 缓存命中
-const MAX_ENTRIES_PER_ACCOUNT = 200            // 每个账号最大缓存条目数
-const PRUNE_INTERVAL = 60 * 1000              // 清理间隔 1 分钟
+// constant
+const DEFAULT_CACHE_TTL = 5 * 60 * 1000       // 5 minute(Anthropic default ephemeral TTL）
+const ONE_HOUR_CACHE_TTL = 60 * 60 * 1000     // 1 Hour
+const DEFAULT_MIN_CACHEABLE_TOKENS = 1024      // Minimum cacheable token number
+const OPUS_MIN_CACHEABLE_TOKENS = 4096         // Opus Model minimum cache threshold
+const MAX_CACHE_RATIO = 0.85                   // The latest content is not possible 100% cache hit
+const MAX_ENTRIES_PER_ACCOUNT = 200            // Maximum number of cache entries per account
+const PRUNE_INTERVAL = 60 * 1000              // Cleanup interval 1 minute
 
-// ============ 类型定义 ============
+// ============ type definition ============
 
 interface CacheBreakpoint {
-  fingerprint: string       // SHA-256 累积 hash
-  cumulativeTokens: number  // 到此断点的累积 token 数
-  ttl: number               // 缓存 TTL（毫秒）
+  fingerprint: string       // SHA-256 accumulation hash
+  cumulativeTokens: number  // Accumulation up to this breakpoint token number
+  ttl: number               // cache TTL(millisecond)
 }
 
 interface CacheProfile {
@@ -41,9 +41,9 @@ interface CacheEntry {
 }
 
 interface CacheableBlock {
-  value: string             // 规范化 JSON 字符串
+  value: string             // Standardize JSON string
   tokens: number
-  ttl: number               // 0 表示非断点
+  ttl: number               // 0 Indicates a non-breakpoint
   isMessageEnd: boolean
 }
 
@@ -53,7 +53,7 @@ export class PromptCacheTracker {
   private entriesByAccount = new Map<string, Map<string, CacheEntry>>()
   private lastPrune = Date.now()
 
-  // 从 Claude 请求构建缓存 profile
+  // from Claude Request build cache profile
   buildClaudeProfile(
     system: unknown,
     messages: { role: string; content: unknown; cache_control?: { type: string; ttl?: string } }[],
@@ -73,13 +73,13 @@ export class PromptCacheTracker {
       this.hashChunk(hasher, block.value)
       cumulativeTokens += block.tokens
 
-      // 确定断点 TTL
+      // Determine breakpoint TTL
       let breakpointTTL = 0
       if (block.ttl > 0) {
         breakpointTTL = block.ttl
         activeTTL = block.ttl
       } else if (block.isMessageEnd && activeTTL > 0) {
-        // 隐式断点：在有显式断点之后，每个消息结束都是一个断点
+        // Implicit breakpoint: After an explicit breakpoint, the end of each message is a breakpoint
         breakpointTTL = activeTTL
       }
 
@@ -101,7 +101,7 @@ export class PromptCacheTracker {
     }
   }
 
-  // 计算缓存命中情况
+  // Calculate cache hits
   compute(accountId: string, profile: CacheProfile | null): CacheUsage {
     if (!profile || profile.breakpoints.length === 0 || !accountId) {
       return { cacheCreationInputTokens: 0, cacheReadInputTokens: 0, cacheCreation5mTokens: 0, cacheCreation1hTokens: 0 }
@@ -116,7 +116,7 @@ export class PromptCacheTracker {
 
     const entries = this.entriesByAccount.get(accountId)
     if (!entries || entries.size === 0) {
-      // 首次请求：全部是 creation
+      // First request: all yes creation
       const effectiveCreation = lastTokens >= minTokens ? lastTokens : 0
       const [cache5m, cache1h] = this.computeTTLBreakdown(profile, 0)
       return {
@@ -127,11 +127,11 @@ export class PromptCacheTracker {
       }
     }
 
-    // 上限 85%
+    // upper limit 85%
     const maxCacheable = Math.floor(profile.totalInputTokens * MAX_CACHE_RATIO)
     if (lastTokens > maxCacheable) lastTokens = maxCacheable
 
-    // 从后往前匹配最长前缀
+    // Match the longest prefix from back to front
     let matchedTokens = 0
     for (let i = profile.breakpoints.length - 1; i >= 0; i--) {
       const bp = profile.breakpoints[i]
@@ -140,7 +140,7 @@ export class PromptCacheTracker {
       const entry = entries.get(bp.fingerprint)
       if (!entry || entry.expiresAt < now) continue
 
-      // 命中：刷新过期时间
+      // Hit: Refresh expiration time
       entry.expiresAt = now + entry.ttl
       matchedTokens = Math.min(bp.cumulativeTokens, profile.totalInputTokens)
       if (matchedTokens > lastTokens) matchedTokens = lastTokens
@@ -158,7 +158,7 @@ export class PromptCacheTracker {
     }
   }
 
-  // 更新缓存条目（请求成功后调用）
+  // Update cache entry (called after successful request)
   update(accountId: string, profile: CacheProfile | null): void {
     if (!profile || profile.breakpoints.length === 0 || !accountId) return
 
@@ -179,7 +179,7 @@ export class PromptCacheTracker {
       })
     }
 
-    // 限制每个账号的条目数
+    // Limit the number of entries per account
     if (entries.size > MAX_ENTRIES_PER_ACCOUNT) {
       const sorted = [...entries.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt)
       const toDelete = sorted.slice(0, entries.size - MAX_ENTRIES_PER_ACCOUNT)
@@ -187,7 +187,7 @@ export class PromptCacheTracker {
     }
   }
 
-  // 清除所有缓存
+  // clear all cache
   clear(): number {
     const count = this.totalEntries()
     this.entriesByAccount.clear()
@@ -200,7 +200,7 @@ export class PromptCacheTracker {
     return count
   }
 
-  // ============ 内部方法 ============
+  // ============ internal method ============
 
   private flattenCacheBlocks(
     system: unknown,
@@ -209,7 +209,7 @@ export class PromptCacheTracker {
   ): CacheableBlock[] {
     const blocks: CacheableBlock[] = []
 
-    // 工具定义
+    // Tool definition
     if (tools) {
       for (const tool of tools) {
         const value = this.canonicalize({ kind: 'tool', name: tool.name, description: tool.description, input_schema: tool.input_schema })
@@ -301,18 +301,18 @@ export class PromptCacheTracker {
   }
 
   /**
-   * 深度稳定序列化：所有层级的对象键按字典序排序。
-   * 不能用 `JSON.stringify(obj, Object.keys(obj).sort())` —— 数组 replacer 是
-   * 作用于**所有层级**的键白名单，嵌套对象（消息 block、tool input_schema 等）的键
-   * 不在顶层键列表里会被整体丢弃，导致指纹只反映结构不反映内容，
-   * 不同内容的请求会误判为缓存命中。
+   * Deep stable serialization: Object keys at all levels are sorted lexicographically.
+   * The ____ does not work `JSON.stringify(obj, Object.keys(obj).sort())` —— array replacer yes
+   * Act on**All levels**whitelist of keys, nested objects (messages block、tool input_schema etc.) keys
+   * If it is not in the top-level key list, it will be discarded as a whole, causing the fingerprint to only reflect the structure but not the content.
+   * Requests for different content will be misjudged as cache hits.
    */
   private static stableStringify(value: unknown): string {
     const json = (v: unknown): string | undefined => {
       if (v === null) return 'null'
       const t = typeof v
       if (t === 'string' || t === 'number' || t === 'boolean') return JSON.stringify(v)
-      if (t !== 'object') return undefined // undefined/function/symbol 与 JSON.stringify 行为一致
+      if (t !== 'object') return undefined // undefined/function/symbol and JSON.stringify Behave consistently
       if (Array.isArray(v)) return `[${v.map((item) => json(item) ?? 'null').join(',')}]`
       const obj = v as Record<string, unknown>
       const parts: string[] = []
@@ -363,10 +363,10 @@ export class PromptCacheTracker {
   }
 }
 
-// 全局单例
+// Global singleton
 export const promptCacheTracker = new PromptCacheTracker()
 
-// 构建带缓存 usage 的 Claude usage 对象
+// Build with cache usage of Claude usage object
 export function buildCachedClaudeUsage(
   inputTokens: number,
   outputTokens: number,

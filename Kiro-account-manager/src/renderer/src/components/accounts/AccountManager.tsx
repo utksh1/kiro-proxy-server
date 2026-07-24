@@ -35,7 +35,7 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [isFilterExpanded, setIsFilterExpanded] = useState(false)
-  // 视图模式：grid（卡片，默认）/ list（紧凑列表），持久化到 localStorage
+  // View mode:grid(card, default)/ list(compact list), persisted to localStorage
   const [viewMode, setViewMode] = useState<AccountViewMode>(() => {
     const saved = localStorage.getItem('accounts_viewMode')
     return saved === 'list' ? 'list' : 'grid'
@@ -46,7 +46,7 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
   const { t } = useTranslation()
   const isEn = t('common.unknown') === 'Unknown'
 
-  // 获取要导出的账号列表
+  // Get the list of accounts to be exported
   const getExportAccounts = () => {
     const accountList = Array.from(accounts.values())
     if (selectedIds.size > 0) {
@@ -55,12 +55,12 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
     return accountList
   }
 
-  // 导出
+  // Export
   const handleExport = (): void => {
     setShowExportDialog(true)
   }
 
-  // 解析 CSV 行（处理引号和逗号）
+  // parse CSV line (handling quotes and commas)
   const parseCSVLine = (line: string): string[] => {
     const result: string[] = []
     let current = ''
@@ -86,11 +86,11 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
     return result
   }
 
-  // 导入
+  // import
   const handleImport = async (): Promise<void> => {
-    // 文件导入归入"当前打开的分组"（activeGroupTab 为真实分组时），否则未分组
+    // file import"Currently open group"（activeGroupTab when it is real grouping), otherwise it is not grouped
     const currentGroupId = (activeGroupTab !== 'all' && activeGroupTab !== 'ungrouped' && groups.has(activeGroupTab)) ? activeGroupTab : undefined
-    const groupName = currentGroupId ? (groups.get(currentGroupId)?.name ?? '未分组') : '未分组'
+    const groupName = currentGroupId ? (groups.get(currentGroupId)?.name ?? 'Not grouped') : 'Not grouped'
     const fileData = await window.api.importFromFile()
 
     if (!fileData) return
@@ -99,25 +99,25 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
 
     try {
       if (format === 'json') {
-        // JSON 格式：完整导出数据
+        // JSON Format: Complete export data
         const data = JSON.parse(content)
         if (data.version && data.accounts) {
           const result = importFromExportData(data)
           const skippedInfo = result.errors.find(e => e.id === 'skipped')
           const skippedMsg = skippedInfo ? `，${skippedInfo.error}` : ''
-          alert(`导入完成：成功 ${result.success} 个${skippedMsg}`)
+          alert(`Import completed: successful ${result.success} indivual${skippedMsg}`)
         } else {
-          alert('无效的 JSON 文件格式')
+          alert('Invalid JSON File format')
         }
       } else if (format === 'csv') {
-        // CSV 格式：邮箱,昵称,登录方式,RefreshToken,ClientId,ClientSecret,Region
+        // CSV Format: Email,Nick name,Login method,RefreshToken,ClientId,ClientSecret,Region
         const lines = content.split('\n').filter(line => line.trim())
         if (lines.length < 2) {
-          alert('CSV 文件为空或只有标题行')
+          alert('CSV The file is empty or has only a header line')
           return
         }
 
-        // 跳过标题行，解析数据行
+        // Skip header row, parse data row
         const items = lines.slice(1).map(line => {
           const cols = parseCSVLine(line)
           return {
@@ -133,29 +133,29 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
         }).filter(item => item.email && item.refreshToken)
 
         if (items.length === 0) {
-          alert('未找到有效的账号数据（需要邮箱和 RefreshToken）')
+          alert('No valid account data found (requires email and RefreshToken）')
           return
         }
 
         const result = importAccounts(items)
-        alert(`导入完成：成功 ${result.success} 个，失败 ${result.failed} 个（分组：${groupName}）`)
+        alert(`Import completed: successful ${result.success} one, failed ${result.failed} (group:${groupName}）`)
       } else if (format === 'txt') {
-        // TXT 格式：自动识别卡密格式或普通格式
+        // TXT Format: Automatically identify card password format or common format
         const lines = content.split('\n').filter(line => line.trim() && !line.startsWith('#'))
 
-        // 检测是否为卡密格式（包含 ---- 分隔符）
+        // Detect whether it is in card encryption format (including ---- separator)
         const isKamiFormat = lines.some(line => line.includes('----'))
 
         if (isKamiFormat) {
-          // 卡密格式：邮箱----密码----RefreshToken----ClientId----ClientSecret
-          // 自动识别分隔符：----、\t、连续空格
+          // Card secret format: email----password----RefreshToken----ClientId----ClientSecret
+          // Automatically recognize separators:----、\t, continuous spaces
           const items = lines.map(line => {
             const parts = splitCredentialLine(line)
             const rawPwd = parts[1]?.trim()
             const clientId = parts[3]?.trim() || undefined
             const clientSecret = parts[4]?.trim() || undefined
-            // 第6字段为登录方式(idp)：新卡密直接带；旧卡密无此字段时按 ClientId/Secret 推断
-            // social(Github/Google) 只有 refreshToken，IdC(BuilderId) 才有 ClientId/Secret
+            // No.6The field is the login method(idp): The new card number will be brought directly; if the old card number does not have this field, press ClientId/Secret infer
+            // social(Github/Google) only refreshToken，IdC(BuilderId) only have ClientId/Secret
             const rawIdp = parts[5]?.trim()
             const idp = rawIdp || ((!clientId && !clientSecret) ? 'Google' : 'BuilderId')
             return {
@@ -170,14 +170,14 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
           }).filter(item => item.email && item.refreshToken)
 
           if (items.length === 0) {
-            alert('未找到有效的卡密数据（格式：邮箱----密码----RefreshToken----ClientId----ClientSecret）')
+            alert('No valid card secret data found (Format: Email----password----RefreshToken----ClientId----ClientSecret）')
             return
           }
 
           const result = importAccounts(items)
-          alert(`卡密导入完成：成功 ${result.success} 个，失败 ${result.failed} 个（分组：${groupName}）`)
+          alert(`Card secret import completed: Success ${result.success} one, failed ${result.failed} (group:${groupName}）`)
         } else {
-          // 普通 TXT 格式：邮箱,RefreshToken 或 邮箱|RefreshToken
+          // ordinary TXT Format: Email,RefreshToken or Mail|RefreshToken
           const items = lines.map(line => {
             const parts = line.includes('|') ? line.split('|') : line.split(',')
             return {
@@ -190,33 +190,33 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
           }).filter(item => item.email && item.refreshToken)
 
           if (items.length === 0) {
-            alert('未找到有效的账号数据（格式：邮箱,RefreshToken 或 卡密格式：邮箱----密码----Token----ID----Secret）')
+            alert('No valid account data found (format: email,RefreshToken or Card secret format: email----password----Token----ID----Secret）')
             return
           }
 
           const result = importAccounts(items)
-          alert(`导入完成：成功 ${result.success} 个，失败 ${result.failed} 个（分组：${groupName}）`)
+          alert(`Import completed: successful ${result.success} one, failed ${result.failed} (group:${groupName}）`)
         }
       } else {
-        alert(`不支持的文件格式：${format}`)
+        alert(`Unsupported file formats:${format}`)
       }
     } catch (e) {
       console.error('Import error:', e)
-      alert('解析导入文件失败')
+      alert('Failed to parse import file')
     }
   }
 
-  // 管理分组
+  // Management grouping
   const handleManageGroups = (): void => {
     setShowGroupDialog(true)
   }
 
-  // 管理标签
+  // Manage tags
   const handleManageTags = (): void => {
     setShowTagDialog(true)
   }
 
-  // 编辑账号
+  // Edit account
   const handleEditAccount = (account: Account): void => {
     setEditingAccount(account)
   }
@@ -226,7 +226,7 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
       <div className="flex items-center justify-center h-full">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">加载账号数据...</p>
+          <p className="text-muted-foreground">Load account data...</p>
         </div>
       </div>
     )
@@ -234,7 +234,7 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
 
   return (
     <div className="flex flex-col h-full">
-      {/* 顶部工具栏 - 玻璃态（relative z-20 抬升 stacking context，确保下拉菜单浮在卡片之上） */}
+      {/* top toolbar - glassy state (relative z-20 lift stacking context, making sure the dropdown menu floats above the card) */}
       <header className="relative z-20 flex items-center justify-between gap-4 px-3 py-3 glass-toolbar">
         <div className="flex items-center gap-4">
           {onBack && (
@@ -246,11 +246,11 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
             <div className="p-2 rounded-lg bg-primary/10">
               <Users className="h-5 w-5 text-primary" />
             </div>
-            <h1 className="text-lg font-semibold text-primary">{isEn ? 'Accounts' : '账户管理'}</h1>
+            <h1 className="text-lg font-semibold text-primary">{isEn ? 'Accounts' : 'Account management'}</h1>
           </div>
         </div>
         
-        {/* 工具栏 */}
+        {/* Toolbar */}
         <AccountToolbar
           onAddAccount={() => setShowAddDialog(true)}
           onImport={handleImport}
@@ -264,9 +264,9 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
         />
       </header>
 
-      {/* 主内容区域 */}
+      {/* main content area */}
       <div className="flex-1 overflow-hidden flex flex-col px-3 py-3 gap-3">
-        {/* 账号列表（卡片 或 紧凑列表） */}
+        {/* Account list (card or compact list) */}
         <div className="flex-1 overflow-hidden">
           {viewMode === 'grid' ? (
             <AccountGrid
@@ -282,32 +282,32 @@ export function AccountManager({ onBack }: AccountManagerProps): React.ReactNode
         </div>
       </div>
 
-      {/* 添加账号对话框 */}
+      {/* Add account dialog box */}
       <AddAccountDialog
         isOpen={showAddDialog}
         onClose={() => setShowAddDialog(false)}
       />
 
-      {/* 编辑账号对话框 */}
+      {/* Edit account dialog box */}
       <EditAccountDialog
         open={!!editingAccount}
         onOpenChange={(open) => !open && setEditingAccount(null)}
         account={editingAccount}
       />
 
-      {/* 分组管理对话框 */}
+      {/* Group management dialog box */}
       <GroupManageDialog
         isOpen={showGroupDialog}
         onClose={() => setShowGroupDialog(false)}
       />
 
-      {/* 标签管理对话框 */}
+      {/* Tag management dialog */}
       <TagManageDialog
         isOpen={showTagDialog}
         onClose={() => setShowTagDialog(false)}
       />
 
-      {/* 导出对话框 */}
+      {/* Export dialog */}
       <ExportDialog
         open={showExportDialog}
         onClose={() => setShowExportDialog(false)}

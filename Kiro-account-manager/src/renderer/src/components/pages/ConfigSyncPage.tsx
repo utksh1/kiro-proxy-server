@@ -9,31 +9,31 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { Card, CardContent, CardHeader, CardTitle, Button, Label, Switch } from '../ui'
 
 /**
- * 配置同步页面
+ * Configure synchronization page
  *
- * 把"非敏感的应用配置"（代理池、Webhook、注册模板、限速/定时/配额、过滤偏好等）
- * 导出为单一 JSON 文件，方便在多台电脑之间同步。
+ * Bundle"Non-sensitive application configuration"(Agent pool,Webhook, registration template, speed limit/timing/Quotas, filtering preferences, etc.)
+ * export as single JSON files for easy synchronization between multiple computers.
  *
- * 敏感数据（账号凭据、refreshToken 等）不会被导出，
- * 它们走「账号管理 - 导出」专用通道（独立加密）。
+ * Sensitive data (account credentials,refreshToken etc.) will not be exported,
+ * They use "account management" - Export" dedicated channel (independently encrypted).
  */
 
 interface PortableConfig {
   version: 1
   exportedAt: string
   app: string  // "kiro-account-manager"
-  /** 代理池条目（脱敏：密码字段会被打码） */
+  /** Agent pool entry (desensitized: the password field will be coded) */
   proxyPool?: Array<Record<string, unknown>>
   proxyPoolConfig?: Record<string, unknown>
-  /** Webhook 列表 */
+  /** Webhook list */
   webhooks?: Array<Record<string, unknown>>
-  /** RegisterPage 配置（kiro-register-config） */
+  /** RegisterPage configure(kiro-register-config） */
   registerConfig?: Record<string, unknown>
-  /** 注册模板（kiro-register-templates） */
+  /** Registration template (kiro-register-templates） */
   registerTemplates?: Array<Record<string, unknown>>
-  /** 其它注册相关 localStorage 设置 */
+  /** Other registration related localStorage set up */
   registerLocalStorage?: Record<string, string>
-  /** App 设置（部分非敏感字段） */
+  /** App Settings (some non-sensitive fields) */
   appSettings?: {
     theme?: string
     darkMode?: boolean
@@ -66,7 +66,7 @@ export function ConfigSyncPage(): React.ReactNode {
   const isEn = t('common.unknown') === 'Unknown'
   const store = useAccountsStore()
 
-  // 导出选项（默认全开）
+  // Export options (all on by default)
   const [opts, setOpts] = useState({
     proxyPool: true,
     webhooks: true,
@@ -74,9 +74,9 @@ export function ConfigSyncPage(): React.ReactNode {
     registerTemplates: true,
     registerSettings: true,
     appSettings: true,
-    /** 包含代理密码？关闭时只导出 host:port，更安全用于分享 */
+    /** Contains proxy password? Export only when closed host:port, safer for sharing */
     includeProxyCredentials: false,
-    /** 启用密码加密：使用用户密码 + Web Crypto AES-GCM */
+    /** Enable password encryption: Use user password + Web Crypto AES-GCM */
     encrypt: false
   })
   const [encryptPassword, setEncryptPassword] = useState('')
@@ -99,7 +99,7 @@ export function ConfigSyncPage(): React.ReactNode {
       payload.proxyPool = Array.from(store.proxyPool.values()).map((p) => {
         const out: Record<string, unknown> = { ...p }
         if (!opts.includeProxyCredentials) {
-          // 脱敏：密码 + url 中的密码部分
+          // Desensitization: Password + url the password part of
           delete out.password
           out.url = p.url.replace(/:([^:@/]+)@/, ':***@')
         }
@@ -157,17 +157,17 @@ export function ConfigSyncPage(): React.ReactNode {
     let outputText = JSON.stringify(payload, null, 2)
     let extension = 'json'
 
-    // C4: 可选加密
+    // C4: optional encryption
     if (opts.encrypt) {
       if (!encryptPassword.trim()) {
-        alert(isEn ? 'Please enter encryption password' : '请输入加密密码')
+        alert(isEn ? 'Please enter encryption password' : 'Please enter the encryption password')
         return
       }
       try {
         outputText = await encryptText(outputText, encryptPassword)
         extension = 'kcfg'
       } catch (err) {
-        alert(isEn ? `Encryption failed: ${err}` : `加密失败: ${err}`)
+        alert(isEn ? `Encryption failed: ${err}` : `Encryption failed: ${err}`)
         return
       }
     }
@@ -186,30 +186,30 @@ export function ConfigSyncPage(): React.ReactNode {
   const handleImport = useCallback(async (file: File): Promise<void> => {
     try {
       let text = await file.text()
-      // C4: 加密文件自动识别 + 弹窗输入密码解密
+      // C4: Automatic identification of encrypted files + Pop-up window to enter password for decryption
       if (file.name.endsWith('.kcfg') || text.startsWith('KCFG1:')) {
-        const pwd = prompt(isEn ? 'Enter decryption password:' : '请输入解密密码：')
+        const pwd = prompt(isEn ? 'Enter decryption password:' : 'Please enter the decryption password:')
         if (!pwd) return
         try {
           text = await decryptText(text, pwd)
         } catch (err) {
-          setLastImportResult({ success: false, error: `解密失败：${err instanceof Error ? err.message : String(err)}` })
+          setLastImportResult({ success: false, error: `Decryption failed:${err instanceof Error ? err.message : String(err)}` })
           return
         }
       }
       const data = JSON.parse(text) as PortableConfig
       if (data.app !== 'kiro-account-manager') {
-        setLastImportResult({ success: false, error: '文件不是有效的 Kiro 账号管理器配置（app 标识不匹配）' })
+        setLastImportResult({ success: false, error: 'The file is not valid Kiro Account Manager Configuration (app ID does not match)' })
         return
       }
 
       const counts: Record<string, number> = {}
 
-      // 代理池
+      // proxy pool
       if (data.proxyPool && data.proxyPool.length > 0) {
         let added = 0
         for (const p of data.proxyPool) {
-          // 跳过脱敏过的密码
+          // Skip desensitized passwords
           if (typeof (p as { url?: string }).url === 'string' && !(p as { url: string }).url.includes('***')) {
             const id = store.addProxy((p as { url: string }).url, {
               label: (p as { label?: string }).label,
@@ -218,7 +218,7 @@ export function ConfigSyncPage(): React.ReactNode {
             })
             if (id) added++
           } else if ((p as { host?: string }).host && (p as { port?: number }).port) {
-            // 脱敏的代理：只有 host:port 时按 http 默认导入
+            // Desensitized Agents: Only host:port time button http Default import
             const proto = (p as { protocol?: string }).protocol || 'http'
             const url = `${proto}://${(p as { host: string }).host}:${(p as { port: number }).port}`
             const id = store.addProxy(url, {
@@ -229,7 +229,7 @@ export function ConfigSyncPage(): React.ReactNode {
             if (id) added++
           }
         }
-        counts['代理池'] = added
+        counts['proxy pool'] = added
       }
       if (data.proxyPoolConfig) {
         store.setProxyPoolConfig(data.proxyPoolConfig as Partial<typeof store.proxyPoolConfig>)
@@ -249,23 +249,23 @@ export function ConfigSyncPage(): React.ReactNode {
         counts['Webhook'] = added
       }
 
-      // 注册配置
+      // Register configuration
       if (data.registerConfig) {
         try {
           localStorage.setItem('kiro-register-config', JSON.stringify(data.registerConfig))
-          counts['注册配置'] = 1
+          counts['Register configuration'] = 1
         } catch { /* ignore */ }
       }
 
-      // 注册模板
+      // Registration template
       if (data.registerTemplates) {
         try {
           localStorage.setItem('kiro-register-templates', JSON.stringify(data.registerTemplates))
-          counts['注册模板'] = data.registerTemplates.length
+          counts['Registration template'] = data.registerTemplates.length
         } catch { /* ignore */ }
       }
 
-      // 注册相关 localStorage
+      // Registration related localStorage
       if (data.registerLocalStorage) {
         let n = 0
         for (const [k, v] of Object.entries(data.registerLocalStorage)) {
@@ -273,10 +273,10 @@ export function ConfigSyncPage(): React.ReactNode {
             try { localStorage.setItem(k, v); n++ } catch { /* ignore */ }
           }
         }
-        counts['注册偏好'] = n
+        counts['Registration preferences'] = n
       }
 
-      // App 设置
+      // App set up
       if (data.appSettings) {
         const s = data.appSettings
         if (s.theme != null) store.setTheme(s.theme)
@@ -291,7 +291,7 @@ export function ConfigSyncPage(): React.ReactNode {
         if (s.switchTarget != null && (s.switchTarget === 'ide' || s.switchTarget === 'cli' || s.switchTarget === 'both')) {
           store.setSwitchTarget(s.switchTarget)
         }
-        counts['App 设置'] = 1
+        counts['App set up'] = 1
       }
 
       setLastImportResult({ success: true, counts })
@@ -312,54 +312,54 @@ export function ConfigSyncPage(): React.ReactNode {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-              {isEn ? 'Config Sync' : '配置同步'}
+              {isEn ? 'Config Sync' : 'Configuration synchronization'}
             </h1>
             <p className="text-muted-foreground">
               {isEn
                 ? 'Export & import non-sensitive app config (proxy pool, webhooks, register templates, app preferences) for multi-device sync.'
-                : '导出/导入非敏感配置（代理池、Webhook、注册模板、应用偏好），用于多设备同步'
+                : 'Export/Import non-sensitive configuration (agent pool,Webhook, registration templates, application preferences) for multi-device synchronization'
               }
             </p>
           </div>
         </div>
       </div>
 
-      {/* 安全提示 */}
+      {/* Safety tips */}
       <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/10">
         <CardContent className="py-3 flex items-start gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
           <div className="text-xs space-y-1">
             <p className="font-medium text-amber-700 dark:text-amber-300">
-              {isEn ? 'Security Notice' : '安全提示'}
+              {isEn ? 'Security Notice' : 'Safety tips'}
             </p>
             <p className="text-muted-foreground">
               {isEn
                 ? 'This export does NOT include account credentials, refresh tokens, or other sensitive secrets — use "Account Export" (under Accounts page) for those.'
-                : '本页导出"不包含"账号凭据、Refresh Token 等敏感数据。账号导出请走"账户管理 → 导出"专用通道。'
+                : 'Export this page"Not included"account credentials,Refresh Token and other sensitive data. Please export the account"Account management → Export"Dedicated channel.'
               }
             </p>
             <p className="text-muted-foreground">
               {isEn
                 ? 'Tip: keep "Include proxy credentials" OFF when sharing the file with others.'
-                : '提示：分享给他人时，建议关闭"包含代理密码"选项，密码会被打码。'
+                : 'Tip: When sharing with others, it is recommended to close"Contains proxy password"option, the password will be coded.'
               }
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* 导出 */}
+      {/* Export */}
       <Card className="hover-lift">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Download className="h-4 w-4 text-primary" />
-            {isEn ? 'Export' : '导出'}
+            {isEn ? 'Export' : 'Export'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-2 gap-2 text-sm">
             <ExportToggle
-              label={`${isEn ? 'Proxy Pool' : '代理池'} (${store.proxyPool.size})`}
+              label={`${isEn ? 'Proxy Pool' : 'proxy pool'} (${store.proxyPool.size})`}
               checked={opts.proxyPool}
               onChange={(v) => setOpts((p) => ({ ...p, proxyPool: v }))}
             />
@@ -369,22 +369,22 @@ export function ConfigSyncPage(): React.ReactNode {
               onChange={(v) => setOpts((p) => ({ ...p, webhooks: v }))}
             />
             <ExportToggle
-              label={isEn ? 'Register Config' : '注册配置'}
+              label={isEn ? 'Register Config' : 'Register configuration'}
               checked={opts.registerConfig}
               onChange={(v) => setOpts((p) => ({ ...p, registerConfig: v }))}
             />
             <ExportToggle
-              label={isEn ? 'Register Templates' : '注册模板'}
+              label={isEn ? 'Register Templates' : 'Registration template'}
               checked={opts.registerTemplates}
               onChange={(v) => setOpts((p) => ({ ...p, registerTemplates: v }))}
             />
             <ExportToggle
-              label={isEn ? 'Register Preferences' : '注册偏好（限速/定时/配额等）'}
+              label={isEn ? 'Register Preferences' : 'Registration preferences (rate limit/timing/quotas, etc.)'}
               checked={opts.registerSettings}
               onChange={(v) => setOpts((p) => ({ ...p, registerSettings: v }))}
             />
             <ExportToggle
-              label={isEn ? 'App Settings (theme/lang/auto-refresh)' : 'App 设置（主题/语言/自动刷新）'}
+              label={isEn ? 'App Settings (theme/lang/auto-refresh)' : 'App settings(theme/language/automatic refresh)'}
               checked={opts.appSettings}
               onChange={(v) => setOpts((p) => ({ ...p, appSettings: v }))}
             />
@@ -401,10 +401,10 @@ export function ConfigSyncPage(): React.ReactNode {
                   ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
                   : <ShieldAlert className="h-3.5 w-3.5 text-muted-foreground" />
                 }
-                {isEn ? 'Include proxy credentials (NOT recommended for sharing)' : '包含代理密码（分享时不建议）'}
+                {isEn ? 'Include proxy credentials (NOT recommended for sharing)' : 'Include proxy password (not recommended when sharing)'}
               </Label>
             </div>
-            {/* C4: 加密导出 */}
+            {/* C4: Encrypted export */}
             <div className="flex items-center gap-2">
               <Switch
                 checked={opts.encrypt}
@@ -412,7 +412,7 @@ export function ConfigSyncPage(): React.ReactNode {
               />
               <Label className="text-xs cursor-pointer flex items-center gap-1.5">
                 <ShieldAlert className="h-3.5 w-3.5 text-green-500" />
-                {isEn ? 'Encrypt (AES-GCM)' : '加密导出 (AES-GCM)'}
+                {isEn ? 'Encrypt (AES-GCM)' : 'Encrypted export (AES-GCM)'}
               </Label>
             </div>
             {opts.encrypt && (
@@ -420,13 +420,13 @@ export function ConfigSyncPage(): React.ReactNode {
                 type="password"
                 value={encryptPassword}
                 onChange={(e) => setEncryptPassword(e.target.value)}
-                placeholder={isEn ? 'Password...' : '加密密码...'}
+                placeholder={isEn ? 'Password...' : 'Encrypted password...'}
                 className="h-8 px-2 rounded-md border bg-background text-xs flex-1 max-w-xs"
               />
             )}
             <Button className="ml-auto" onClick={handleExport} disabled={opts.encrypt && !encryptPassword.trim()}>
               <FileJson className="h-4 w-4 mr-2" />
-              {isEn ? 'Export' : '导出'}
+              {isEn ? 'Export' : 'Export'}
             </Button>
           </div>
 
@@ -434,26 +434,26 @@ export function ConfigSyncPage(): React.ReactNode {
             <p className="text-[10px] text-muted-foreground">
               {isEn
                 ? `Last export: ${(lastExportSize / 1024).toFixed(1)} KB`
-                : `上次导出大小: ${(lastExportSize / 1024).toFixed(1)} KB`
+                : `Last export size: ${(lastExportSize / 1024).toFixed(1)} KB`
               }
             </p>
           )}
         </CardContent>
       </Card>
 
-      {/* 导入 */}
+      {/* import */}
       <Card className="hover-lift">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Upload className="h-4 w-4 text-primary" />
-            {isEn ? 'Import' : '导入'}
+            {isEn ? 'Import' : 'import'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <Label className="text-xs">
             {isEn
               ? 'Choose a previously exported config JSON. Duplicates will be merged/skipped automatically.'
-              : '选择之前导出的配置 JSON 文件。重复项会自动合并/跳过。'
+              : 'Select the previously exported configuration JSON document. Duplicates are automatically merged/jump over.'
             }
           </Label>
           <div className="flex items-center gap-2">
@@ -479,7 +479,7 @@ export function ConfigSyncPage(): React.ReactNode {
                 <>
                   <div className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-300">
                     <CheckCircle2 className="h-4 w-4" />
-                    {isEn ? 'Import Successful' : '导入成功'}
+                    {isEn ? 'Import Successful' : 'Import successful'}
                   </div>
                   {lastImportResult.counts && (
                     <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
@@ -496,7 +496,7 @@ export function ConfigSyncPage(): React.ReactNode {
                 <div className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-medium">{isEn ? 'Import Failed' : '导入失败'}</div>
+                    <div className="font-medium">{isEn ? 'Import Failed' : 'Import failed'}</div>
                     <div className="text-xs mt-0.5">{lastImportResult.error}</div>
                   </div>
                 </div>
@@ -506,12 +506,12 @@ export function ConfigSyncPage(): React.ReactNode {
         </CardContent>
       </Card>
 
-      {/* 危险操作 */}
+      {/* Dangerous operation */}
       <Card className="border-red-200 dark:border-red-800">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2 text-red-600">
             <Trash2 className="h-4 w-4" />
-            {isEn ? 'Danger Zone' : '危险操作'}
+            {isEn ? 'Danger Zone' : 'Dangerous operation'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -522,16 +522,16 @@ export function ConfigSyncPage(): React.ReactNode {
             onClick={() => {
               if (!confirm(isEn
                 ? 'Reset register page preferences (rate limit / schedule / quota / mixed sources / blacklist / templates)? This does NOT affect accounts.'
-                : '重置注册页所有偏好（限速/定时/配额/混合源/黑名单/模板）？不影响账号数据。'
+                : 'Reset all preferences on the registration page (speed limit/timing/quota/Mixed sources/blacklist/template)? Account data is not affected.'
               )) return
               for (const k of REGISTER_LS_KEYS) localStorage.removeItem(k)
               localStorage.removeItem('kiro-register-templates')
               localStorage.removeItem('kiro-register-email-blacklist')
-              alert(isEn ? 'Done. Please reload the page.' : '已重置，请刷新页面')
+              alert(isEn ? 'Done. Please reload the page.' : 'Reset, please refresh the page')
             }}
           >
             <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
-            {isEn ? 'Reset Register Preferences' : '重置注册页偏好'}
+            {isEn ? 'Reset Register Preferences' : 'Reset registration page preferences'}
           </Button>
         </CardContent>
       </Card>
@@ -548,14 +548,14 @@ function ExportToggle({ label, checked, onChange }: { label: string; checked: bo
   )
 }
 
-// ============ AES-GCM 加密辅助（C4） ============
+// ============ AES-GCM Encryption Assist (C4） ============
 
 const ENC_PREFIX = 'KCFG1:'
 const PBKDF2_ITER = 100_000
 
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
   const enc = new TextEncoder()
-  // 用 .slice() 拿到独立的 ArrayBuffer 视图，规避 TypeScript 5 严格 ArrayBufferLike 类型问题
+  // use .slice() get independent ArrayBuffer view, avoidance TypeScript 5 strict ArrayBufferLike type issue
   const baseKey = await crypto.subtle.importKey(
     'raw',
     enc.encode(password).slice().buffer,

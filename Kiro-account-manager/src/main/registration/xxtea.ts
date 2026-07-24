@@ -59,11 +59,11 @@ export async function refreshAppJSConfig(
         if (result.version) cachedVersion = result.version
       }
     } catch (err) {
-      console.log('[xxtea] 下载 app.js 失败:', err)
+      console.log('[xxtea] download app.js fail:', err)
     }
 
     if (!cachedKey) {
-      console.log('[xxtea] 使用 fallback 密钥')
+      console.log('[xxtea] use fallback key')
       cachedKey = [...FALLBACK_KEY] as [number, number, number, number]
     }
     if (!cachedVersion) cachedVersion = FALLBACK_VER
@@ -132,7 +132,7 @@ function xxteaEncryptCore(plaintext: string, key: [number, number, number, numbe
   return result
 }
 
-/** 加密指纹 JSON: JSON -> CRC32前缀 -> XXTEA加密 -> base64 -> identifier:结果 */
+/** Encrypted fingerprint JSON: JSON -> CRC32prefix -> XXTEAencryption -> base64 -> identifier:result */
 export function encryptFingerprint(jsonStr: string): string {
   const crc = crc32(jsonStr)
   const crcHex = crc.toString(16).toUpperCase().padStart(8, '0')

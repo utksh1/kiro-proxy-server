@@ -7,26 +7,26 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // 默认主 CTA：实色 + hover 浮起 + 主色辉光
+        // Default main CTA:Solid color + hover float + main color glow
         default: 'bg-primary text-primary-foreground shadow hover:bg-primary/90 hover:-translate-y-px hover:shadow-[var(--glass-shadow-glow)]',
-        // 危险操作：红色 + hover 红色辉光
+        // Dangerous operation: red + hover red glow
         destructive: 'bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 hover:-translate-y-px hover:shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_8px_24px_rgba(239,68,68,0.25)]',
-        // 玻璃 outline：默认无填充，hover 显示淡色 + 浮起
+        // Glass outline: No padding by default,hover Show light color + float
         outline: 'border border-[var(--glass-border-strong)] bg-[var(--glass-bg-subtle)] backdrop-blur-md shadow-sm hover:bg-[var(--glass-bg)] hover:text-foreground hover:-translate-y-px',
-        // secondary：玻璃感
+        // secondary: Glassy feeling
         secondary: 'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 hover:-translate-y-px',
-        // ghost：透明，hover 显示淡色背景
+        // ghost:transparent,hover Show light background
         ghost: 'hover:bg-white/40 dark:hover:bg-white/5 hover:text-foreground',
-        // link：下划线
+        // link: Underline
         link: 'text-primary underline-offset-4 hover:underline',
-        // gradient：主 CTA 强调款，主题渐变 + 持续呼吸辉光
+        // gradient:host CTA Emphasis style, theme gradient + continuous breathing glow
         gradient: 'gradient-bg-primary shadow-md hover:-translate-y-px breathe-glow text-white border-0'
       },
       size: {
         default: 'h-9 px-4 py-2',
         sm: 'h-8 rounded-lg px-3 text-xs',
         lg: 'h-11 rounded-xl px-6 text-base',
-        cta: 'h-12 rounded-2xl px-8 text-base font-semibold', // 主要 Call-to-Action 按钮
+        cta: 'h-12 rounded-2xl px-8 text-base font-semibold', // main Call-to-Action button
         icon: 'h-9 w-9 rounded-lg'
       }
     },

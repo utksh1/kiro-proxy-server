@@ -27,7 +27,7 @@ export function UpdateDialog() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // 监听更新事件
+    // Listen for update events
     const unsubChecking = window.api.onUpdateChecking(() => {
       setStatus('checking')
     })
@@ -35,7 +35,7 @@ export function UpdateDialog() {
     const unsubAvailable = window.api.onUpdateAvailable((info) => {
       setUpdateInfo(info)
       setStatus('available')
-      setOpen(true) // 有更新时自动打开弹窗
+      setOpen(true) // Automatically open a pop-up window when there is an update
     })
 
     const unsubNotAvailable = window.api.onUpdateNotAvailable(() => {
@@ -100,7 +100,7 @@ export function UpdateDialog() {
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
       
       <div className="relative glass-card-strong rounded-2xl shadow-2xl w-full max-w-md m-4 animate-in zoom-in-95 duration-200 overflow-hidden">
-        {/* 头部 */}
+        {/* head */}
         <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-6 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -108,7 +108,7 @@ export function UpdateDialog() {
                 <Sparkles className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-lg font-bold">发现新版本</h2>
+                <h2 className="text-lg font-bold">new version found</h2>
                 {updateInfo && (
                   <p className="text-sm text-muted-foreground">v{updateInfo.version}</p>
                 )}
@@ -125,12 +125,12 @@ export function UpdateDialog() {
           </div>
         </div>
 
-        {/* 内容 */}
+        {/* content */}
         <div className="p-6 space-y-4">
           {status === 'available' && (
             <>
               <p className="text-sm text-muted-foreground">
-                新版本已发布，建议立即更新以获得最新功能和修复。
+                A new version has been released, it is recommended to update immediately to get the latest features and fixes.
               </p>
               {updateInfo?.releaseNotes && (
                 <div 
@@ -140,11 +140,11 @@ export function UpdateDialog() {
               )}
               <div className="flex gap-3">
                 <Button variant="outline" className="flex-1" onClick={handleClose}>
-                  稍后提醒
+                  reminder later
                 </Button>
                 <Button className="flex-1" onClick={handleDownload}>
                   <Download className="h-4 w-4 mr-2" />
-                  立即下载
+                  Download now
                 </Button>
               </div>
             </>
@@ -154,7 +154,7 @@ export function UpdateDialog() {
             <>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">正在下载更新...</span>
+                  <span className="text-muted-foreground">Downloading updates...</span>
                   <span className="font-mono">{progress ? `${progress.percent.toFixed(1)}%` : '0%'}</span>
                 </div>
                 <Progress value={progress?.percent ?? 0} className="h-2" />
@@ -167,7 +167,7 @@ export function UpdateDialog() {
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>请勿关闭应用...</span>
+                <span>Don't close the app...</span>
               </div>
             </>
           )}
@@ -176,18 +176,18 @@ export function UpdateDialog() {
             <>
               <div className="flex items-center gap-3 text-success">
                 <CheckCircle className="h-6 w-6" />
-                <span className="font-medium">下载完成！</span>
+                <span className="font-medium">Download completed!</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                更新已下载完成，点击下方按钮重启应用以完成安装。
+                The update has been downloaded, click the button below to restart the app to complete the installation.
               </p>
               <div className="flex gap-3">
                 <Button variant="outline" className="flex-1" onClick={handleClose}>
-                  稍后安装
+                  Install later
                 </Button>
                 <Button className="flex-1" onClick={handleInstall}>
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  立即重启
+                  Restart now
                 </Button>
               </div>
             </>
@@ -196,10 +196,10 @@ export function UpdateDialog() {
           {status === 'error' && (
             <>
               <p className="text-sm text-destructive">
-                更新检查失败: {error}
+                Update check failed: {error}
               </p>
               <Button variant="outline" className="w-full" onClick={handleClose}>
-                关闭
+                closure
               </Button>
             </>
           )}

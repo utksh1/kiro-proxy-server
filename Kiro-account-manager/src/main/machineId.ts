@@ -1,6 +1,6 @@
 /**
- * 机器码管理模块 - 主进程
- * 支持 Windows、macOS、Linux 三大平台
+ * Machine code management module - main process
+ * support Windows、macOS、Linux Three major platforms
  */
 
 import { exec, execSync, spawn } from 'child_process'
@@ -13,30 +13,30 @@ import { app, dialog } from 'electron'
 const execAsync = promisify(exec)
 
 /**
- * 查找可用的 PowerShell 可执行路径
- * 按优先级尝试多个路径，兼容不同 Windows 环境
+ * Find available PowerShell Executable path
+ * Try multiple paths according to priority, with different compatibility Windows environment
  */
 function findPowerShell(): string | null {
   const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
   const candidates = [
     // PowerShell 7+ (pwsh)
     `${process.env.ProgramFiles}\\PowerShell\\7\\pwsh.exe`,
-    // 标准 WindowsPowerShell 路径
+    // standard WindowsPowerShell path
     `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`,
-    // SysWOW64 路径（32位进程在64位系统上）
+    // SysWOW64 path(32bit process in64bit system)
     `${systemRoot}\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe`,
-    // 直接用命令名（依赖 PATH）
+    // Directly use the command name (depending on PATH）
     'pwsh.exe',
     'powershell.exe'
   ]
 
   for (const candidate of candidates) {
     try {
-      // 对绝对路径检查文件是否存在
+      // Check if file exists with absolute path
       if (path.isAbsolute(candidate)) {
         if (fs.existsSync(candidate)) return candidate
       } else {
-        // 对命令名尝试 where.exe 查找
+        // Try the command name where.exe Find
         const result = execSync(`where.exe ${candidate}`, {
           encoding: 'utf-8',
           timeout: 3000,
@@ -62,7 +62,7 @@ export interface MachineIdResult {
 }
 
 /**
- * 获取操作系统类型
+ * Get operating system type
  */
 export function getOSType(): OSType {
   switch (process.platform) {
@@ -78,15 +78,15 @@ export function getOSType(): OSType {
 }
 
 /**
- * 生成随机机器码 (GUID 格式)
+ * Generate random machine code (GUID Format)
  */
 export function generateRandomMachineId(): string {
-  // 生成符合 Windows MachineGuid 格式的 UUID
+  // Generate a match Windows MachineGuid Formatted UUID
   return crypto.randomUUID().toLowerCase()
 }
 
 /**
- * 获取当前机器码
+ * Get the current machine code
  */
 export async function getCurrentMachineId(): Promise<MachineIdResult> {
   const osType = getOSType()
@@ -100,25 +100,25 @@ export async function getCurrentMachineId(): Promise<MachineIdResult> {
       case 'linux':
         return await getLinuxMachineId()
       default:
-        return { success: false, error: '不支持的操作系统' }
+        return { success: false, error: 'Unsupported operating system' }
     }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : '获取机器码失败'
+      error: error instanceof Error ? error.message : 'Failed to obtain machine code'
     }
   }
 }
 
 /**
- * 设置新机器码
+ * Set new machine code
  */
 export async function setMachineId(newMachineId: string): Promise<MachineIdResult> {
   const osType = getOSType()
 
-  // 验证机器码格式
+  // Verify machine code format
   if (!isValidMachineId(newMachineId)) {
-    return { success: false, error: '无效的机器码格式' }
+    return { success: false, error: 'Invalid machine code format' }
   }
 
   try {
@@ -130,11 +130,11 @@ export async function setMachineId(newMachineId: string): Promise<MachineIdResul
       case 'linux':
         return await setLinuxMachineId(newMachineId)
       default:
-        return { success: false, error: '不支持的操作系统' }
+        return { success: false, error: 'Unsupported operating system' }
     }
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : '设置机器码失败'
-    // 检查是否需要管理员权限
+    const errorMsg = error instanceof Error ? error.message : 'Failed to set machine code'
+    // Check if administrator rights are required
     if (
       errorMsg.includes('Access is denied') ||
       errorMsg.includes('permission denied') ||
@@ -142,14 +142,14 @@ export async function setMachineId(newMachineId: string): Promise<MachineIdResul
       errorMsg.includes('EPERM') ||
       errorMsg.includes('EACCES')
     ) {
-      return { success: false, error: '需要管理员权限', requiresAdmin: true }
+      return { success: false, error: 'Requires administrator rights', requiresAdmin: true }
     }
     return { success: false, error: errorMsg }
   }
 }
 
 /**
- * 检查是否拥有管理员权限
+ * Check if you have administrator rights
  */
 export async function checkAdminPrivilege(): Promise<boolean> {
   const osType = getOSType()
@@ -157,7 +157,7 @@ export async function checkAdminPrivilege(): Promise<boolean> {
   try {
     switch (osType) {
       case 'windows': {
-        // 方法1: 使用 PowerShell 检查（最可靠，多路径探测）
+        // method1: use PowerShell Check (most reliable, multipath detection)
         const psPath = findPowerShell()
         if (psPath) {
           try {
@@ -177,7 +177,7 @@ export async function checkAdminPrivilege(): Promise<boolean> {
           console.log('[MachineId] PowerShell not found, skipping PS admin check')
         }
 
-        // 方法2: 尝试 net session（备用，不依赖 PowerShell）
+        // method2: try net session(Backup, not dependent on PowerShell）
         const systemRoot = process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows'
         const netPath = `${systemRoot}\\System32\\net.exe`
         try {
@@ -189,24 +189,24 @@ export async function checkAdminPrivilege(): Promise<boolean> {
           console.log('[MachineId] net session failed, no admin')
         }
 
-        // 方法3: 尝试写入系统目录测试权限
+        // method3: Try writing to the system directory to test permissions
         try {
           const testFile = `${systemRoot}\\Temp\\admin_check_${Date.now()}`
           fs.writeFileSync(testFile, '')
           fs.unlinkSync(testFile)
-          return false // Temp 目录普通用户也能写，此方法仅兜底
+          return false // Temp Ordinary users can also write to the directory. This method only covers the basics.
         } catch {
-          // 忽略
+          // neglect
         }
 
         return false
       }
 
       case 'macos':
-        // macOS 上写入用户目录不需要管理员权限
+        // macOS Writing to the user directory does not require administrator privileges
         return true
       case 'linux':
-        // 检查是否为 root
+        // Check if it is root
         return process.getuid?.() === 0
       default:
         return false
@@ -217,7 +217,7 @@ export async function checkAdminPrivilege(): Promise<boolean> {
 }
 
 /**
- * 请求以管理员权限重新启动应用
+ * Request to restart app with administrator privileges
  */
 export async function requestAdminRestart(): Promise<boolean> {
   const osType = getOSType()
@@ -228,13 +228,13 @@ export async function requestAdminRestart(): Promise<boolean> {
   try {
     switch (osType) {
       case 'windows': {
-        // Windows: 多路径探测 PowerShell，使用 Start-Process -Verb RunAs 提权
+        // Windows: multipath detection PowerShell,use Start-Process -Verb RunAs Elevate privileges
         const psPath = findPowerShell()
         if (psPath) {
-          // 用 spawn 数组传参（不走 cmd 解析）+ PowerShell 单引号包路径：
-          // 旧实现 `-Command "... -FilePath \"path\" ..."` 的嵌套双引号会被
-          // PowerShell argv 解析吞掉，安装路径含空格（C:\Program Files\...）时
-          // 路径被空格拆开导致提权重启静默失败。
+          // use spawn Array parameter transfer (do not go cmd parsing)+ PowerShell Single quoted package path:
+          // old implementation `-Command "... -FilePath \"path\" ..."` The nested double quotes will be
+          // PowerShell argv Parsed and swallowed, the installation path contains spaces (C:\Program Files\...)hour
+          // The path is separated by spaces, causing the privilege escalation restart to fail silently.
           const psQuotedPath = appPath.replace(/'/g, "''")
           const psCommand = `Start-Process -FilePath '${psQuotedPath}' -Verb RunAs`
           console.log('[MachineId] Running PowerShell:', psCommand)
@@ -249,13 +249,13 @@ export async function requestAdminRestart(): Promise<boolean> {
           })
           child.unref()
         } else {
-          // PowerShell 不可用时回退到 ShellExecute runas
+          // PowerShell Fallback to when unavailable ShellExecute runas
           console.log('[MachineId] PowerShell not found, using electron shell openPath with runas')
           const { shell } = await import('electron')
           shell.openExternal(`file:///${appPath}`)
         }
 
-        // 延迟退出，确保命令有时间执行
+        // Delay exit to ensure command has time to execute
         setTimeout(() => {
           console.log('[MachineId] Quitting app...')
           app.quit()
@@ -264,9 +264,9 @@ export async function requestAdminRestart(): Promise<boolean> {
       }
 
       case 'macos': {
-        // macOS: 使用 osascript 请求管理员权限。
-        // spawn 数组传参避免外层 shell 引号问题；路径先按 POSIX shell 规则单引号包裹
-        //（内部 ' 用 '\'' 转义），再按 AppleScript 双引号字符串规则转义 \ 和 "。
+        // macOS: use osascript Request administrator permissions.
+        // spawn Array parameter passing avoids outer layer shell Quotation mark problem; press the path first POSIX shell Rules wrapped in single quotes
+        //(internal ' use '\'' escape) and press AppleScript Double quoted string rules escaping \ and "。
         const shellQuotedPath = `'${appPath.replace(/'/g, "'\\''")}'`
         const appleScriptCmd = `open -n ${shellQuotedPath}`.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
         const script = `do shell script "${appleScriptCmd}" with administrator privileges`
@@ -279,7 +279,7 @@ export async function requestAdminRestart(): Promise<boolean> {
       }
 
       case 'linux': {
-        // Linux: 尝试使用 pkexec 或 gksudo
+        // Linux: Try using pkexec or gksudo
         const sudoCommands = ['pkexec', 'gksudo', 'kdesudo']
         for (const cmd of sudoCommands) {
           try {
@@ -302,18 +302,18 @@ export async function requestAdminRestart(): Promise<boolean> {
         return false
     }
   } catch (error) {
-    console.error('请求管理员权限失败:', error)
+    console.error('Request for administrator privileges failed:', error)
     return false
   }
 }
 
 /**
- * 验证机器码格式
+ * Verify machine code format
  */
 function isValidMachineId(machineId: string): boolean {
-  // UUID 格式: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  // UUID Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  // 纯32位十六进制 (Linux machine-id 格式)
+  // pure32bit hexadecimal (Linux machine-id Format)
   const hexRegex = /^[0-9a-f]{32}$/i
   return uuidRegex.test(machineId) || hexRegex.test(machineId)
 }
@@ -321,7 +321,7 @@ function isValidMachineId(machineId: string): boolean {
 // ==================== Windows ====================
 
 async function getWindowsMachineId(): Promise<MachineIdResult> {
-  // 方法1: 使用 reg query 命令
+  // method1: use reg query Order
   try {
     const { stdout } = await execAsync(
       'reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
@@ -335,7 +335,7 @@ async function getWindowsMachineId(): Promise<MachineIdResult> {
     console.log('[MachineId] reg query failed, trying PowerShell:', error instanceof Error ? error.message : error)
   }
 
-  // 方法2: 使用 PowerShell 读取注册表（某些 Win11 环境下更可靠，多路径探测）
+  // method2: use PowerShell Reading the registry (some Win11 More reliable in environment, multi-path detection)
   const psPath = findPowerShell()
   if (psPath) {
     try {
@@ -352,7 +352,7 @@ async function getWindowsMachineId(): Promise<MachineIdResult> {
     }
   }
 
-  // 方法3: 使用 WMIC 获取 UUID（备用方案）
+  // method3: use WMIC get UUID(Alternative plan)
   try {
     const { stdout } = await execAsync(
       'wmic csproduct get UUID',
@@ -371,23 +371,23 @@ async function getWindowsMachineId(): Promise<MachineIdResult> {
 
   return {
     success: false,
-    error: '无法获取机器码，请尝试以管理员身份运行或检查系统权限设置'
+    error: 'Unable to obtain machine code, please try running as administrator or check system permission settings'
   }
 }
 
 async function setWindowsMachineId(newMachineId: string): Promise<MachineIdResult> {
   try {
-    // 需要管理员权限
+    // Requires administrator rights
     await execAsync(
       `reg add "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid /t REG_SZ /d "${newMachineId}" /f`
     )
     return { success: true, machineId: newMachineId }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : ''
-    if (errorMsg.includes('Access is denied') || errorMsg.includes('拒绝访问')) {
-      return { success: false, error: '需要管理员权限', requiresAdmin: true }
+    if (errorMsg.includes('Access is denied') || errorMsg.includes('access denied')) {
+      return { success: false, error: 'Requires administrator rights', requiresAdmin: true }
     }
-    return { success: false, error: errorMsg || '设置Windows机器码失败' }
+    return { success: false, error: errorMsg || 'set upWindowsMachine code failed' }
   }
 }
 
@@ -395,7 +395,7 @@ async function setWindowsMachineId(newMachineId: string): Promise<MachineIdResul
 
 async function getMacOSMachineId(): Promise<MachineIdResult> {
   try {
-    // 优先读取 override 文件（本应用设置的机器码）
+    // Read first override File (machine code set by this application)
     const overridePath = path.join(app.getPath('userData'), 'machine-id-override')
     if (fs.existsSync(overridePath)) {
       const overrideId = fs.readFileSync(overridePath, 'utf-8').trim()
@@ -404,7 +404,7 @@ async function getMacOSMachineId(): Promise<MachineIdResult> {
       }
     }
     
-    // 检查 Kiro IDE 的 machineid 文件
+    // examine Kiro IDE of machineid document
     const kiroMachineIdPath = path.join(process.env.HOME || '', 'Library/Application Support/Kiro/machineid')
     if (fs.existsSync(kiroMachineIdPath)) {
       const kiroId = fs.readFileSync(kiroMachineIdPath, 'utf-8').trim()
@@ -413,7 +413,7 @@ async function getMacOSMachineId(): Promise<MachineIdResult> {
       }
     }
 
-    // 回退到硬件 UUID
+    // Fallback to hardware UUID
     const { stdout } = await execAsync(
       "ioreg -rd1 -c IOPlatformExpertDevice | awk '/IOPlatformUUID/ { print $3 }'"
     )
@@ -422,26 +422,26 @@ async function getMacOSMachineId(): Promise<MachineIdResult> {
       return { success: true, machineId }
     }
 
-    return { success: false, error: '无法获取macOS机器码' }
+    return { success: false, error: 'Unable to obtainmacOSmachine code' }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : '获取macOS机器码失败'
+      error: error instanceof Error ? error.message : 'getmacOSMachine code failed'
     }
   }
 }
 
 async function setMacOSMachineId(newMachineId: string): Promise<MachineIdResult> {
-  // macOS 的硬件 UUID 无法直接修改
-  // 我们写入本应用的 override 文件，并同步到 Kiro IDE 的 machineid 文件
+  // macOS hardware UUID cannot be modified directly
+  // What we wrote in this application override files and sync to Kiro IDE of machineid document
   const overridePath = path.join(app.getPath('userData'), 'machine-id-override')
   const kiroMachineIdPath = path.join(process.env.HOME || '', 'Library/Application Support/Kiro/machineid')
 
   try {
-    // 写入本应用的 override 文件
+    // written in this application override document
     fs.writeFileSync(overridePath, newMachineId, 'utf-8')
     
-    // 同步到 Kiro IDE 的 machineid 文件
+    // Sync to Kiro IDE of machineid document
     try {
       const kiroDir = path.dirname(kiroMachineIdPath)
       if (!fs.existsSync(kiroDir)) {
@@ -451,14 +451,14 @@ async function setMacOSMachineId(newMachineId: string): Promise<MachineIdResult>
       console.log('[MachineId] Synced to Kiro IDE machineid:', kiroMachineIdPath)
     } catch (syncError) {
       console.warn('[MachineId] Failed to sync to Kiro IDE:', syncError)
-      // 同步失败不影响主流程
+      // Synchronization failure does not affect the main process
     }
     
     return { success: true, machineId: newMachineId }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : '设置macOS机器码失败'
+      error: error instanceof Error ? error.message : 'set upmacOSMachine code failed'
     }
   }
 }
@@ -473,7 +473,7 @@ async function getLinuxMachineId(): Promise<MachineIdResult> {
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8').trim()
         if (content) {
-          // Linux machine-id 是32位十六进制，转换为UUID格式
+          // Linux machine-id yes32bit hexadecimal, converted toUUIDFormat
           const formattedId = formatAsUUID(content)
           return { success: true, machineId: formattedId }
         }
@@ -483,16 +483,16 @@ async function getLinuxMachineId(): Promise<MachineIdResult> {
     }
   }
 
-  return { success: false, error: '无法获取Linux机器码' }
+  return { success: false, error: 'Unable to obtainLinuxmachine code' }
 }
 
 async function setLinuxMachineId(newMachineId: string): Promise<MachineIdResult> {
-  // 转换为32位十六进制格式（移除连字符）
+  // Convert to32digit hexadecimal format (hyphens removed)
   const rawId = newMachineId.replace(/-/g, '').toLowerCase()
 
   const paths = ['/etc/machine-id', '/var/lib/dbus/machine-id']
 
-  // 首先尝试直接写入（如果有权限）
+  // First try writing directly (if you have permission)
   for (const filePath of paths) {
     try {
       if (fs.existsSync(filePath)) {
@@ -502,42 +502,42 @@ async function setLinuxMachineId(newMachineId: string): Promise<MachineIdResult>
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : ''
       if (errorMsg.includes('EACCES') || errorMsg.includes('EPERM')) {
-        // 需要管理员权限，尝试使用 pkexec 直接写入
+        // Administrator rights are required, try using pkexec write directly
         const pkexecResult = await setLinuxMachineIdWithPkexec(rawId, filePath)
         if (pkexecResult.success) {
           return { success: true, machineId: newMachineId }
         }
-        // 如果 pkexec 失败，继续尝试其他路径或返回错误
-        if (pkexecResult.error?.includes('用户取消') || pkexecResult.error?.includes('dismissed')) {
-          return { success: false, error: '用户取消了授权' }
+        // if pkexec Failure, continue trying other paths or return an error
+        if (pkexecResult.error?.includes('User cancels') || pkexecResult.error?.includes('dismissed')) {
+          return { success: false, error: 'User canceled authorization' }
         }
       }
     }
   }
 
-  return { success: false, error: '设置Linux机器码失败' }
+  return { success: false, error: 'set upLinuxMachine code failed' }
 }
 
 /**
- * 使用 pkexec 以 root 权限写入 Linux 机器码
- * 这种方式不需要重启整个应用，避免了 Wayland 显示授权问题
+ * use pkexec by root Permission to write Linux machine code
+ * This method does not require restarting the entire application and avoids Wayland Display authorization issues
  */
 async function setLinuxMachineIdWithPkexec(rawId: string, filePath: string): Promise<MachineIdResult> {
   const sudoCommands = ['pkexec', 'gksudo', 'kdesudo']
   
   for (const cmd of sudoCommands) {
     try {
-      // 检查命令是否存在
+      // Check if the command exists
       execSync(`which ${cmd}`, { stdio: 'ignore' })
       
-      // 使用 pkexec/gksudo 调用 tee 命令写入文件
-      // tee 命令可以以 root 权限写入文件
+      // use pkexec/gksudo call tee Command to write to file
+      // tee The command can be root Permission to write files
       const command = `echo "${rawId}" | ${cmd} tee "${filePath}" > /dev/null`
       console.log(`[MachineId] Running: ${cmd} to write machine-id`)
       
       await execAsync(command)
       
-      // 如果还有 /var/lib/dbus/machine-id，也更新它
+      // if there is still /var/lib/dbus/machine-id, also update it
       if (filePath === '/etc/machine-id') {
         const dbusPath = '/var/lib/dbus/machine-id'
         if (fs.existsSync(dbusPath)) {
@@ -545,7 +545,7 @@ async function setLinuxMachineIdWithPkexec(rawId: string, filePath: string): Pro
             const dbusCommand = `echo "${rawId}" | ${cmd} tee "${dbusPath}" > /dev/null`
             await execAsync(dbusCommand)
           } catch {
-            // 忽略 dbus machine-id 更新失败
+            // neglect dbus machine-id Update failed
           }
         }
       }
@@ -555,20 +555,20 @@ async function setLinuxMachineIdWithPkexec(rawId: string, filePath: string): Pro
       const errorMsg = error instanceof Error ? error.message : ''
       console.log(`[MachineId] ${cmd} failed:`, errorMsg)
       
-      // 用户取消授权
+      // User cancels authorization
       if (errorMsg.includes('dismissed') || errorMsg.includes('Not authorized') || errorMsg.includes('126')) {
-        return { success: false, error: '用户取消了授权' }
+        return { success: false, error: 'User canceled authorization' }
       }
-      // 继续尝试下一个命令
+      // Continue trying the next command
       continue
     }
   }
   
-  return { success: false, error: '没有可用的权限提升工具', requiresAdmin: true }
+  return { success: false, error: 'No privilege escalation tools available', requiresAdmin: true }
 }
 
 /**
- * 将32位十六进制转换为UUID格式
+ * Will32bit hexadecimal toUUIDFormat
  */
 function formatAsUUID(hex: string): string {
   const clean = hex.replace(/-/g, '').toLowerCase()
@@ -577,7 +577,7 @@ function formatAsUUID(hex: string): string {
 }
 
 /**
- * 备份机器码到文件
+ * Backup machine code to file
  */
 export async function backupMachineIdToFile(
   machineId: string,
@@ -593,43 +593,43 @@ export async function backupMachineIdToFile(
     fs.writeFileSync(filePath, JSON.stringify(backupData, null, 2), 'utf-8')
     return true
   } catch (error) {
-    console.error('备份机器码失败:', error)
+    console.error('Backup machine code failed:', error)
     return false
   }
 }
 
 /**
- * 从文件恢复机器码
+ * Recover machine code from file
  */
 export async function restoreMachineIdFromFile(filePath: string): Promise<MachineIdResult> {
   try {
     if (!fs.existsSync(filePath)) {
-      return { success: false, error: '备份文件不存在' }
+      return { success: false, error: 'Backup file does not exist' }
     }
     const content = fs.readFileSync(filePath, 'utf-8')
     const data = JSON.parse(content)
     if (!data.machineId || !isValidMachineId(data.machineId)) {
-      return { success: false, error: '备份文件格式无效' }
+      return { success: false, error: 'Backup file format is invalid' }
     }
     return { success: true, machineId: data.machineId }
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : '读取备份文件失败'
+      error: error instanceof Error ? error.message : 'Failed to read backup file'
     }
   }
 }
 
 /**
- * 显示需要管理员权限的对话框
+ * Shows a dialog box that requires administrator privileges
  */
 export async function showAdminRequiredDialog(): Promise<boolean> {
   const result = await dialog.showMessageBox({
     type: 'warning',
-    title: '需要管理员权限',
-    message: '修改机器码需要管理员权限',
-    detail: '是否以管理员权限重新启动应用程序？',
-    buttons: ['取消', '以管理员身份重启'],
+    title: 'Requires administrator rights',
+    message: 'Modifying machine code requires administrator privileges',
+    detail: 'Restart the application with administrator rights?',
+    buttons: ['Cancel', 'Restart as administrator'],
     defaultId: 1,
     cancelId: 0
   })

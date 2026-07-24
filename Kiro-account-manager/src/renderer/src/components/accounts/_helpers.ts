@@ -1,13 +1,13 @@
 /**
- * 账号视图共享工具 — AccountCard / AccountListRow 复用
- * 保证两种视图（卡片 / 列表）视觉系统一致
+ * Account view sharing tool — AccountCard / AccountListRow Reuse
+ * Guaranteed two views (cards / list) visual system consistent
  */
 import type { CSSProperties } from 'react'
 import type { Account } from '@/types/account'
 
-// ============ 颜色解析 ============
+// ============ Color analysis ============
 
-// 解析 ARGB 颜色转换为 CSS rgba（支持 #AARRGGBB 与 #RRGGBB）
+// parse ARGB Color converted to CSS rgba(support #AARRGGBB and #RRGGBB）
 export function toRgba(argbColor: string): string {
   let alpha = 255
   let rgb = argbColor
@@ -22,9 +22,9 @@ export function toRgba(argbColor: string): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha / 255})`
 }
 
-// ============ 标签光环 ============
+// ============ tag halo ============
 
-// 生成卡片版标签光环样式：单标签 → box-shadow；多标签 → 渐变 border
+// Generate card version label halo style: single label → box-shadow;Multiple tags → Gradient border
 export function generateGlowStyle(tagColors: string[]): CSSProperties {
   if (tagColors.length === 0) return {}
   if (tagColors.length === 1) {
@@ -46,7 +46,7 @@ export function generateGlowStyle(tagColors: string[]): CSSProperties {
   }
 }
 
-// 列表行用：标签色带 — 只保留左边 3px 色带作为身份识别，不染色行背景避免多行列表花花绿绿
+// List row use: label ribbon — Keep only the left side 3px The ribbon is used for identification, and does not dye the row background to avoid colorful multi-line lists.
 export function generateRowGlowStyle(tagColors: string[]): CSSProperties {
   if (tagColors.length === 0) return {}
   if (tagColors.length === 1) {
@@ -55,7 +55,7 @@ export function generateRowGlowStyle(tagColors: string[]): CSSProperties {
       borderLeftWidth: '3px'
     }
   }
-  // 多标签：垂直渐变左边色带（双层 backgroundClip trick，渐变只在 border-box 的 3px 区域显示）
+  // Multi-label: vertical gradient left ribbon (double layer backgroundClip trick, the gradient is only in border-box of 3px area display)
   const gradientStops = tagColors.map((c, i) => {
     const percent = (i / (tagColors.length - 1)) * 100
     return `${toRgba(c)} ${percent}%`
@@ -70,9 +70,9 @@ export function generateRowGlowStyle(tagColors: string[]): CSSProperties {
   }
 }
 
-// ============ 封禁状态样式 ============
+// ============ Ban status style ============
 
-// 卡片版封禁背景样式（用 CSS 变量）
+// Card version ban background style (use CSS variable)
 export const unauthorizedCardStyle: CSSProperties = {
   backgroundColor: 'var(--card-unauthorized-bg)',
   borderColor: 'var(--card-unauthorized-border)',
@@ -82,14 +82,14 @@ export const unauthorizedCardStyle: CSSProperties = {
   `
 }
 
-// 列表行封禁背景样式（更轻量，不抢眼）
+// List row ban background style (lighter, less eye-catching)
 export const unauthorizedRowStyle: CSSProperties = {
   backgroundColor: 'var(--card-unauthorized-bg)',
   borderColor: 'var(--card-unauthorized-border)',
   boxShadow: `0 0 0 1px var(--card-unauthorized-ring)`
 }
 
-// ============ 订阅徽章配色 ============
+// ============ Subscribe badge color ============
 
 export function getSubscriptionColor(type: string, title?: string): string {
   const text = (title || type).toUpperCase()
@@ -99,14 +99,14 @@ export function getSubscriptionColor(type: string, title?: string): string {
   return 'bg-gray-500'
 }
 
-// ============ 状态文本 ============
+// ============ status text ============
 
 export const StatusLabelsZh: Record<string, string> = {
-  active: '正常',
-  expired: '已过期',
-  error: '错误',
-  refreshing: '刷新中',
-  unknown: '未知'
+  active: 'normal',
+  expired: 'Expired',
+  error: 'mistake',
+  refreshing: 'Refreshing',
+  unknown: 'unknown'
 }
 
 export const StatusLabelsEn: Record<string, string> = {
@@ -117,7 +117,7 @@ export const StatusLabelsEn: Record<string, string> = {
   unknown: 'Unknown'
 }
 
-// 状态徽章 Tailwind class
+// status badge Tailwind class
 export function getStatusBadgeClass(status: string, isUnauthorized: boolean): string {
   if (isUnauthorized) return 'text-destructive bg-destructive/10'
   switch (status) {
@@ -129,7 +129,7 @@ export function getStatusBadgeClass(status: string, isUnauthorized: boolean): st
   }
 }
 
-// ============ 显示名 ============
+// ============ display name ============
 
 export function getDisplayName(account: Account): string {
   if (account.nickname) return account.nickname
@@ -138,31 +138,31 @@ export function getDisplayName(account: Account): string {
   return 'Unknown'
 }
 
-// ============ Token 过期格式化 ============
+// ============ Token Expired formatting ============
 
 export function formatTokenExpiry(expiresAt: number, isEn: boolean): string {
   const now = Date.now()
   const diff = expiresAt - now
-  if (diff <= 0) return isEn ? 'Expired' : '已过期'
+  if (diff <= 0) return isEn ? 'Expired' : 'Expired'
   const minutes = Math.floor(diff / (60 * 1000))
   const hours = Math.floor(diff / (60 * 60 * 1000))
   if (minutes < 60) {
-    return isEn ? `${minutes}m` : `${minutes} 分钟`
+    return isEn ? `${minutes}m` : `${minutes} minute`
   } else if (hours < 24) {
     const remainingMinutes = minutes % 60
     return isEn
       ? (remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`)
-      : (remainingMinutes > 0 ? `${hours} 小时 ${remainingMinutes} 分` : `${hours} 小时`)
+      : (remainingMinutes > 0 ? `${hours} Hour ${remainingMinutes} point` : `${hours} Hour`)
   } else {
     const days = Math.floor(hours / 24)
     const remainingHours = hours % 24
     return isEn
       ? (remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`)
-      : (remainingHours > 0 ? `${days} 天 ${remainingHours} 小时` : `${days} 天`)
+      : (remainingHours > 0 ? `${days} sky ${remainingHours} Hour` : `${days} sky`)
   }
 }
 
-// ============ 封禁错误识别 ============
+// ============ Banning error recognition ============
 
 export function isBannedError(error: string | undefined): boolean {
   if (!error) return false
@@ -173,15 +173,15 @@ export function isBannedError(error: string | undefined): boolean {
     lower.includes('temporarily_suspended') ||
     lower.includes('temporarily suspended') ||
     (lower.includes('user id is') && lower.includes('suspended')) ||
-    lower.includes('账户已封禁') ||
-    lower.includes('已封禁') ||
+    lower.includes('Account has been banned') ||
+    lower.includes('Banned') ||
     /\b423\b/.test(lower)
   )
 }
 
-// ============ 日期格式化 ============
+// ============ date formatting ============
 
-// 把 nextResetDate / freeTrialExpiry 等多种类型安全格式化为 YYYY-MM-DD
+// Bundle nextResetDate / freeTrialExpiry and other types of safe formatting as YYYY-MM-DD
 export function formatDateSafe(d: unknown): string {
   try {
     return (typeof d === 'string' ? d : new Date(d as Date).toISOString()).split('T')[0]

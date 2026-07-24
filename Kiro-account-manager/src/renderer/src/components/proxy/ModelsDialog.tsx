@@ -37,7 +37,7 @@ export function ModelsDialog({
   const [loading, setLoading] = useState(false)
   const [fromCache, setFromCache] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // IP 限制提示是否显示 (用户点击关闭后持久化)
+  // IP Whether the restriction prompt is displayed (Persistence after user clicks close)
   const [showIpTip, setShowIpTip] = useState(() => {
     return localStorage.getItem('models_dialog_ip_tip_dismissed') !== '1'
   })
@@ -91,15 +91,15 @@ export function ModelsDialog({
                 <Cpu className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <span className="font-bold">{isEn ? 'Available Models' : '可用模型'}</span>
+                <span className="font-bold">{isEn ? 'Available Models' : 'Available models'}</span>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge className="bg-primary/10 text-primary border-primary/20 font-semibold">
-                    {models.length} {isEn ? 'models' : '个模型'}
+                    {models.length} {isEn ? 'models' : 'models'}
                   </Badge>
                   {fromCache && (
                     <Badge variant="secondary" className="text-xs bg-warning/10 text-warning border-0">
                       <Sparkles className="h-3 w-3 mr-1" />
-                      {isEn ? 'Cached' : '缓存'}
+                      {isEn ? 'Cached' : 'cache'}
                     </Badge>
                   )}
                 </div>
@@ -114,7 +114,7 @@ export function ModelsDialog({
                   className="rounded-lg"
                 >
                   <Shuffle className="h-4 w-4" />
-                  <span className="ml-1.5">{isEn ? 'Mapping' : '映射'}</span>
+                  <span className="ml-1.5">{isEn ? 'Mapping' : 'mapping'}</span>
                   {mappingCount > 0 && (
                     <Badge className="ml-1.5 h-5 px-1.5 bg-primary/20 text-primary text-xs">
                       {mappingCount}
@@ -134,7 +134,7 @@ export function ModelsDialog({
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                <span className="ml-1.5">{isEn ? 'Refresh' : '刷新'}</span>
+                <span className="ml-1.5">{isEn ? 'Refresh' : 'refresh'}</span>
               </Button>
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg hover:bg-red-500 hover:text-white transition-colors" onClick={() => onOpenChange(false)}>
                 <X className="h-5 w-5" />
@@ -143,7 +143,7 @@ export function ModelsDialog({
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          {/* IP 限制提示横幅 (Pro+ 订阅但缺失高级模型) */}
+          {/* IP Restriction reminder banner (Pro+ Subscribed but missing premium model) */}
           {showIpTip && (
             <div className="mb-3 rounded-xl border border-warning/30 bg-gradient-to-r from-warning/10 to-warning/5 p-3.5 relative">
               <div className="flex items-start gap-3">
@@ -155,17 +155,17 @@ export function ModelsDialog({
                     <Globe className="h-3.5 w-3.5" />
                     {isEn
                       ? 'Pro/Pro Max subscription but missing advanced models?'
-                      : '订阅 Pro/Pro Max 但看不到高级模型？'}
+                      : 'subscription Pro/Pro Max But can’t see the premium model?'}
                   </p>
                   <p className="text-xs text-warning/90 leading-relaxed mb-1">
                     {isEn
                       ? 'This is likely caused by regional restrictions on China-mainland IPs. Try the following:'
-                      : '这通常是国内 IP 被限制导致的。请尝试以下方案：'}
+                      : 'This is usually domestic IP caused by restrictions. Please try the following options:'}
                   </p>
                   <ul className="text-xs text-warning/90 space-y-0.5 list-disc list-inside">
-                    <li>{isEn ? 'Enable VPN/proxy (system-level or app-level)' : '开启 VPN / 代理（系统级或应用级均可）'}</li>
-                    <li>{isEn ? 'Switch to high-quality outbound IP (US/EU residential preferred)' : '切换到优质外网 IP（推荐美国 / 欧洲住宅 IP）'}</li>
-                    <li>{isEn ? 'Click Refresh after IP change to reload models' : 'IP 切换后点击右上角「刷新」重新加载模型'}</li>
+                    <li>{isEn ? 'Enable VPN/proxy (system-level or app-level)' : 'turn on VPN / Agent (either system level or application level)'}</li>
+                    <li>{isEn ? 'Switch to high-quality outbound IP (US/EU residential preferred)' : 'Switch to a high-quality external network IP(Recommend the United States / european residence IP）'}</li>
+                    <li>{isEn ? 'Click Refresh after IP change to reload models' : 'IP After switching, click "Refresh" in the upper right corner to reload the model.'}</li>
                   </ul>
                 </div>
                 <Button
@@ -173,7 +173,7 @@ export function ModelsDialog({
                   size="icon"
                   className="absolute top-2 right-2 h-7 w-7 hover:bg-warning/20 text-warning"
                   onClick={dismissIpTip}
-                  title={isEn ? "Don't show again" : '不再显示'}
+                  title={isEn ? "Don't show again" : "Don't show again"}
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -186,7 +186,7 @@ export function ModelsDialog({
                 <div className="p-4 rounded-full bg-primary/10 mb-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 </div>
-                <p className="font-medium">{isEn ? 'Loading models...' : '加载模型中...'}</p>
+                <p className="font-medium">{isEn ? 'Loading models...' : 'Loading model...'}</p>
               </div>
             ) : error ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -194,14 +194,14 @@ export function ModelsDialog({
                   <X className="h-8 w-8 text-destructive" />
                 </div>
                 <p className="text-destructive font-medium">{error}</p>
-                <p className="text-sm mt-2">{isEn ? 'Make sure proxy is running and has synced accounts' : '请确保代理服务已启动且已同步账号'}</p>
+                <p className="text-sm mt-2">{isEn ? 'Make sure proxy is running and has synced accounts' : 'Please ensure that the proxy service is started and the account has been synchronized'}</p>
               </div>
             ) : models.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <div className="p-4 rounded-full bg-muted mb-4">
                   <Cpu className="h-8 w-8" />
                 </div>
-                <p className="font-medium">{isEn ? 'No models available' : '暂无可用模型'}</p>
+                <p className="font-medium">{isEn ? 'No models available' : 'No models available yet'}</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
@@ -226,7 +226,7 @@ export function ModelsDialog({
                       </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2 pl-4">
-                      {model.description || (isEn ? 'No description' : '无描述')}
+                      {model.description || (isEn ? 'No description' : 'No description')}
                     </p>
                     <div className="flex items-center justify-between pt-2 border-t border-border/50">
                       <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 /**
  * useTranslation hook
- * 简化 i18n 使用的 React hook
+ * simplify i18n used React hook
  */
 
 import { useMemo } from 'react'
@@ -17,7 +17,7 @@ interface Translations {
 const locales: Record<string, Translations> = { en, zh }
 
 /**
- * 检测系统语言
+ * Detection system language
  */
 function detectSystemLanguage(): 'en' | 'zh' {
   const lang = navigator.language.toLowerCase()
@@ -26,7 +26,7 @@ function detectSystemLanguage(): 'en' | 'zh' {
 }
 
 /**
- * 获取实际使用的语言
+ * Get the actual language used
  */
 function getActualLanguage(language: Language): 'en' | 'zh' {
   if (language === 'auto') {
@@ -36,7 +36,7 @@ function getActualLanguage(language: Language): 'en' | 'zh' {
 }
 
 /**
- * 获取嵌套对象的值
+ * Get the value of a nested object
  */
 function getNestedValue(obj: Translations, path: string): string {
   const keys = path.split('.')
@@ -52,12 +52,12 @@ function getNestedValue(obj: Translations, path: string): string {
 }
 
 /**
- * 翻译函数
+ * translation function
  */
 function translate(key: string, language: 'en' | 'zh', params?: Record<string, string | number>): string {
   let text = getNestedValue(locales[language] || locales.en, key)
   
-  // 替换参数
+  // Replace parameters
   if (params && text !== key) {
     Object.entries(params).forEach(([paramKey, value]) => {
       text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(value))

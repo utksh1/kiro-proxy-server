@@ -8,9 +8,9 @@ import { UpdateDialog } from './components/UpdateDialog'
 import { CloseConfirmDialog } from './components/CloseConfirmDialog'
 import { useAccountsStore, isBannedAccountError } from './store/accounts'
 
-// 托盘信息防抖延迟：后台刷新风暴时合并多次跨进程 IPC 为单次
+// Tray information anti-shake delay: merge multiple cross-processes during background refresh storm IPC for a single
 const TRAY_UPDATE_DEBOUNCE_MS = 400
-// 后台刷新结果批量化间隔：N 条结果合并到一次 set，避免 N 次 Map 全量复制 + 渲染抖动
+// Background refresh result batching interval:N Results are merged into one set,avoid N Second-rate Map Full copy + Rendering jitter
 const BACKGROUND_RESULT_FLUSH_MS = 120
 
 function App(): React.JSX.Element {
@@ -32,7 +32,7 @@ function App(): React.JSX.Element {
     updateAccount
   } = useAccountsStore()
 
-  // 切换到下一个可用账户
+  // Switch to next available account
   const switchToNextAccount = useCallback(() => {
     const activeAccounts = Array.from(accounts.values()).filter(acc => acc.status === 'active')
     if (activeAccounts.length <= 1) return
@@ -42,7 +42,7 @@ function App(): React.JSX.Element {
     setActiveAccount(activeAccounts[nextIndex].id)
   }, [accounts, activeAccountId, setActiveAccount])
 
-  // 托盘信息防抖：账号 Map 频繁变更（后台刷新风暴）时合并 N 次 IPC 为 1 次
+  // Tray information anti-shake: account number Map Merge when frequent changes (background refresh storm) N Second-rate IPC for 1 Second-rate
   const trayDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const updateTrayInfo = useCallback(() => {
     if (trayDebounceRef.current) clearTimeout(trayDebounceRef.current)
@@ -86,14 +86,14 @@ function App(): React.JSX.Element {
     }, TRAY_UPDATE_DEBOUNCE_MS)
   }, [])
 
-  // 应用启动时加载数据并启动自动刷新
+  // Load data when the app starts and start automatic refresh
   useEffect(() => {
     loadFromStorage().then(() => {
       startAutoTokenRefresh()
     })
-    // 同步主动续期开关（持久化在 main 进程的 electron-store）
+    // Synchronous active renewal switch (persistent in main process electron-store）
     useAccountsStore.getState().loadProactiveRenewalEnabled()
-    // 加载 Webhook 配置
+    // load Webhook Configuration
     useWebhookStore.getState().loadFromStorage()
 
     return () => {
@@ -101,9 +101,9 @@ function App(): React.JSX.Element {
     }
   }, [loadFromStorage, startAutoTokenRefresh, stopAutoTokenRefresh])
 
-  // 订阅 Kiro IDE 自己 refresh token 后反代检测到的事件
-  // 触发时间点：Kiro IDE 在后台 refresh loop 把磁盘 token 写新了，反代 watcher 反向同步到 store
-  // 这里收到事件后从磁盘重新加载账号数据，让 UI 立刻显示最新 expiresAt / accessToken
+  // subscription Kiro IDE Own refresh token Events detected after generation
+  // Trigger time point:Kiro IDE in the background refresh loop put the disk token Write something new, go against the times watcher Reverse sync to store
+  // After receiving the event here, reload the account data from the disk, so that UI Show latest immediately expiresAt / accessToken
   useEffect(() => {
     if (typeof window.api.onKiroIdeTokenChanged !== 'function') return
     const unsubscribe = window.api.onKiroIdeTokenChanged((data) => {
@@ -113,19 +113,19 @@ function App(): React.JSX.Element {
     return unsubscribe
   }, [loadFromStorage])
 
-  // 反代关键事件 → 触发 webhook（v1.8 新增）
-  // 由 main/proxyServer 内置的 webhookTrigger 通过 IPC 推送过来，统一在 renderer 调 useWebhookStore
+  // Anti-generational key events → trigger webhook（v1.8 Newly added)
+  // Depend on main/proxyServer built-in webhookTrigger pass IPC Push it over and unify it renderer tune useWebhookStore
   useEffect(() => {
     const unsubscribe = window.api.onProxyWebhookTrigger?.((event, payload) => {
       try {
         const store = useWebhookStore.getState()
-        // 映射反代事件名 → Webhook 事件类型
+        // Mapping event names → Webhook event type
         const webhookEventMap: Record<string, 'risk-warning' | 'account-banned'> = {
           'proxy-account-suspended': 'account-banned',
           'proxy-all-exhausted': 'risk-warning'
         }
         const targetEvent = webhookEventMap[event] || 'risk-warning'
-        // 规范化 level（main 用 'error'/'info' 等字符串字面量，需要映射到 store 接受的类型）
+        // Standardize level（main use 'error'/'info' String literals, etc., need to be mapped to store accepted types)
         const rawLevel = (payload as { level?: string })?.level
         const level: 'info' | 'warn' | 'error' | 'success' =
           rawLevel === 'error' ? 'error'
@@ -133,7 +133,7 @@ function App(): React.JSX.Element {
           : rawLevel === 'success' ? 'success'
           : 'warn'
         void store.triggerEvent(targetEvent, {
-          title: String((payload as Record<string, unknown>).title ?? '反代告警'),
+          title: String((payload as Record<string, unknown>).title ?? 'Anti-generation warning'),
           message: String((payload as Record<string, unknown>).message ?? ''),
           level,
           fields: (payload as { fields?: Record<string, string | number> })?.fields
@@ -145,7 +145,7 @@ function App(): React.JSX.Element {
     return () => { unsubscribe?.() }
   }, [])
 
-  // 应用内页面跳转（轻量 CustomEvent，供深层组件无需 prop 钻取即可切页）
+  // In-app page jump (lightweight CustomEvent, no need for deep components prop Drill to cut pages)
   useEffect(() => {
     const handler = (e: Event): void => {
       const detail = (e as CustomEvent<PageType>).detail
@@ -155,7 +155,7 @@ function App(): React.JSX.Element {
     return () => window.removeEventListener('navigate-page', handler)
   }, [])
 
-  // 新增封禁账号 → 桌面通知（仅"新封禁"弹一次，去重 + 启动宽限期避免初次加载/批量刷新时刷屏）
+  // Add new banned account → Desktop notifications (only"new ban"Play it once and remove the duplicates + Launch grace period to avoid initial load/Refresh the screen during batch refresh)
   const bannedNotifyStartRef = useRef(Date.now())
   useEffect(() => {
     if (typeof Notification === 'undefined') return
@@ -176,28 +176,28 @@ function App(): React.JSX.Element {
       }
     }
 
-    // 启动后 8s 内只建立基线、不弹通知（覆盖异步加载 + 首次状态检查），之后才对新封禁弹窗
+    // After startup 8s Only establishes a baseline and does not pop up notifications (covering asynchronous loading) + first status check) before blocking new pop-ups
     const inGracePeriod = Date.now() - bannedNotifyStartRef.current < 8000
     if (!inGracePeriod && fresh.length > 0 && Notification.permission !== 'denied') {
       const fire = (): void => {
         const lang = useAccountsStore.getState().language
         const isEn = lang === 'en' || (lang === 'auto' && !navigator.language.startsWith('zh'))
         const title = fresh.length === 1
-          ? (isEn ? 'Account banned' : '账号被封禁')
-          : (isEn ? `${fresh.length} accounts banned` : `${fresh.length} 个账号被封禁`)
+          ? (isEn ? 'Account banned' : 'Account banned')
+          : (isEn ? `${fresh.length} accounts banned` : `${fresh.length} Accounts have been banned`)
         const names = fresh.slice(0, 3).map((a) => a.nickname || a.email)
-        const body = names.join('\n') + (fresh.length > 3 ? (isEn ? `\n+${fresh.length - 3} more` : `\n等 ${fresh.length} 个`) : '')
+        const body = names.join('\n') + (fresh.length > 3 ? (isEn ? `\n+${fresh.length - 3} more` : `\nwait ${fresh.length} indivual`) : '')
         try { new Notification(title, { body }) } catch { /* ignore */ }
       }
       if (Notification.permission === 'granted') fire()
       else void Notification.requestPermission().then((p) => { if (p === 'granted') fire() })
     }
 
-    // 持久化当前仍封禁的集合：已解封的移出（将来再次封禁可重新提醒），新封禁的记入避免重复弹
+    // Persistence of currently banned collections: removal of unblocked items (you can be reminded again if banned again in the future), and recording of newly banned items to avoid repeated bans
     try { localStorage.setItem(KEY, JSON.stringify(currentBanned)) } catch { /* ignore */ }
   }, [accounts])
 
-  // 关闭/刷新前强制 flush 防抖中的待保存数据，防止数据丢失
+  // closure/Force before refresh flush Data to be saved in anti-shake to prevent data loss
   useEffect(() => {
     const handleBeforeUnload = (): void => { void flushSaveImmediately() }
     window.addEventListener('beforeunload', handleBeforeUnload)
@@ -207,12 +207,12 @@ function App(): React.JSX.Element {
     }
   }, [flushSaveImmediately])
 
-  // 账户/激活变化时触发托盘更新（内部防抖 + 直接从 store 读取最新数据，避免 stale closure）
+  // Account/Trigger tray update when activation changes (internal anti-shake + directly from store Read the latest data to avoid stale closure）
   useEffect(() => {
     updateTrayInfo()
   }, [accounts, activeAccountId, updateTrayInfo])
 
-  // 监听托盘刷新账户事件
+  // Listen for tray refresh account events
   useEffect(() => {
     const unsubscribe = window.api.onTrayRefreshAccount(() => {
       checkAndRefreshExpiringTokens()
@@ -223,7 +223,7 @@ function App(): React.JSX.Element {
     }
   }, [checkAndRefreshExpiringTokens, updateTrayInfo])
 
-  // 监听托盘切换账户事件
+  // Listen for tray switching account events
   useEffect(() => {
     const unsubscribe = window.api.onTraySwitchAccount(() => {
       switchToNextAccount()
@@ -233,7 +233,7 @@ function App(): React.JSX.Element {
     }
   }, [switchToNextAccount])
 
-  // 监听后台刷新结果：缓冲 + 批量化 flush，N 条结果合并为一次 set，消除 Map 复制风暴
+  // Listening to background refresh results: buffering + Batch flush，N The results are merged into one set,eliminate Map copy storm
   useEffect(() => {
     const refreshBuffer: Array<{ id: string; success: boolean; data?: unknown; error?: string }> = []
     let flushTimer: ReturnType<typeof setTimeout> | null = null
@@ -255,13 +255,13 @@ function App(): React.JSX.Element {
       unsubscribe()
       if (flushTimer) {
         clearTimeout(flushTimer)
-        // 卸载前 flush 剩余结果，防止丢失
+        // Before uninstalling flush Remaining results to prevent loss
         flush()
       }
     }
   }, [applyBackgroundRefreshResults])
 
-  // 监听后台检查结果：同样的批量化策略
+  // Monitoring background check results: the same batching strategy
   useEffect(() => {
     const checkBuffer: Array<{ id: string; success: boolean; data?: unknown; error?: string }> = []
     let flushTimer: ReturnType<typeof setTimeout> | null = null
@@ -288,8 +288,8 @@ function App(): React.JSX.Element {
     }
   }, [applyBackgroundCheckResults])
 
-  // 监听反代账号被封禁事件（TEMPORARILY_SUSPENDED / AccountSuspendedException）
-  // 反代触发后，把封禁状态同步到 store 让 UI 显示
+  // Monitor anti-generation account ban events (TEMPORARILY_SUSPENDED / AccountSuspendedException）
+  // After the anti-generation is triggered, synchronize the ban status to store let UI show
   useEffect(() => {
     const unsubscribe = window.api.onProxyAccountSuspended((info) => {
       console.warn(`[App] Account suspended via proxy: ${info.email || info.id} (${info.reason})`)
@@ -300,7 +300,7 @@ function App(): React.JSX.Element {
     }
   }, [updateAccountStatus])
 
-  // 监听反代账号更新事件（Enterprise profileArn 自愈），持久化到 store + 磁盘
+  // Monitor anti-generation account update events (Enterprise profileArn self-healing), lasting to store + disk
   useEffect(() => {
     const unsubscribe = window.api.onProxyAccountUpdate((info) => {
       if (!info.profileArn) return

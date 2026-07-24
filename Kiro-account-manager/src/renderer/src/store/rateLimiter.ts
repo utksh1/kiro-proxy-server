@@ -1,34 +1,34 @@
 /**
- * 注册批量任务限速 + 风控信号检测
+ * Register batch task speed limit + Risk control signal detection
  *
- * 设计：
- * - 滑动窗口统计：维护最近 N 秒内的成功/失败时间戳
- * - 动态退避：连续失败超过阈值时，自动延长间隔（指数退避）
- * - 风控触发：成功率突然下降到阈值以下，触发警告 + 自动放慢
+ * design:
+ * - Sliding window statistics: maintained recently N Success within seconds/Failure timestamp
+ * - Dynamic backoff: When consecutive failures exceed the threshold, the interval is automatically extended (exponential backoff)
+ * - Risk control trigger: The success rate suddenly drops below the threshold, triggering a warning + Automatically slow down
  *
- * 使用方式：
+ * How to use:
  *   const limiter = createRateLimiter({...})
- *   limiter.reportResult(true / false)         // 每次任务结束上报
- *   await limiter.waitForSlot()                // 启动新任务前等待获取令牌
- *   limiter.snapshot()                          // UI 读取实时状态
+ *   limiter.reportResult(true / false)         // Report at the end of each task
+ *   await limiter.waitForSlot()                // Wait for a token before starting a new task
+ *   limiter.snapshot()                          // UI Read real-time status
  */
 
 export interface RateLimiterConfig {
-  /** 每分钟最大启动任务数（令牌桶速率） */
+  /** Maximum number of startup tasks per minute (token bucket rate) */
   maxPerMinute: number
-  /** 突发上限（令牌桶容量） */
+  /** Burst upper limit (token bucket capacity) */
   burst: number
-  /** 成功率监控窗口（秒） */
+  /** Success rate monitoring window (seconds) */
   windowSec: number
-  /** 触发风控警告的成功率阈值（0-1） */
+  /** The success rate threshold for triggering risk control warnings (0-1） */
   successRateThreshold: number
-  /** 触发风控警告所需最小样本数（避免少量样本误判） */
+  /** The minimum number of samples required to trigger a risk control warning (to avoid misjudgment with a small number of samples) */
   minSamples: number
-  /** 连续失败次数触发退避 */
+  /** The number of consecutive failures triggers backoff */
   consecutiveFailureThreshold: number
-  /** 退避基础时长（毫秒） */
+  /** Backoff base duration (milliseconds) */
   backoffBaseMs: number
-  /** 退避最大时长（毫秒） */
+  /** Maximum backoff duration (milliseconds) */
   backoffMaxMs: number
 }
 
@@ -44,48 +44,48 @@ export const DEFAULT_RATE_LIMITER_CONFIG: RateLimiterConfig = {
 }
 
 export interface RateLimiterSnapshot {
-  /** 当前桶中可用令牌数 */
+  /** Number of tokens available in the current bucket */
   availableTokens: number
-  /** 窗口内成功数 */
+  /** Number of successes within window */
   windowSuccess: number
-  /** 窗口内失败数 */
+  /** Number of failures within window */
   windowFailed: number
-  /** 当前成功率（0-1） */
+  /** Current success rate (0-1） */
   successRate: number
-  /** 连续失败次数 */
+  /** Number of consecutive failures */
   consecutiveFailures: number
-  /** 当前退避剩余时长（毫秒，0 表示无退避） */
+  /** Current remaining backoff duration (milliseconds,0 Indicates no backoff) */
   backoffRemainingMs: number
-  /** 当前是否处于风控警告状态 */
+  /** Is it currently in a risk control warning state? */
   riskWarning: boolean
-  /** 实际吞吐率（个/分钟） */
+  /** Actual throughput rate (number of/minute) */
   throughputPerMinute: number
 }
 
 interface RateLimiterInternal {
   config: RateLimiterConfig
-  /** 令牌桶上次填充时间 */
+  /** Token bucket last filled time */
   lastRefillTime: number
-  /** 当前可用令牌 */
+  /** Currently available tokens */
   tokens: number
-  /** 时间戳事件队列 [timestamp, success] */
+  /** timestamp event queue [timestamp, success] */
   events: Array<[number, boolean]>
-  /** 连续失败次数 */
+  /** Number of consecutive failures */
   consecutiveFailures: number
-  /** 退避结束时间戳（0 表示不在退避） */
+  /** Backoff end timestamp (0 Indicates no longer retreating) */
   backoffEndAt: number
 }
 
 export interface RateLimiter {
-  /** 启动一个任务前调用：等待获取令牌（含退避） */
+  /** Called before starting a task: waiting to obtain the token (including backoff) */
   waitForSlot: (signal?: { aborted: boolean }) => Promise<void>
-  /** 任务完成后上报结果 */
+  /** Report results after task completion */
   reportResult: (success: boolean) => void
-  /** 读取实时状态（供 UI 显示） */
+  /** Read real-time status (for UI show) */
   snapshot: () => RateLimiterSnapshot
-  /** 更新配置 */
+  /** Update configuration */
   updateConfig: (next: Partial<RateLimiterConfig>) => void
-  /** 重置统计 */
+  /** reset statistics */
   reset: () => void
 }
 
@@ -99,7 +99,7 @@ export function createRateLimiter(config: Partial<RateLimiterConfig> = {}): Rate
     backoffEndAt: 0
   }
 
-  /** 按令牌桶规则补充令牌 */
+  /** Replenish tokens according to token bucket rules */
   function refillTokens(): void {
     const now = Date.now()
     const elapsedMs = now - state.lastRefillTime
@@ -109,7 +109,7 @@ export function createRateLimiter(config: Partial<RateLimiterConfig> = {}): Rate
     state.lastRefillTime = now
   }
 
-  /** 清理窗口外的事件 */
+  /** Clean up events outside the window */
   function pruneEvents(): void {
     const cutoff = Date.now() - state.config.windowSec * 1000
     while (state.events.length > 0 && state.events[0][0] < cutoff) {
@@ -121,7 +121,7 @@ export function createRateLimiter(config: Partial<RateLimiterConfig> = {}): Rate
     waitForSlot: async (signal) => {
       while (true) {
         if (signal?.aborted) return
-        // 退避优先
+        // Backoff priority
         const now = Date.now()
         if (state.backoffEndAt > now) {
           const wait = Math.min(state.backoffEndAt - now, 1000)
@@ -133,7 +133,7 @@ export function createRateLimiter(config: Partial<RateLimiterConfig> = {}): Rate
           state.tokens -= 1
           return
         }
-        // 令牌不足：按速率估算等待时长
+        // Not enough tokens: estimated wait time by rate
         const tokensPerMs = state.config.maxPerMinute / 60_000
         const tokensNeeded = 1 - state.tokens
         const waitMs = Math.max(50, Math.min(2000, tokensNeeded / tokensPerMs))
@@ -151,7 +151,7 @@ export function createRateLimiter(config: Partial<RateLimiterConfig> = {}): Rate
       } else {
         state.consecutiveFailures += 1
         if (state.consecutiveFailures >= state.config.consecutiveFailureThreshold) {
-          // 指数退避：第 N 次失败 → backoffBase × 2^(N - threshold)
+          // Exponential Backoff: No. N failed → backoffBase × 2^(N - threshold)
           const overflow = state.consecutiveFailures - state.config.consecutiveFailureThreshold + 1
           const backoffMs = Math.min(
             state.config.backoffBaseMs * Math.pow(2, overflow - 1),

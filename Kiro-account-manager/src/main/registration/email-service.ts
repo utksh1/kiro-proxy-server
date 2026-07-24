@@ -3,7 +3,6 @@ import { fetch as undiciFetch, type RequestInit as UndiciRequestInit } from 'und
 import type { SessionClient } from 'tlsclientwrapper'
 import { getSystemProxy, safeCreateProxyAgent } from '../proxy/systemProxy'
 import { randomEmailPrefix } from './names'
-import { waitProtonOtp } from './proton-mail-window'
 
 function getRegistrationProxyUrl(): string | undefined {
   return process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || getSystemProxy() || undefined
@@ -17,7 +16,7 @@ async function proxyFetch(url: string, options?: RequestInit): Promise<Response>
   return await fetch(url, options)
 }
 
-// ============ 验证码提取 ============
+// ============ Verification code extraction ============
 
 const OTP_PATTERN = /\b(\d{6})\b/g
 
@@ -27,18 +26,18 @@ export function extractCode(body: string): string {
   return matches[matches.length - 1]
 }
 
-// ============ TempEmailService 接口 ============
+// ============ TempEmailService interface ============
 
 export interface TempEmailService {
   create(): Promise<string>
-  /** signal：注册被取消时中断轮询（停止/暂停后立即退出，而非等满 timeout） */
+  /** signal: Interrupt polling (stop/Exit immediately after pausing instead of waiting until it is full timeout） */
   waitForCode(timeoutSec: number, intervalSec: number, signal?: AbortSignal): Promise<string>
   getAddress(): string
 }
 
-/** 可被 AbortSignal 中断的 sleep：停止注册时立刻 reject，不再傻等 */
+/** can be AbortSignal Interrupted sleep: Immediately when registration is stopped reject, no more stupid waiting */
 function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.reject(new Error('注册已取消'))
+  if (signal?.aborted) return Promise.reject(new Error('Registration canceled'))
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort)
@@ -46,13 +45,13 @@ function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms)
     const onAbort = (): void => {
       clearTimeout(timer)
-      reject(new Error('注册已取消'))
+      reject(new Error('Registration canceled'))
     }
     signal?.addEventListener('abort', onAbort, { once: true })
   })
 }
 
-// ============ MoEmail 临时邮箱 ============
+// ============ MoEmail Temporary mailbox ============
 
 export class MoEmailService implements TempEmailService {
   private baseURL: string
@@ -65,25 +64,25 @@ export class MoEmailService implements TempEmailService {
   }
 
   /**
-   * 归一化用户输入的 baseURL：
-   *   - 去除首尾空白与末尾斜杠
-   *   - 缺少 protocol 时补 `https://`
-   *   - 校验协议仅允许 http / https，否则抛清晰错误
-   * 用于规避 fetch 因协议不合法抛出
+   * Normalized user input baseURL：
+   *   - Remove leading and trailing whitespace and trailing slashes
+   *   - Lack protocol Time to make up for `https://`
+   *   - The verification protocol only allows http / https, otherwise throw a clear error
+   * used to circumvent fetch Thrown due to illegal protocol
    * "Invalid URL protocol: the URL must start with `http:` or `https:`."
    */
   private static normalizeBaseURL(raw: string): string {
     const trimmed = (raw || '').trim().replace(/\/+$/, '')
-    if (!trimmed) throw new Error('MoEmail BaseURL 未配置')
+    if (!trimmed) throw new Error('MoEmail BaseURL Not configured')
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
     let u: URL
     try {
       u = new URL(withScheme)
     } catch {
-      throw new Error(`MoEmail BaseURL 格式无效: ${raw}`)
+      throw new Error(`MoEmail BaseURL Invalid format: ${raw}`)
     }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-      throw new Error(`MoEmail BaseURL 协议不支持 (仅支持 http/https): ${u.protocol}`)
+      throw new Error(`MoEmail BaseURL The protocol is not supported (Only supports http/https): ${u.protocol}`)
     }
     return withScheme
   }
@@ -104,7 +103,7 @@ export class MoEmailService implements TempEmailService {
       ''
 
     if (!addr) {
-      console.log('[MoEmail] 创建邮箱失败:', JSON.stringify(data))
+      console.log('[MoEmail] Failed to create mailbox:', JSON.stringify(data))
       return ''
     }
     this.address = addr
@@ -112,21 +111,21 @@ export class MoEmailService implements TempEmailService {
   }
 
   async waitForCode(timeoutSec: number, intervalSec: number, signal?: AbortSignal): Promise<string> {
-    if (!this.address) throw new Error('邮箱地址为空')
+    if (!this.address) throw new Error('Email address is empty')
 
     const maxRetries = Math.floor(timeoutSec / intervalSec)
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      if (signal?.aborted) throw new Error('注册已取消')
+      if (signal?.aborted) throw new Error('Registration canceled')
       await abortableSleep(intervalSec * 1000, signal)
       try {
         const code = await this.fetchCode()
         if (code) return code
       } catch (err) {
-        if (attempt % 5 === 0) console.log(`[MoEmail] [${attempt}/${maxRetries}] 查询失败:`, err)
+        if (attempt % 5 === 0) console.log(`[MoEmail] [${attempt}/${maxRetries}] Query failed:`, err)
       }
-      if (attempt % 5 === 0) console.log(`[MoEmail] [${attempt}/${maxRetries}] 暂无验证码...`)
+      if (attempt % 5 === 0) console.log(`[MoEmail] [${attempt}/${maxRetries}] No verification code yet...`)
     }
-    throw new Error(`等待验证码超时 (${timeoutSec}s)`)
+    throw new Error(`Timeout waiting for verification code (${timeoutSec}s)`)
   }
 
   getAddress(): string {
@@ -162,14 +161,14 @@ export class MoEmailService implements TempEmailService {
   }
 }
 
-// ============ TempMail.Plus + 自建域名 ============
+// ============ TempMail.Plus + Self-created domain name ============
 
 export class TempMailPlusService implements TempEmailService {
   private static readonly BASE_URL = 'https://tempmail.plus/api'
 
-  private readonly tmEmail: string   // tempmail.plus 用户名（不含 @mailto.plus）
+  private readonly tmEmail: string   // tempmail.plus Username (excluding @mailto.plus）
   private readonly epin: string
-  /** 支持多域名（用户填多行/逗号/空格分隔），每次 create 随机挑一个，降低单域名被风控关联 */
+  /** Supports multiple domain names (users fill in multiple lines/comma/separated by spaces), each time create Pick one at random to reduce risk control associated with a single domain name */
   private readonly domains: string[]
   private domain = ''
   private address = ''
@@ -182,7 +181,7 @@ export class TempMailPlusService implements TempEmailService {
       .map((d) => d.trim().replace(/^@/, ''))
       .filter(Boolean)
     if (this.domains.length === 0) {
-      throw new Error('TempMail.Plus 自建域名为空')
+      throw new Error('TempMail.Plus Self-created domain name is empty')
     }
   }
 
@@ -202,9 +201,9 @@ export class TempMailPlusService implements TempEmailService {
     this.domain = this.domains[Math.floor(Math.random() * this.domains.length)]
     this.address = `${prefix}@${this.domain}`
     if (this.domains.length > 1) {
-      console.log(`[TempMailPlus] 生成邮箱: ${this.address}  (域名池 ${this.domains.length} 个)`)
+      console.log(`[TempMailPlus] Generate mailbox: ${this.address}  (Domain name pool ${this.domains.length} indivual)`)
     } else {
-      console.log(`[TempMailPlus] 生成邮箱: ${this.address}`)
+      console.log(`[TempMailPlus] Generate mailbox: ${this.address}`)
     }
     return this.address
   }
@@ -214,17 +213,17 @@ export class TempMailPlusService implements TempEmailService {
   }
 
   async waitForCode(timeoutSec: number, intervalSec: number, signal?: AbortSignal): Promise<string> {
-    if (!this.address) throw new Error('邮箱地址为空')
+    if (!this.address) throw new Error('Email address is empty')
     const maxRetries = Math.floor(timeoutSec / intervalSec)
     const checkedIds = new Set<number>()
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      if (signal?.aborted) throw new Error('注册已取消')
+      if (signal?.aborted) throw new Error('Registration canceled')
       await abortableSleep(intervalSec * 1000, signal)
       try {
         const mails = await this.fetchMailList()
         if (attempt === 1 || attempt % 5 === 0) {
-          console.log(`[TempMailPlus] [${attempt}/${maxRetries}] 邮件数: ${mails.length}`)
+          console.log(`[TempMailPlus] [${attempt}/${maxRetries}] Number of emails: ${mails.length}`)
         }
         for (const mail of mails) {
           const mailId = mail.mail_id as number
@@ -234,29 +233,29 @@ export class TempMailPlusService implements TempEmailService {
           const detail = await this.fetchMailDetail(mailId)
           if (!detail) continue
 
-          // 验证收件人匹配
+          // Verify recipient matches
           const toField = String(detail.to || '').toLowerCase()
           if (!toField.includes(this.address.toLowerCase())) {
-            console.log(`[TempMailPlus] 收件人不匹配: ${toField} (期望包含: ${this.address})`)
+            console.log(`[TempMailPlus] Recipient does not match: ${toField} (expected to contain: ${this.address})`)
             continue
           }
 
-          // 提取验证码
+          // Extract verification code
           const code = this.extractOTP(detail)
           if (code) {
-            console.log(`[TempMailPlus] 验证码: ${code}`)
+            console.log(`[TempMailPlus] Verification code: ${code}`)
             await this.deleteMail(mailId)
             return code
           } else {
-            console.log(`[TempMailPlus] 邮件 ${mailId} 未提取到验证码`)
+            console.log(`[TempMailPlus] mail ${mailId} Verification code not retrieved`)
           }
         }
       } catch (err) {
-        console.log(`[TempMailPlus] [${attempt}/${maxRetries}] 查询失败:`, err)
+        console.log(`[TempMailPlus] [${attempt}/${maxRetries}] Query failed:`, err)
       }
-      if (attempt % 5 === 0) console.log(`[TempMailPlus] [${attempt}/${maxRetries}] 暂无验证码...`)
+      if (attempt % 5 === 0) console.log(`[TempMailPlus] [${attempt}/${maxRetries}] No verification code yet...`)
     }
-    throw new Error(`等待验证码超时 (${timeoutSec}s)`)
+    throw new Error(`Timeout waiting for verification code (${timeoutSec}s)`)
   }
 
   private get fullEmail(): string {
@@ -284,105 +283,105 @@ export class TempMailPlusService implements TempEmailService {
     const body = `email=${encodeURIComponent(this.fullEmail)}&epin=${encodeURIComponent(this.epin)}`
     try {
       await proxyFetch(url, { method: 'DELETE', headers, body, signal: AbortSignal.timeout(10000) })
-      console.log(`[TempMailPlus] 已删除邮件: ${mailId}`)
+      console.log(`[TempMailPlus] Deleted messages: ${mailId}`)
     } catch (err) {
-      console.log(`[TempMailPlus] 删除邮件失败:`, err)
+      console.log(`[TempMailPlus] Failed to delete message:`, err)
     }
   }
 
   private extractOTP(detail: Record<string, unknown>): string {
-    // 从主题提取
+    // Extract from topic
     const subject = String(detail.subject || '')
     const subjectMatch = subject.match(/(\d{6})/)
     if (subjectMatch) return subjectMatch[1]
-    // 从正文提取
+    // Extract from text
     const text = String(detail.text || '')
     const code = extractCode(text)
     if (code) return code
-    // 从 HTML 提取
+    // from HTML extract
     const html = String(detail.html || '')
     return extractCode(html)
   }
 }
 
-// ============ GPTmail (mail.chatgpt.org.uk) — 域名邮箱取码 ============
+// ============ GPTmail (mail.chatgpt.org.uk) — Domain name email code retrieval ============
 
 /**
- * GPTmail（mail.chatgpt.org.uk）取码源，**同时支持两种玩法**：
+ * GPTmail（mail.chatgpt.org.uk) Get the code source,**Supports two modes of play at the same time**：
  *
- * 玩法 A：私有域名直收（推荐，无需 CF）
- *   1) 用户把自己域名 MX 直接解析到 GPTmail（在 GPTmail 站点添加私有/公开域名后会给 MX 指令）
- *   2) 注册时生成 `prefix@用户域名` —— 这个地址本身就是 GPTmail 上的 inbox，
- *      所有发到它的邮件 GPTmail 直接收到
- *   3) 用同一个地址 GET 页面拿 token，轮询取码
- *   inboxEmail 留空表示走这个模式。
+ * How to play A：Private domain name direct payment (recommended, no need CF）
+ *   1) Users put their own domain name MX parse directly to GPTmail(exist GPTmail Site add private/After the domain name is made public, it will be MX instruction)
+ *   2) Generated during registration `prefix@User domain name` —— The address itself is GPTmail on inbox，
+ *      All emails sent to it GPTmail received directly
+ *   3) use the same address GET Page take token, polling to get the code
+ *   inboxEmail Leave blank to use this mode.
  *
- * 玩法 B：CF Email Routing 转发
- *   1) 用户在 GPTmail 上拥有一个固定接收邮箱（如公共域名池里的 abc@msn-mail-free-9224.dynv6.net）
- *   2) 用户在自己域名 Cloudflare 配 catch-all：*@example.com → abc@msn-mail-free-9224.dynv6.net
- *   3) 注册时生成 `prefix@example.com`，CF 转发到接收邮箱
- *   4) 用接收邮箱的 token 轮询，从邮件里软匹配本次注册地址（CF 转发的邮件 to 字段会是接收邮箱）
- *   inboxEmail 填了表示走这个模式。
+ * How to play B：CF Email Routing Forward
+ *   1) User is in GPTmail Have a fixed receiving mailbox (such as one in a public domain name pool) abc@msn-mail-free-9224.dynv6.net）
+ *   2) Users in their own domain name Cloudflare match catch-all：*@example.com → abc@msn-mail-free-9224.dynv6.net
+ *   3) Generated during registration `prefix@example.com`，CF Forward to receiving email
+ *   4) Use receiving email token Polling, soft matching this registration address from the email (CF forwarded mail to The field will be the receiving email address)
+ *   inboxEmail Filling it out means going into this mode.
  *
- * GPTmail 协议要点（基于官方前端 + 抓包）：
- *  - 直接 GET `https://mail.chatgpt.org.uk/<email>` 页面，从 HTML 解析 `window.__BROWSER_AUTH.token`
- *    （服务端 SSR 嵌入，这是浏览器拿初始 token 的"零成本"路径，比 POST /api/inbox-token 更不易被反爬）
+ * GPTmail Key points of the agreement (based on the official front-end + Packet capture):
+ *  - direct GET `https://mail.chatgpt.org.uk/<email>` page, from HTML parse `window.__BROWSER_AUTH.token`
+ *    (server SSR Embed, this is what the browser initially gets token of"zero cost"path, than POST /api/inbox-token More difficult to be reversed)
  *  - GET /api/emails?email=<inbox> (header x-inbox-token)
  *      -> {success, data:{emails:[{id, email_address, from_address, subject, content, html_content}]}, auth:{token,...}}
  *  - DELETE /api/emails/clear?email=<inbox> (header x-inbox-token)
- *  - 每次响应都会刷新 token（含 sid+email+exp），本类自动滚动保存
- *  - Cloudflare 后端通过 TLS 指纹 + sec-ch-* + Referer 校验"是否真实 Chrome"，
- *    所以本类必须通过 tlsclientwrapper SessionClient 发请求
+ *  - Each response will be refreshed token(Including sid+email+exp), this type automatically scrolls and saves
+ *  - Cloudflare Backend passes TLS fingerprint + sec-ch-* + Referer check"Is it true Chrome"，
+ *    So this class must pass tlsclientwrapper SessionClient send request
  */
 export class GptMailService implements TempEmailService {
   private static readonly DEFAULT_BASE_URL = 'https://mail.chatgpt.org.uk'
-  // 与 sessionOpts 的 tlsClientIdentifier='chrome_146' 及 SessionClient 默认 UA 保持一致，
-  // 否则 sec-ch-ua / UA / JA3 三者版本对不上，容易被 Cloudflare 风控识破。
+  // and sessionOpts of tlsClientIdentifier='chrome_146' and SessionClient default UA Be consistent,
+  // otherwise sec-ch-ua / UA / JA3 If the three versions do not match each other, it is easy to be Cloudflare Risk control sees through.
   private static readonly CHROME_MAJOR = 146
   private static readonly UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${GptMailService.CHROME_MAJOR}.0.0.0 Safari/537.36`
   private static readonly SEC_CH_UA = `"Google Chrome";v="${GptMailService.CHROME_MAJOR}", "Chromium";v="${GptMailService.CHROME_MAJOR}", "Not)A;Brand";v="24"`
 
   private readonly baseURL: string
   /**
-   * 固定接收邮箱（CF 转发目标）。
-   * - 玩法 A（私有域名直收）：留空 —— 本次注册地址本身就是 inbox
-   * - 玩法 B（CF 转发）：填了，所有 prefix@domain 都转发到这个邮箱
+   * Fixed receiving email (CF forwarding target).
+   * - How to play A(Private domain name is received directly): Leave blank —— The registered address itself is inbox
+   * - How to play B（CF Forward): filled in, all prefix@domain Forward them all to this email
    */
   private readonly fixedInboxEmail: string
-  /** 用户自己的域名池（玩法 A：MX 已解析到 GPTmail；玩法 B：CF 配了 catch-all）*/
+  /** User’s own domain name pool (how to play A：MX has been resolved to GPTmail;How to play B：CF Matched catch-all）*/
   private readonly domains: string[]
-  /** 可选的固定前缀；留空则用 randomEmailPrefix() 生成 */
+  /** Optional fixed prefix; leave blank to use randomEmailPrefix() generate */
   private readonly fixedPrefix: string
   /**
-   * 可选：私有域名密码。
-   * 在 GPTmail 站点添加「私有域名」时会设一个密码，所有该域名下的 inbox 查看邮件前必须 unlock。
-   * 留空 = 公共域名或公开域名（不需密码）。
+   * Optional: Private domain name password.
+   * exist GPTmail When adding a "private domain name" to the site, a password will be set, and all the inbox Before checking email, you must unlock。
+   * Leave blank = Public domain name or public domain name (no password required).
    */
   private readonly privatePassword: string
   /**
-   * 取当前 TLS SessionClient 的 getter（伪装 Chrome JA3 指纹）。
-   * GPTmail 后端通过 TLS 握手指纹校验"是否真实浏览器"，
-   * Node 默认 TLS / undici 会被识破返回 401 "Browser session required"，
-   * 所以必须用 Registrar 已经初始化好的 SessionClient 发请求。
+   * Get current TLS SessionClient of getter(camouflage Chrome JA3 fingerprint).
+   * GPTmail Backend passes TLS Handshake fingerprint verification"Is it a real browser?"，
+   * Node default TLS / undici Will be found out and return 401 "Browser session required"，
+   * So it must be used Registrar Already initialized SessionClient Send a request.
    *
-   * 关键：这里**不能缓存 SessionClient 实例**。Registrar 在注册过程中（Portal/WorkflowInit
-   * 重试、网络抖动、可恢复 TLS 错误）会 rebuildTlsClient() —— 销毁旧 session 再建新的。
-   * 若缓存旧引用，邮箱创建后到取码之间一旦发生 rebuild，旧 session 已 destroyed，
-   * 后续每次轮询都会抛 "SessionClient has been destroyed" 直到超时。
-   * 因此每次请求都通过 getter 读取 Registrar 的**最新** session。
+   * Key: here**Cannot cache SessionClient Example**。Registrar During the registration process (Portal/WorkflowInit
+   * Retry, network jitter, recoverable TLS error) will rebuildTlsClient() —— destroy old session Build a new one.
+   * If the old reference is cached, once it occurs between the creation of the mailbox and the retrieval of the code, rebuild,old session already destroyed，
+   * Each subsequent poll will throw "SessionClient has been destroyed" until timeout.
+   * So every request goes through getter read Registrar of**up to date** session。
    */
   private readonly getSession: () => SessionClient | null
 
-  /** 本次注册使用的"用户侧"邮箱地址（prefix@用户域名）—— 注册站点看到的就是它 */
+  /** Used for this registration"User side"Email address (prefix@User domain name)—— This is what you see when you register for the site */
   private address = ''
-  /** 实际查询邮件用的 GPTmail inbox 地址（玩法 A = address；玩法 B = fixedInboxEmail）*/
+  /** Used to actually query emails GPTmail inbox address (how to play A = address;How to play B = fixedInboxEmail）*/
   private inboxEmail = ''
-  /** 当前滚动 token：每次响应若带回 auth.token 则替换 */
+  /** current scroll token: Each response if brought back auth.token then replace */
   private token = ''
   /**
-   * create() 时已存在于 inbox 的邮件 ID 基线。
-   * CF 转发模式下多个并发注册共享同一 inbox，绝不能用全量 clear（会删掉别的任务待取的验证码）；
-   * 改为记录基线 ID，轮询时跳过这些旧邮件，做到无副作用、并发安全。
+   * create() already existed inbox mail ID baseline.
+   * CF In forwarding mode, multiple concurrent registrations share the same inbox, never use the full amount clear(Verification codes pending for other tasks will be deleted);
+   * Record baseline instead ID, skip these old emails when polling, to achieve no side effects and safe concurrency.
    */
   private baselineIds = new Set<string>()
 
@@ -392,24 +391,24 @@ export class GptMailService implements TempEmailService {
     domain: string
     prefix?: string
     privatePassword?: string
-    /** 取当前 SessionClient 的 getter（不缓存，规避 rebuildTlsClient 后引用失效） */
+    /** Get current SessionClient of getter(Do not cache, circumvent rebuildTlsClient later reference invalid) */
     getSession: () => SessionClient | null
   }) {
     if (typeof opts.getSession !== 'function') {
-      throw new Error('GPTmail 必须传入 getSession（用于每次取最新 TLS SessionClient 绕过 401 校验）')
+      throw new Error('GPTmail Must be passed in getSession(used to get the latest every time TLS SessionClient bypass 401 check)')
     }
     this.getSession = opts.getSession
     this.baseURL = GptMailService.normalizeBaseURL(opts.baseURL || GptMailService.DEFAULT_BASE_URL)
     this.fixedInboxEmail = (opts.inboxEmail || '').trim()
     if (this.fixedInboxEmail && !this.fixedInboxEmail.includes('@')) {
-      throw new Error('GPTmail 接收邮箱格式无效（应为 xxx@yyy.zzz，或留空走私有域名直收）')
+      throw new Error('GPTmail The receiving email format is invalid (should be xxx@yyy.zzz, or leave it blank to smuggle domain names for direct payment)')
     }
     this.domains = (opts.domain || '')
       .split(/[\s,;]+/)
       .map((d) => d.trim().replace(/^@/, ''))
       .filter(Boolean)
     if (this.domains.length === 0) {
-      throw new Error('GPTmail 自建域名池为空（私有模式: MX 已解析到 GPTmail 的域名；CF 模式: CF 配了 catch-all 的域名）')
+      throw new Error('GPTmail The self-created domain name pool is empty (private mode: MX has been resolved to GPTmail domain name;CF model: CF Matched catch-all domain name)')
     }
     this.fixedPrefix = (opts.prefix || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '')
     this.privatePassword = (opts.privatePassword || '').trim()
@@ -423,18 +422,18 @@ export class GptMailService implements TempEmailService {
     try {
       u = new URL(withScheme)
     } catch {
-      throw new Error(`GPTmail BaseURL 格式无效: ${raw}`)
+      throw new Error(`GPTmail BaseURL Invalid format: ${raw}`)
     }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-      throw new Error(`GPTmail BaseURL 协议不支持 (仅支持 http/https): ${u.protocol}`)
+      throw new Error(`GPTmail BaseURL The protocol is not supported (Only supports http/https): ${u.protocol}`)
     }
     return withScheme
   }
 
   /**
-   * 从页面 HTML 中提取 `window.__BROWSER_AUTH = {...}` 的 JSON 文本。
-   * 用括号配平扫描（识别字符串与转义），从第一个 `{` 开始找到与之匹配的 `}`，
-   * 支持对象内含嵌套 {} —— 比非贪婪正则健壮。
+   * from page HTML extracted from `window.__BROWSER_AUTH = {...}` of JSON text.
+   * Balance the scan with brackets (identify strings and escapes), starting with the first `{` Start finding matches `}`，
+   * Supports nesting within objects {} —— More robust than non-greedy regularization.
    */
   private static extractBrowserAuthJson(html: string): string | null {
     const anchor = html.indexOf('__BROWSER_AUTH')
@@ -467,14 +466,14 @@ export class GptMailService implements TempEmailService {
   }
 
   /**
-   * 通用请求：经过 tlsclientwrapper（伪装 Chrome JA3 指纹）调用 GPTmail API。
+   * General Request: Pass tlsclientwrapper(camouflage Chrome JA3 fingerprint) call GPTmail API。
    *
-   * 关键：GPTmail 通过 TLS 指纹 + Referer/Origin/sec-ch-* 校验"是否真实 Chrome"，
-   * 用 Node 默认 TLS / undici 会被识破返回 401 {"error":"Browser session required"}。
-   * 此方法走 Registrar 的 SessionClient（伪装 chrome_146 JA3）并补全浏览器 headers，
-   * 才能通过 Cloudflare 反爬。
+   * key:GPTmail pass TLS fingerprint + Referer/Origin/sec-ch-* check"Is it true Chrome"，
+   * use Node default TLS / undici Will be found out and return 401 {"error":"Browser session required"}。
+   * This method goes Registrar of SessionClient(camouflage chrome_146 JA3) and complete the browser headers，
+   * to pass Cloudflare Climb backwards.
    *
-   * 自动注入 x-inbox-token，并从响应里滚动更新 token。
+   * automatic injection x-inbox-token, and scroll updates from the response token。
    */
   private async request<T = Record<string, unknown>>(
     path: string,
@@ -482,7 +481,7 @@ export class GptMailService implements TempEmailService {
   ): Promise<T> {
     const url = `${this.baseURL}${path}`
     const origin = new URL(this.baseURL).origin
-    // Referer 跟官方抓包对齐：`https://mail.chatgpt.org.uk/<inboxEmail>`（不带 /zh/）
+    // Referer Aligned with the official packet capture:`https://mail.chatgpt.org.uk/<inboxEmail>`(without /zh/）
     const referer = `${origin}/${this.inboxEmail || ''}`
     const method: 'GET' | 'POST' | 'DELETE' = init.method ?? 'GET'
 
@@ -507,9 +506,9 @@ export class GptMailService implements TempEmailService {
       headers['x-inbox-token'] = this.token
     }
 
-    // 走 tlsclientwrapper（伪装 Chrome 146 JA3 + 由 Registrar 的 sessionOpts 注入 UA/代理）
+    // Walk tlsclientwrapper(camouflage Chrome 146 JA3 + Depend on Registrar of sessionOpts injection UA/acting)
     const session = this.getSession()
-    if (!session) throw new Error('GPTmail TLS SessionClient 不可用（可能正在重建，稍后重试）')
+    if (!session) throw new Error('GPTmail TLS SessionClient Unavailable (may be rebuilding, try again later)')
     let raw: { status: number; body: string }
     if (method === 'POST') {
       raw = await session.post(url, init.body ?? '', { headers })
@@ -522,13 +521,13 @@ export class GptMailService implements TempEmailService {
     let data: unknown
     try { data = JSON.parse(raw.body) } catch { data = raw.body }
 
-    // 401/403 且带 token：可能是滚动 token 过期 —— 重新从页面拿一次 token 后重试一次。
-    // （若是 TLS 指纹被识破的 "Browser session required"，重取也无害，最多再失败一次按原错误抛出）
+    // 401/403 And bring token: maybe scrolling token Expired —— Get it from the page again token Try again later.
+    // (if TLS Fingerprints revealed "Browser session required", it is harmless to retrieve, and it will be thrown according to the original error if it fails at most once)
     if ((raw.status === 401 || raw.status === 403) && !init._retried && (init.withToken ?? true) && path !== '') {
       try {
         await this.fetchInitialTokenFromPage()
         return await this.request<T>(path, { ...init, _retried: true })
-      } catch { /* 重取失败则按原错误抛出 */ }
+      } catch { /* If retrieval fails, the original error will be thrown. */ }
     }
 
     if (raw.status < 200 || raw.status >= 300) {
@@ -548,32 +547,32 @@ export class GptMailService implements TempEmailService {
   }
 
   async create(): Promise<string> {
-    // step 1: 生成「prefix@用户自建域名」作为注册站点提交的邮箱
+    // step 1: generate"prefix@User-created domain name" as the email address submitted for registration site
     const domain = this.domains[Math.floor(Math.random() * this.domains.length)]
     const prefix = this.fixedPrefix || randomEmailPrefix()
     this.address = `${prefix}@${domain}`
 
-    // step 2: 决定查询 GPTmail 时用哪个 inbox 邮箱
-    //   玩法 A（私有域名直收）：inboxEmail = address —— 注册地址本身就是 inbox（MX 已解析到 GPTmail）
-    //   玩法 B（CF 转发）：     inboxEmail = fixedInboxEmail —— 所有邮件转发到这个固定 inbox
+    // step 2: Decide to query GPTmail Which one to use when inbox Mail
+    //   How to play A(Private domain name is collected directly):inboxEmail = address —— The registered address itself is inbox（MX has been resolved to GPTmail）
+    //   How to play B（CF Forward):     inboxEmail = fixedInboxEmail —— Forward all emails to this pin inbox
     this.inboxEmail = this.fixedInboxEmail || this.address
 
-    // step 3: GET 收件箱页面 https://mail.chatgpt.org.uk/<inboxEmail>，从 HTML 里解析
-    //   服务端 SSR 嵌入的 window.__BROWSER_AUTH（含初始 token）。
-    //   比 POST /api/inbox-token 更不容易触发反爬（那个 POST 端点会回 401 "Browser session required"）。
+    // step 3: GET Inbox page https://mail.chatgpt.org.uk/<inboxEmail>,from HTML analysis
+    //   Server SSR embedded window.__BROWSER_AUTH(Including initial token）。
+    //   Compare POST /api/inbox-token It is less likely to trigger anti-climbing (that POST The endpoint will return 401 "Browser session required"）。
     await this.fetchInitialTokenFromPage()
     if (!this.token) {
-      throw new Error('GPTmail 从页面 HTML 解析 __BROWSER_AUTH.token 失败')
+      throw new Error('GPTmail from page HTML parse __BROWSER_AUTH.token fail')
     }
 
-    // step 4: 私有域名密码解锁（如果设了密码）—— 私有域名 inbox 在未 unlock 前查 emails 会返回 403
+    // step 4: Private domain name password unlock (if a password is set)—— Private domain name inbox in the future unlock pre-check emails will return 403
     if (this.privatePassword) {
       await this.unlockPrivateInbox()
     }
 
-    // step 5: 记录 inbox 现有邮件 ID 作为基线，轮询时跳过这些旧邮件，避免历史验证码污染。
-    //   不再做全量 clear —— CF 转发模式下多个并发注册共享同一 inbox，
-    //   全量删除会误删别的任务待取的验证码。基线方案无副作用、并发安全。
+    // step 5: Record inbox Existing mail ID As a baseline, these old emails are skipped when polling to avoid historical CAPTCHA contamination.
+    //   No longer do the full amount clear —— CF In forwarding mode, multiple concurrent registrations share the same inbox，
+    //   Deleting all of them will accidentally delete the verification codes waiting for other tasks. The baseline regimen has no side effects and is safe.
     try {
       const existing = await this.fetchMails()
       for (const mail of existing) {
@@ -581,25 +580,25 @@ export class GptMailService implements TempEmailService {
         if (id) this.baselineIds.add(id)
       }
       if (this.baselineIds.size > 0) {
-        console.log(`[GPTmail] inbox 基线邮件数: ${this.baselineIds.size}（轮询时将跳过）`)
+        console.log(`[GPTmail] inbox Baseline number of messages: ${this.baselineIds.size}(will be skipped when polling)`)
       }
-    } catch { /* 基线获取失败不影响后续轮询 */ }
+    } catch { /* Failure to obtain the baseline does not affect subsequent polling */ }
 
     const mode = this.fixedInboxEmail
-      ? `CF 转发 → ${this.inboxEmail}`
-      : this.privatePassword ? '私有域名直收（已解锁）' : '私有域名直收（MX→GPTmail）'
+      ? `CF Forward → ${this.inboxEmail}`
+      : this.privatePassword ? 'Private domain name direct acquisition (unlocked)' : 'Private domain name direct collection (MX→GPTmail）'
     if (this.domains.length > 1) {
-      console.log(`[GPTmail] 注册邮箱: ${this.address}  (域名池 ${this.domains.length} 个，模式: ${mode})`)
+      console.log(`[GPTmail] Register email: ${this.address}  (Domain name pool ${this.domains.length} individual, pattern: ${mode})`)
     } else {
-      console.log(`[GPTmail] 注册邮箱: ${this.address}  (模式: ${mode})`)
+      console.log(`[GPTmail] Register email: ${this.address}  (model: ${mode})`)
     }
     return this.address
   }
 
   /**
-   * 通过 GET 页面 HTML 解析 window.__BROWSER_AUTH 初始 token。
-   * GPTmail 服务端会在 SSR 时把 `{token,email,expires_at}` 渲染到 HTML 的内联 script 里，
-   * 这是浏览器拿到 token 的"零成本"路径，不会触发 /api/inbox-token 的反爬保护。
+   * pass GET page HTML parse window.__BROWSER_AUTH initial token。
+   * GPTmail The server will be in SSR Time `{token,email,expires_at}` render to HTML inline script inside,
+   * This is what the browser gets token of"zero cost"path, will not trigger /api/inbox-token Anti-climbing protection.
    */
   private async fetchInitialTokenFromPage(): Promise<void> {
     const origin = new URL(this.baseURL).origin
@@ -620,39 +619,39 @@ export class GptMailService implements TempEmailService {
     }
 
     const session = this.getSession()
-    if (!session) throw new Error('GPTmail TLS SessionClient 不可用（可能正在重建，稍后重试）')
+    if (!session) throw new Error('GPTmail TLS SessionClient Unavailable (may be rebuilding, try again later)')
     const raw = await session.get(pageUrl, { headers: pageHeaders })
     if (raw.status < 200 || raw.status >= 300) {
       throw new Error(`GPTmail GET ${pageUrl} HTTP ${raw.status}: ${raw.body.slice(0, 200)}`)
     }
 
-    // 解析 window.__BROWSER_AUTH = { ... }；用括号配平扫描而非非贪婪正则，
-    // 避免对象出现嵌套 {} 时被 `\{[\s\S]*?\}` 提前截断导致 JSON 解析失败。
+    // parse window.__BROWSER_AUTH = { ... };Use brackets to balance scans instead of non-greedy regularization,
+    // Avoid nested objects {} when being `\{[\s\S]*?\}` Early truncation results in JSON Parsing failed.
     const jsonText = GptMailService.extractBrowserAuthJson(raw.body)
     if (!jsonText) {
-      throw new Error('GPTmail 页面里未找到 window.__BROWSER_AUTH（服务器结构可能已变）')
+      throw new Error('GPTmail Not found on the page window.__BROWSER_AUTH(Server structure may have changed)')
     }
     let auth: Record<string, unknown>
     try {
       auth = JSON.parse(jsonText)
     } catch (err) {
-      throw new Error(`GPTmail __BROWSER_AUTH JSON 解析失败: ${err instanceof Error ? err.message : err}`)
+      throw new Error(`GPTmail __BROWSER_AUTH JSON Parsing failed: ${err instanceof Error ? err.message : err}`)
     }
     const token = typeof auth.token === 'string' ? auth.token : ''
     if (!token) {
-      throw new Error(`GPTmail __BROWSER_AUTH 缺 token 字段: ${JSON.stringify(auth).slice(0, 200)}`)
+      throw new Error(`GPTmail __BROWSER_AUTH lack token Field: ${JSON.stringify(auth).slice(0, 200)}`)
     }
     this.token = token
-    console.log(`[GPTmail] 已从页面拿到初始 token（email=${auth.email}, exp=${auth.expires_at}）`)
+    console.log(`[GPTmail] Already got initial from page token（email=${auth.email}, exp=${auth.expires_at}）`)
   }
 
   /**
-   * 私有域名密码解锁。
-   * GPTmail 私有域名 inbox 在未 unlock 前调用 /api/emails 会返回 403 "private domain password required"。
-   * 必须先 POST /api/private-domains/unlock {email, password} 拿到 unlock 后的 token，再轮询邮件。
+   * Unlock private domain name password.
+   * GPTmail Private domain name inbox in the future unlock Called before /api/emails will return 403 "private domain password required"。
+   * must first POST /api/private-domains/unlock {email, password} get unlock later token, and then poll for emails.
    */
   private async unlockPrivateInbox(): Promise<void> {
-    const lang = 'zh-CN' // 与 official frontend 默认一致
+    const lang = 'zh-CN' // and official frontend Consistent by default
     const resp = await this.request<Record<string, unknown>>(
       `/api/private-domains/unlock?lang=${encodeURIComponent(lang)}`,
       {
@@ -662,10 +661,10 @@ export class GptMailService implements TempEmailService {
     )
     if (!resp.success) {
       const err = (resp.error as string) || JSON.stringify(resp).slice(0, 200)
-      throw new Error(`GPTmail 私有域名解锁失败: ${err}（密码错误？域名未设为私有？）`)
+      throw new Error(`GPTmail Unlocking private domain name failed: ${err}(Wrong password? Domain not set to private?)`)
     }
-    console.log(`[GPTmail] 私有域名 inbox 解锁成功: ${this.inboxEmail}`)
-    // token 已被 request() 内部从 auth.token 自动滚动更新
+    console.log(`[GPTmail] Private domain name inbox Unlocked successfully: ${this.inboxEmail}`)
+    // token has been request() internally from auth.token Automatic rolling updates
   }
 
   getAddress(): string {
@@ -673,24 +672,24 @@ export class GptMailService implements TempEmailService {
   }
 
   async waitForCode(timeoutSec: number, intervalSec: number, signal?: AbortSignal): Promise<string> {
-    if (!this.address) throw new Error('GPTmail 注册邮箱为空，需先调用 create()')
-    if (!this.inboxEmail) throw new Error('GPTmail inbox 邮箱为空，需先调用 create()')
-    if (!this.token) throw new Error('GPTmail token 为空，需先调用 create()')
+    if (!this.address) throw new Error('GPTmail The registered email is empty and needs to be called first create()')
+    if (!this.inboxEmail) throw new Error('GPTmail inbox The mailbox is empty and needs to be called first create()')
+    if (!this.token) throw new Error('GPTmail token is empty, needs to be called first create()')
 
     const maxRetries = Math.max(1, Math.floor(timeoutSec / intervalSec))
-    // 用 create() 时记录的基线 ID 初始化：跳过注册前就存在于 inbox 的旧邮件
+    // use create() baseline recorded at ID Initialization: Skip existing before registration inbox old emails
     const checkedIds = new Set<string>(this.baselineIds)
     const userLocal = this.address.toLowerCase().split('@')[0]
-    // 私有域名直收模式下，inbox = address，所有邮件 to 必然是 address，严格匹配即可
+    // In private domain name direct acquisition mode,inbox = address, all messages to must be address, just match strictly
     const isPrivateDirect = !this.fixedInboxEmail
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      if (signal?.aborted) throw new Error('注册已取消')
+      if (signal?.aborted) throw new Error('Registration canceled')
       await abortableSleep(intervalSec * 1000, signal)
       try {
         const mails = await this.fetchMails()
         if (attempt === 1 || attempt % 5 === 0) {
-          console.log(`[GPTmail] [${attempt}/${maxRetries}] 收件箱(${this.inboxEmail}) 邮件数: ${mails.length}`)
+          console.log(`[GPTmail] [${attempt}/${maxRetries}] Inbox(${this.inboxEmail}) Number of emails: ${mails.length}`)
         }
         for (const mail of mails) {
           const id = String(mail.id ?? '')
@@ -702,40 +701,40 @@ export class GptMailService implements TempEmailService {
           const html = String(mail.html_content ?? mail.html ?? '')
 
           if (isPrivateDirect) {
-            // 私有直收：inbox=address，email_address 必然匹配
+            // Private direct collection:inbox=address，email_address Must match
             const to = String(mail.email_address ?? '').toLowerCase()
             if (to && to !== this.address.toLowerCase()) {
               continue
             }
           } else {
-            // CF 转发：email_address=inbox，需要从 subject/body 软匹配本次注册地址，
-            //         避免拿到同一 inbox 其他注册的旧验证码
+            // CF Forward:email_address=inbox, need to start from subject/body Soft matching this registration address,
+            //         avoid getting the same inbox Old verification codes for other registrations
             const blob = `${subject}\n${content}\n${html}`.toLowerCase()
             const matches = blob.includes(this.address.toLowerCase()) || blob.includes(userLocal)
             if (!matches) {
-              // 注意：subject/body 可能不含注册地址（部分服务只发"您的验证码"无邮箱回显），
-              //       此时若 inbox 里恰好只有这一封新邮件也可能是本次的 —— 但我们保守跳过避免误用
+              // Notice:subject/body It may not contain the registered address (some services only send"your verification code"No email response),
+              //       If at this time inbox There happens to be only this one new email, and it may be from this time. —— But we skip it conservatively to avoid misuse
               continue
             }
           }
 
           const code = this.extractOTP(mail)
           if (code) {
-            console.log(`[GPTmail] 提取到验证码: ${code} (from=${mail.from_address ?? ''}, subject=${subject.slice(0, 60)})`)
-            // 不再全量 clear inbox：CF 转发模式下多任务共享同一 inbox，
-            // 清空会误删别的任务待取的验证码。本次邮件已记入 checkedIds，
-            // 后续实例靠 create() 重新捕获基线跳过，已足够避免重复取码。
+            console.log(`[GPTmail] Extract verification code: ${code} (from=${mail.from_address ?? ''}, subject=${subject.slice(0, 60)})`)
+            // No longer the full amount clear inbox：CF In forwarding mode, multiple tasks share the same inbox，
+            // Clearing it will accidentally delete the verification codes waiting for other tasks. This email has been credited checkedIds，
+            // Subsequent examples rely on create() Recapturing baseline skips is sufficient to avoid repeated decoding.
             return code
           }
         }
       } catch (err) {
         if (attempt % 5 === 0) {
-          console.log(`[GPTmail] [${attempt}/${maxRetries}] 查询失败:`, err instanceof Error ? err.message : err)
+          console.log(`[GPTmail] [${attempt}/${maxRetries}] Query failed:`, err instanceof Error ? err.message : err)
         }
       }
-      if (attempt % 5 === 0) console.log(`[GPTmail] [${attempt}/${maxRetries}] 暂无验证码...`)
+      if (attempt % 5 === 0) console.log(`[GPTmail] [${attempt}/${maxRetries}] No verification code yet...`)
     }
-    throw new Error(`GPTmail 等待验证码超时 (${timeoutSec}s)`)
+    throw new Error(`GPTmail Timeout waiting for verification code (${timeoutSec}s)`)
   }
 
   private async fetchMails(): Promise<Array<Record<string, unknown>>> {
@@ -748,17 +747,17 @@ export class GptMailService implements TempEmailService {
   }
 
   private extractOTP(mail: Record<string, unknown>): string {
-    // 1) 主题里直接含 6 位数字（"Your code is 123456" 类）
+    // 1) Included directly in the theme 6 digit ("Your code is 123456" kind)
     const subject = String(mail.subject ?? '')
     const subjMatch = subject.match(/(\d{6})/)
     if (subjMatch) return subjMatch[1]
 
-    // 2) 正文（content 是纯文本字段，HAR 里 AWS 验证码就在这里）
+    // 2) text(content is a plain text field,HAR inside AWS Verification code is here)
     const content = String(mail.content ?? '')
     const c1 = extractCode(content)
     if (c1) return c1
 
-    // 3) HTML 兜底
+    // 3) HTML reveal all the details
     const html = String(mail.html_content ?? mail.html ?? '')
     return extractCode(html)
   }
@@ -773,7 +772,7 @@ export interface OutlookAccount {
   refreshToken: string
 }
 
-/** 按 ---- 拆分；多出的连字符(N-4)归还前一字段（refreshToken 等 base64url 可能以 '-' 结尾） */
+/** according to ---- split; extra hyphen(N-4)Return the previous field (refreshToken wait base64url may be '-' end) */
 function splitByDashes(line: string): string[] {
   const parts: string[] = []
   const re = /-{4,}/g
@@ -828,9 +827,9 @@ export async function refreshOutlookToken(acc: OutlookAccount): Promise<string> 
     { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() }
   )
   const data = (await resp.json()) as Record<string, unknown>
-  if (resp.status !== 200) throw new Error(`刷新失败 ${resp.status}: ${JSON.stringify(data).slice(0, 300)}`)
+  if (resp.status !== 200) throw new Error(`Refresh failed ${resp.status}: ${JSON.stringify(data).slice(0, 300)}`)
   const token = data.access_token as string
-  if (!token) throw new Error('响应中无 access_token')
+  if (!token) throw new Error('None in response access_token')
   return token
 }
 
@@ -849,7 +848,7 @@ class IMAPClient {
       const socket = tls.connect(993, 'outlook.office365.com', { servername: 'outlook.office365.com' })
       const timer = setTimeout(() => {
         socket.destroy()
-        reject(new Error('连接超时'))
+        reject(new Error('Connection timeout'))
       }, 15000)
 
       socket.once('error', (err) => { clearTimeout(timer); reject(err) })
@@ -863,7 +862,7 @@ class IMAPClient {
 
   private readLine(timeoutMs = 30000): Promise<string> {
     return new Promise((resolve, reject) => {
-      if (!this.socket) return reject(new Error('未连接'))
+      if (!this.socket) return reject(new Error('Not connected'))
 
       let settled = false
       const timer = setTimeout(() => {
@@ -871,7 +870,7 @@ class IMAPClient {
         settled = true
         this.socket?.removeListener('data', onData)
         this.socket?.removeListener('error', onError)
-        reject(new Error('IMAP readLine 超时'))
+        reject(new Error('IMAP readLine time out'))
       }, timeoutMs)
 
       const done = (line: string): void => {
@@ -913,7 +912,7 @@ class IMAPClient {
   }
 
   private async sendCommand(cmd: string): Promise<string> {
-    if (!this.socket) throw new Error('未连接')
+    if (!this.socket) throw new Error('Not connected')
     this.tag++
     const tagStr = `A${String(this.tag).padStart(3, '0')}`
     this.socket.write(`${tagStr} ${cmd}\r\n`)
@@ -933,9 +932,9 @@ class IMAPClient {
     const xoauth2 = buildXOAuth2(email, accessToken)
     const tag = await this.sendCommand(`AUTHENTICATE XOAUTH2 ${xoauth2}`)
     const { result } = await this.readUntilTag(tag)
-    if (!result.includes('OK')) throw new Error(`认证失败: ${result}`)
-    console.log('[IMAP] 认证成功')
-    await sleep(800)
+    if (!result.includes('OK')) throw new Error(`Authentication failed: ${result}`)
+    console.log('[IMAP] Authentication successful')
+    await abortableSleep(800)
   }
 
   async selectInbox(): Promise<number> {
@@ -950,18 +949,18 @@ class IMAPClient {
         return 0
       }
       if (retry < 2) {
-        console.log(`[IMAP] SELECT INBOX 失败 (${result}), 重试 ${retry + 1}/3...`)
-        await sleep((1 + retry) * 1000)
+        console.log(`[IMAP] SELECT INBOX fail (${result}), Try again ${retry + 1}/3...`)
+        await abortableSleep((1 + retry) * 1000)
       }
     }
-    throw new Error('SELECT INBOX 重试耗尽')
+    throw new Error('SELECT INBOX Exhausted retries')
   }
 
   async fetchLatestBody(seq: number): Promise<string> {
-    if (seq <= 0) throw new Error('无效的邮件序号')
+    if (seq <= 0) throw new Error('Invalid email sequence number')
     const tag = await this.sendCommand(`FETCH ${seq} (BODY.PEEK[TEXT])`)
     const { lines, result } = await this.readUntilTag(tag)
-    if (!result.includes('OK')) throw new Error(`FETCH TEXT 失败: ${result}`)
+    if (!result.includes('OK')) throw new Error(`FETCH TEXT fail: ${result}`)
 
     const rawLines: string[] = []
     let inBody = false
@@ -972,7 +971,7 @@ class IMAPClient {
     }
     const raw = rawLines.join('\n')
 
-    // 尝试解码 MIME base64
+    // try to decode MIME base64
     const parts = raw.split('------=_Part_')
     let decoded = ''
     for (const part of parts) {
@@ -987,7 +986,7 @@ class IMAPClient {
     }
     if (decoded) return decoded
 
-    // 整体 base64 解码
+    // overall base64 decoding
     const cleaned = raw.replace(/[\s]/g, '')
     try {
       return Buffer.from(cleaned, 'base64').toString()
@@ -1024,12 +1023,12 @@ export async function waitForOTP(
   interval: number,
   signal?: AbortSignal
 ): Promise<string> {
-  console.log(`[Outlook IMAP] 等待验证码, 邮箱=${acc.email}, 发送前邮件数=${beforeCount}`)
+  console.log(`[Outlook IMAP] Wait for verification code, Mail=${acc.email}, Number of emails before sending=${beforeCount}`)
   let accessToken = await refreshOutlookToken(acc)
   const maxRetries = Math.floor(timeout / interval)
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    if (signal?.aborted) throw new Error('注册已取消')
+    if (signal?.aborted) throw new Error('Registration canceled')
     let client: IMAPClient | null = null
     try {
       client = new IMAPClient()
@@ -1038,7 +1037,7 @@ export async function waitForOTP(
       const total = await client.selectInbox()
 
       if (total <= beforeCount) {
-        if (attempt % 5 === 0) console.log(`[Outlook IMAP] [${attempt}/${maxRetries}] 暂无新邮件 (当前${total}封)...`)
+        if (attempt % 5 === 0) console.log(`[Outlook IMAP] [${attempt}/${maxRetries}] No new emails yet (current${total}seal up)...`)
         await abortableSleep(interval * 1000, signal)
         continue
       }
@@ -1048,65 +1047,21 @@ export async function waitForOTP(
           const body = await client.fetchLatestBody(i)
           const code = extractCode(body)
           if (code) {
-            console.log(`[Outlook IMAP] 获取到验证码: ${code}`)
+            console.log(`[Outlook IMAP] Get verification code: ${code}`)
             return code
           }
         } catch { /* continue */ }
       }
 
-      if (attempt % 5 === 0) console.log(`[Outlook IMAP] [${attempt}/${maxRetries}] 新邮件中未找到验证码...`)
+      if (attempt % 5 === 0) console.log(`[Outlook IMAP] [${attempt}/${maxRetries}] Verification code not found in new email...`)
     } catch (err) {
-      if (attempt % 5 === 0) console.log(`[Outlook IMAP] 连接失败:`, err)
+      if (attempt % 5 === 0) console.log(`[Outlook IMAP] Connection failed:`, err)
       try { accessToken = await refreshOutlookToken(acc) } catch { /* ignore */ }
     } finally {
       client?.close()
     }
     await abortableSleep(interval * 1000, signal)
   }
-  throw new Error(`等待验证码超时 (${timeout}s)`)
+  throw new Error(`Timeout waiting for verification code (${timeout}s)`)
 }
 
-// ============ Proton 邮箱（webview 借壳官方网页，轻量读 DOM 取码） ============
-
-/**
- * Proton 点号别名取码源：用一个 Proton 母邮箱（如 evanbartellchae@protonmail.com），
- * 前端用 dotVariants 生成点号变体（evanbar.tellcha.e@protonmail.com）作为每个账号的注册邮箱，
- * 所有变体都进同一个 Proton 收件箱。读码经由主进程的隐藏 Proton 窗口（见 proton-mail-window.ts），
- * 官方网页负责登录与 PGP 解密，本类只接收前端生成好的具体地址并等待取码。
- */
-export class ProtonWebviewService implements TempEmailService {
-  /** 本次注册使用的具体邮箱地址（母邮箱或其点号变体，由前端生成传入） */
-  private readonly address: string
-  /** 日志回调：传入 registrar.this.log 时，取码日志会推送到注册页面日志面板；缺省回退 console */
-  private readonly log: (msg: string) => void
-
-  constructor(presetAddress: string, log?: (msg: string) => void) {
-    this.address = (presetAddress || '').trim()
-    if (!this.address) {
-      throw new Error('Proton 邮箱地址为空')
-    }
-    this.log = log || ((m) => console.log(m))
-  }
-
-  async create(): Promise<string> {
-    this.log(`[Proton] 使用邮箱: ${this.address}`)
-    return this.address
-  }
-
-  getAddress(): string {
-    return this.address
-  }
-
-  async waitForCode(timeoutSec: number, intervalSec: number, signal?: AbortSignal): Promise<string> {
-    return waitProtonOtp(this.address, {
-      timeoutSec,
-      intervalSec,
-      signal,
-      log: this.log
-    })
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
-}

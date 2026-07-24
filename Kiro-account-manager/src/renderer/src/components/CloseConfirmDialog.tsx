@@ -30,7 +30,7 @@ export function CloseConfirmDialog() {
       <div className="absolute inset-0 bg-black/50" onClick={() => handleAction('cancel')} />
       
       <div className="relative glass-card-strong rounded-2xl shadow-2xl w-full max-w-md m-4 animate-in zoom-in-95 duration-200 overflow-hidden">
-        {/* 头部 */}
+        {/* head */}
         <div className="bg-gradient-to-r from-primary/10 to-[var(--gradient-to)]/10 p-6 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -38,8 +38,8 @@ export function CloseConfirmDialog() {
                 <XCircle className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h2 className="text-lg font-bold">{isEn ? 'Close Window' : '关闭窗口'}</h2>
-                <p className="text-sm text-muted-foreground">{isEn ? 'Choose an action' : '请选择关闭行为'}</p>
+                <h2 className="text-lg font-bold">{isEn ? 'Close Window' : 'close window'}</h2>
+                <p className="text-sm text-muted-foreground">{isEn ? 'Choose an action' : 'Please select a shutdown behavior'}</p>
               </div>
             </div>
             <button
@@ -51,17 +51,17 @@ export function CloseConfirmDialog() {
           </div>
         </div>
 
-        {/* 内容 */}
+        {/* content */}
         <div className="p-6 space-y-4">
           <p className="text-sm text-muted-foreground">
-            {isEn ? 'Would you like to minimize to system tray or exit the application?' : '您想要最小化到系统托盘还是退出程序？'}
+            {isEn ? 'Would you like to minimize to system tray or exit the application?' : 'Do you want to minimize to the system tray or exit the program?'}
           </p>
           
           <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-            {isEn ? 'When minimized to tray, the app will continue running in the background and the proxy service will remain available. You can reopen the window by clicking the tray icon.' : '最小化到托盘后，程序将在后台继续运行，代理服务保持可用。您可以通过点击托盘图标重新打开窗口。'}
+            {isEn ? 'When minimized to tray, the app will continue running in the background and the proxy service will remain available. You can reopen the window by clicking the tray icon.' : 'After minimizing to the tray, the program will continue to run in the background and the proxy service remains available. You can reopen the window by clicking on the tray icon.'}
           </p>
 
-          {/* 操作按钮 */}
+          {/* Action button */}
           <div className="space-y-2">
             <Button 
               variant="outline" 
@@ -72,8 +72,8 @@ export function CloseConfirmDialog() {
                 <Minimize2 className="h-4 w-4 text-blue-500" />
               </div>
               <div className="text-left">
-                <div className="font-medium">{isEn ? 'Minimize to Tray' : '最小化到托盘'}</div>
-                <div className="text-xs text-muted-foreground">{isEn ? 'Continue running in background' : '在后台继续运行'}</div>
+                <div className="font-medium">{isEn ? 'Minimize to Tray' : 'Minimize to tray'}</div>
+                <div className="text-xs text-muted-foreground">{isEn ? 'Continue running in background' : 'Continue running in the background'}</div>
               </div>
             </Button>
             
@@ -86,13 +86,13 @@ export function CloseConfirmDialog() {
                 <LogOut className="h-4 w-4 text-red-500" />
               </div>
               <div className="text-left">
-                <div className="font-medium">{isEn ? 'Exit Application' : '退出程序'}</div>
-                <div className="text-xs text-muted-foreground">{isEn ? 'Close the app completely' : '完全关闭应用'}</div>
+                <div className="font-medium">{isEn ? 'Exit Application' : 'Exit program'}</div>
+                <div className="text-xs text-muted-foreground">{isEn ? 'Close the app completely' : 'Completely close the app'}</div>
               </div>
             </Button>
           </div>
 
-          {/* 记住选择 */}
+          {/* Remember to choose */}
           <div className="flex items-center gap-2 pt-2">
             <button
               type="button"
@@ -110,17 +110,17 @@ export function CloseConfirmDialog() {
               onClick={() => setRememberChoice(!rememberChoice)}
               className="text-sm text-muted-foreground cursor-pointer select-none"
             >
-              {isEn ? 'Remember my choice' : '记住我的选择'}
+              {isEn ? 'Remember my choice' : 'remember my choice'}
             </button>
           </div>
 
-          {/* 取消按钮 */}
+          {/* Cancel button */}
           <Button 
             variant="ghost" 
             className="w-full"
             onClick={() => handleAction('cancel')}
           >
-            {isEn ? 'Cancel' : '取消'}
+            {isEn ? 'Cancel' : 'Cancel'}
           </Button>
         </div>
       </div>

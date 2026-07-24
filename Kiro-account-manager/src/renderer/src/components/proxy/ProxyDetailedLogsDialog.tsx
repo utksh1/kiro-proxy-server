@@ -17,7 +17,7 @@ interface ProxyDetailedLogsDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-// 自定义下拉框组件
+// Custom drop-down box component
 interface DropdownOption {
   value: string
   label: string
@@ -124,10 +124,10 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
       setLoading(true)
       loadLogs().finally(() => setLoading(false))
       
-      // 每 1.5 秒刷新一次
+      // Every 1.5 Refresh once every second
       pollIntervalRef.current = setInterval(() => {
         loadLogs().then(() => {
-          // 如果用户不在底部，累计新日志数
+          // If the user is not at the bottom, the cumulative number of new logs
           if (!isAtBottom && logs.length > prevLogCount.current) {
             setNewLogCount(prev => prev + (logs.length - prevLogCount.current))
           }
@@ -144,7 +144,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
     }
   }, [open, loadLogs, isAtBottom, logs.length])
 
-  // 监听滚动位置判断是否在底部
+  // Monitor the scroll position to determine whether it is at the bottom
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
@@ -209,12 +209,12 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
     setExpandedLogs(newExpanded)
   }
 
-  // 获取所有类别（缓存）
+  // Get all categories (cached)
   const categories = useMemo(() => {
     return Array.from(new Set(logs.map(log => log.category))).sort()
   }, [logs])
 
-  // 时间范围过滤
+  // time range filter
   const getTimeRangeMs = (range: string): number => {
     const hour = 60 * 60 * 1000
     const day = 24 * hour
@@ -232,14 +232,14 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
     }
   }
 
-  // 过滤日志（缓存，避免每次渲染都重新计算）
+  // Filter logs (cached to avoid recalculating every render)
   const filteredLogs = useMemo(() => {
     const now = Date.now()
     const rangeMs = getTimeRangeMs(timeRange)
     const search = searchText.toLowerCase()
     
     let result = logs.filter(log => {
-      // 时间范围过滤
+      // time range filter
       if (rangeMs > 0) {
         const logTime = new Date(log.timestamp).getTime()
         if (now - logTime > rangeMs) return false
@@ -247,12 +247,12 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
       if (levelFilter !== 'all' && log.level !== levelFilter) return false
       if (categoryFilter !== 'all' && log.category !== categoryFilter) return false
       if (search) {
-        // 先检查 message 和 category（快速）
+        // Check first message and category(fast)
         if (log.message.toLowerCase().includes(search) ||
             log.category.toLowerCase().includes(search)) {
           return true
         }
-        // 只有在前面没匹配时才检查 data（慢）
+        // Only check if there is no previous match data(slow)
         if (log.data) {
           try {
             return JSON.stringify(log.data).toLowerCase().includes(search)
@@ -265,17 +265,17 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
       return true
     })
     
-    // 显示条数限制
+    // Display number limit
     if (displayLimit !== 'all') {
       const limit = parseInt(displayLimit)
       if (limit > 0) result = result.slice(-limit)
     }
     
-    // 正序，最新在底部（配合智能跟随滚到底部）
+    // Positive sequence, latest at the bottom (with smart follow to scroll to the bottom)
     return result
   }, [logs, timeRange, levelFilter, categoryFilter, searchText, displayLimit])
 
-  // 虚拟滚动
+  // virtual scrolling
   const virtualizer = useVirtualizer({
     count: filteredLogs.length,
     getScrollElement: () => scrollRef.current,
@@ -283,7 +283,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
     overscan: 20
   })
 
-  // 智能滚动：在底部时自动跟随新日志
+  // Smart scrolling: automatically follow new posts when at the bottom
   useEffect(() => {
     if (isAtBottom && filteredLogs.length > 0) {
       virtualizer.scrollToIndex(filteredLogs.length - 1, { align: 'end' })
@@ -336,7 +336,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
         className="glass-card-strong rounded-2xl shadow-2xl max-w-[90vw] w-[1200px] h-[80vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 标题栏 */}
+        {/* title bar */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
@@ -344,7 +344,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <h2 className="text-lg font-semibold">{isEn ? 'Proxy Detailed Logs' : '反代详细日志'}</h2>
+            <h2 className="text-lg font-semibold">{isEn ? 'Proxy Detailed Logs' : 'Anti-generation detailed log'}</h2>
           </div>
           <div className="flex items-center gap-2">
             <CustomDropdown
@@ -352,16 +352,16 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
               onChange={setTimeRange}
               className="min-w-[70px]"
               options={[
-                { value: 'all', label: isEn ? 'All Time' : '全部时间' },
-                { value: '1h', label: isEn ? '1 Hour' : '1小时' },
-                { value: '6h', label: isEn ? '6 Hours' : '6小时' },
-                { value: '12h', label: isEn ? '12 Hours' : '12小时' },
-                { value: '1d', label: isEn ? '1 Day' : '1天' },
-                { value: '3d', label: isEn ? '3 Days' : '3天' },
-                { value: '7d', label: isEn ? '7 Days' : '7天' },
-                { value: '30d', label: isEn ? '30 Days' : '30天' },
-                { value: '180d', label: isEn ? '180 Days' : '180天' },
-                { value: '1y', label: isEn ? '1 Year' : '1年' },
+                { value: 'all', label: isEn ? 'All Time' : 'all time' },
+                { value: '1h', label: isEn ? '1 Hour' : '1Hour' },
+                { value: '6h', label: isEn ? '6 Hours' : '6Hour' },
+                { value: '12h', label: isEn ? '12 Hours' : '12Hour' },
+                { value: '1d', label: isEn ? '1 Day' : '1sky' },
+                { value: '3d', label: isEn ? '3 Days' : '3sky' },
+                { value: '7d', label: isEn ? '7 Days' : '7sky' },
+                { value: '30d', label: isEn ? '30 Days' : '30sky' },
+                { value: '180d', label: isEn ? '180 Days' : '180sky' },
+                { value: '1y', label: isEn ? '1 Year' : '1Year' },
               ]}
             />
             <CustomDropdown
@@ -369,18 +369,18 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
               onChange={setDisplayLimit}
               className="min-w-[70px]"
               options={[
-                { value: 'all', label: isEn ? 'All' : '全部' },
+                { value: 'all', label: isEn ? 'All' : 'all' },
                 { value: '5000', label: '5000' },
-                { value: '10000', label: isEn ? '10K' : '1万' },
-                { value: '50000', label: isEn ? '50K' : '5万' },
-                { value: '100000', label: isEn ? '100K' : '10万' },
-                { value: '200000', label: isEn ? '200K' : '20万' },
-                { value: '500000', label: isEn ? '500K' : '50万' },
-                { value: '1000000', label: isEn ? '1M' : '100万' },
+                { value: '10000', label: isEn ? '10K' : '1Ten thousand' },
+                { value: '50000', label: isEn ? '50K' : '5Ten thousand' },
+                { value: '100000', label: isEn ? '100K' : '10Ten thousand' },
+                { value: '200000', label: isEn ? '200K' : '20Ten thousand' },
+                { value: '500000', label: isEn ? '500K' : '50Ten thousand' },
+                { value: '1000000', label: isEn ? '1M' : '100Ten thousand' },
               ]}
             />
             <Badge variant="secondary" className="font-mono">
-              {filteredLogs.length} / {logs.length} {isEn ? 'entries' : '条'}
+              {filteredLogs.length} / {logs.length} {isEn ? 'entries' : 'strip'}
             </Badge>
             <Button variant="ghost" size="icon" className="rounded-full hover:bg-red-500 hover:text-white transition-colors" onClick={() => onOpenChange(false)}>
               <X className="w-4 h-4" />
@@ -388,13 +388,13 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
           </div>
         </div>
 
-        {/* 工具栏 */}
+        {/* Toolbar */}
         <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 border-b border-border">
-          {/* 搜索 */}
+          {/* search */}
           <div className="relative flex-1 min-w-[100px]">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder={isEn ? 'Search logs...' : '搜索日志内容...'}
+              placeholder={isEn ? 'Search logs...' : 'Search log content...'}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               className="pl-8 pr-8 h-8 text-xs bg-background/50 border-border focus:border-primary"
@@ -411,12 +411,12 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
             )}
           </div>
 
-          {/* 级别过滤 */}
+          {/* level filtering */}
           <CustomDropdown
             value={levelFilter}
             onChange={setLevelFilter}
             options={[
-              { value: 'all', label: isEn ? 'All' : '全部', icon: <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-destructive via-warning to-primary" /> },
+              { value: 'all', label: isEn ? 'All' : 'all', icon: <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-destructive via-warning to-primary" /> },
               { value: 'ERROR', label: 'ERR', icon: <span className="w-2.5 h-2.5 rounded-full bg-destructive" /> },
               { value: 'WARN', label: 'WARN', icon: <span className="w-2.5 h-2.5 rounded-full bg-warning" /> },
               { value: 'INFO', label: 'INFO', icon: <span className="w-2.5 h-2.5 rounded-full bg-primary" /> },
@@ -424,13 +424,13 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
             ]}
           />
 
-          {/* 类别过滤 */}
+          {/* Category filtering */}
           <CustomDropdown
             value={categoryFilter}
             onChange={setCategoryFilter}
             className="min-w-[100px]"
             options={[
-              { value: 'all', label: isEn ? 'All' : '全部', icon: <svg className="w-3 h-3 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg> },
+              { value: 'all', label: isEn ? 'All' : 'all', icon: <svg className="w-3 h-3 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg> },
               ...categories.map(cat => ({ 
                 value: cat, 
                 label: cat,
@@ -441,13 +441,13 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
 
           <div className="h-5 w-px bg-border flex-shrink-0" />
 
-          {/* 显示条数 */}
+          {/* Display number */}
           <CustomDropdown
             value={displayLimit}
             onChange={setDisplayLimit}
             className="min-w-[60px]"
             options={[
-              { value: 'all', label: isEn ? 'All' : '全部' },
+              { value: 'all', label: isEn ? 'All' : 'all' },
               { value: '5000', label: '5K' },
               { value: '10000', label: '10K' },
               { value: '50000', label: '50K' },
@@ -455,13 +455,13 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
             ]}
           />
 
-          {/* 时间范围 */}
+          {/* time range */}
           <CustomDropdown
             value={timeRange}
             onChange={setTimeRange}
             className="min-w-[60px]"
             options={[
-              { value: 'all', label: isEn ? 'All' : '全部' },
+              { value: 'all', label: isEn ? 'All' : 'all' },
               { value: '1h', label: '1h' },
               { value: '6h', label: '6h' },
               { value: '1d', label: '1d' },
@@ -471,7 +471,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
 
           <div className="h-5 w-px bg-border flex-shrink-0" />
 
-          {/* 操作按钮 */}
+          {/* Action button */}
           <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={loadLogs} disabled={loading}>
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
@@ -483,7 +483,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
           </Button>
         </div>
 
-        {/* 日志列表（虚拟滚动） */}
+        {/* Log list (virtual scrolling) */}
         <div className="flex-1 overflow-hidden relative">
           <div
             ref={scrollRef}
@@ -493,7 +493,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
             {filteredLogs.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
                 <Filter className="h-8 w-8 opacity-20" />
-                <span className="text-sm">{logs.length === 0 ? (isEn ? 'No logs yet' : '暂无日志记录') : (isEn ? 'No matching logs' : '没有匹配的日志')}</span>
+                <span className="text-sm">{logs.length === 0 ? (isEn ? 'No logs yet' : 'No log records yet') : (isEn ? 'No matching logs' : 'No matching logs')}</span>
               </div>
             ) : (
               <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
@@ -546,7 +546,7 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
             )}
           </div>
 
-          {/* 回到底部浮动按钮 */}
+          {/* Return to bottom floating button */}
           {!isAtBottom && (
             <button
               className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg hover:bg-primary/90 transition-all"
@@ -554,20 +554,20 @@ export function ProxyDetailedLogsDialog({ open, onOpenChange }: ProxyDetailedLog
             >
               <ChevronsDown className="h-3.5 w-3.5" />
               {newLogCount > 0 ? (
-                <>{isEn ? `${newLogCount} new` : `${newLogCount} 条新`}</>
+                <>{isEn ? `${newLogCount} new` : `${newLogCount} new article`}</>
               ) : (
-                <>{isEn ? 'Bottom' : '底部'}</>
+                <>{isEn ? 'Bottom' : 'bottom'}</>
               )}
             </button>
           )}
         </div>
 
-        {/* 底部状态栏 */}
+        {/* bottom status bar */}
         <div className="flex-shrink-0 flex items-center justify-between px-4 py-1.5 border-t border-border text-[10px] text-muted-foreground">
-          <span>{isEn ? 'Showing' : '显示'} {filteredLogs.length.toLocaleString()} / {logs.length.toLocaleString()}</span>
+          <span>{isEn ? 'Showing' : 'show'} {filteredLogs.length.toLocaleString()} / {logs.length.toLocaleString()}</span>
           <div className="flex items-center gap-1">
             <ArrowDown className={`h-3 w-3 ${isAtBottom ? 'text-success' : 'text-muted-foreground/40'}`} />
-            <span>{isAtBottom ? (isEn ? 'Following' : '跟随中') : (isEn ? 'Scrolled up' : '已暂停跟随')}</span>
+            <span>{isAtBottom ? (isEn ? 'Following' : 'Following') : (isEn ? 'Scrolled up' : 'Following has been suspended')}</span>
           </div>
         </div>
       </div>

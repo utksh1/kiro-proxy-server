@@ -60,7 +60,7 @@ export function ModelMappingDialog({
   const addRule = () => {
     const newRule: ModelMappingRule = {
       id: generateId(),
-      name: isEn ? 'New Rule' : '新规则',
+      name: isEn ? 'New Rule' : 'new rules',
       enabled: true,
       type: 'replace',
       sourceModel: '',
@@ -163,9 +163,9 @@ export function ModelMappingDialog({
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'replace': return isEn ? 'Replace' : '替换'
-      case 'alias': return isEn ? 'Alias' : '别名'
-      case 'loadbalance': return isEn ? 'Load Balance' : '负载均衡'
+      case 'replace': return isEn ? 'Replace' : 'replace'
+      case 'alias': return isEn ? 'Alias' : 'Alias'
+      case 'loadbalance': return isEn ? 'Load Balance' : 'load balancing'
       default: return type
     }
   }
@@ -192,10 +192,10 @@ export function ModelMappingDialog({
                 <Shuffle className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <span className="font-bold">{isEn ? 'Model Mapping' : '模型映射'}</span>
+                <span className="font-bold">{isEn ? 'Model Mapping' : 'model mapping'}</span>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge className="bg-primary/10 text-primary border-primary/20 font-semibold">
-                    {localMappings.length} {isEn ? 'rules' : '条规则'}
+                    {localMappings.length} {isEn ? 'rules' : 'rules'}
                   </Badge>
                 </div>
               </div>
@@ -208,7 +208,7 @@ export function ModelMappingDialog({
                 className="rounded-lg"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                {isEn ? 'Add Rule' : '添加规则'}
+                {isEn ? 'Add Rule' : 'Add rule'}
               </Button>
               <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg hover:bg-red-500 hover:text-white transition-colors" onClick={() => onOpenChange(false)}>
                 <X className="h-5 w-5" />
@@ -223,8 +223,8 @@ export function ModelMappingDialog({
                 <div className="p-4 rounded-full bg-muted mb-4">
                   <Shuffle className="h-8 w-8" />
                 </div>
-                <p className="font-medium">{isEn ? 'No mapping rules' : '暂无映射规则'}</p>
-                <p className="text-sm mt-1">{isEn ? 'Click "Add Rule" to create one' : '点击"添加规则"创建新规则'}</p>
+                <p className="font-medium">{isEn ? 'No mapping rules' : 'No mapping rules yet'}</p>
+                <p className="text-sm mt-1">{isEn ? 'Click "Add Rule" to create one' : 'Click"Add rule"Create new rule'}</p>
               </div>
             ) : (
               localMappings.map((rule, index) => (
@@ -236,7 +236,7 @@ export function ModelMappingDialog({
                     expandedId === rule.id ? "ring-2 ring-primary/30" : ""
                   )}
                 >
-                  {/* 规则头部 */}
+                  {/* Rule header */}
                   <div 
                     className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/30"
                     onClick={() => setExpandedId(expandedId === rule.id ? null : rule.id)}
@@ -293,44 +293,44 @@ export function ModelMappingDialog({
                     </div>
                   </div>
 
-                  {/* 展开的编辑区域 */}
+                  {/* Expanded editing area */}
                   {expandedId === rule.id && (
                     <div className="border-t p-4 space-y-4 bg-muted/10">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>{isEn ? 'Rule Name' : '规则名称'}</Label>
+                          <Label>{isEn ? 'Rule Name' : 'Rule name'}</Label>
                           <Input 
                             value={rule.name}
                             onChange={(e) => updateRule(rule.id, { name: e.target.value })}
-                            placeholder={isEn ? 'Enter rule name' : '输入规则名称'}
+                            placeholder={isEn ? 'Enter rule name' : 'Enter rule name'}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>{isEn ? 'Mapping Type' : '映射类型'}</Label>
+                          <Label>{isEn ? 'Mapping Type' : 'Mapping type'}</Label>
                           <select
                             className="w-full h-10 px-3 py-2 text-sm rounded-xl border border-input bg-background ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                             value={rule.type}
                             onChange={(e) => updateRule(rule.id, { type: e.target.value as ModelMappingRule['type'] })}
                           >
-                            <option value="replace">{isEn ? 'Replace - Direct model replacement' : '替换 - 直接替换模型'}</option>
-                            <option value="alias">{isEn ? 'Alias - Create model alias' : '别名 - 创建模型别名'}</option>
-                            <option value="loadbalance">{isEn ? 'Load Balance - Random selection' : '负载均衡 - 随机选择'}</option>
+                            <option value="replace">{isEn ? 'Replace - Direct model replacement' : 'replace - Direct replacement model'}</option>
+                            <option value="alias">{isEn ? 'Alias - Create model alias' : 'Alias - Create model alias'}</option>
+                            <option value="loadbalance">{isEn ? 'Load Balance - Random selection' : 'load balancing - randomly selected'}</option>
                           </select>
                         </div>
                       </div>
 
                       <div className="space-y-2">
                         <div>
-                          <Label>{isEn ? 'Source Model' : '源模型'}</Label>
+                          <Label>{isEn ? 'Source Model' : 'source model'}</Label>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {isEn ? 'The model name in user request (e.g., gpt-4, claude-*, my-alias). Supports * wildcard.' : '用户请求时使用的模型名（如 gpt-4, claude-*, my-alias）。支持 * 通配符。'}
+                            {isEn ? 'The model name in user request (e.g., gpt-4, claude-*, my-alias). Supports * wildcard.' : 'The model name used when the user requests it (e.g. gpt-4, claude-*, my-alias). support * Wildcard.'}
                           </p>
                         </div>
                         <div className="flex gap-2">
                           <Input 
                             value={rule.sourceModel}
                             onChange={(e) => updateRule(rule.id, { sourceModel: e.target.value })}
-                            placeholder={isEn ? 'e.g., claude-*, gpt-4, my-alias' : '例如: claude-*, gpt-4, my-alias'}
+                            placeholder={isEn ? 'e.g., claude-*, gpt-4, my-alias' : 'For example: claude-*, gpt-4, my-alias'}
                             className="flex-1"
                           />
                           {availableModels.length > 0 && (
@@ -341,7 +341,7 @@ export function ModelMappingDialog({
                                 if (e.target.value) updateRule(rule.id, { sourceModel: e.target.value })
                               }}
                             >
-                              <option value="">{isEn ? 'Select model' : '选择模型'}</option>
+                              <option value="">{isEn ? 'Select model' : 'Select model'}</option>
                               {availableModels.map(m => (
                                 <option key={m.id} value={m.id}>{m.id}</option>
                               ))}
@@ -353,9 +353,9 @@ export function ModelMappingDialog({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div>
-                            <Label>{isEn ? 'Target Models' : '目标模型'}</Label>
+                            <Label>{isEn ? 'Target Models' : 'target model'}</Label>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {isEn ? 'The actual Kiro model to call. Select from the dropdown for official models.' : '实际调用的 Kiro 模型。从下拉框选择官方模型。'}
+                              {isEn ? 'The actual Kiro model to call. Select from the dropdown for official models.' : 'actually called Kiro Model. Select an official model from the drop-down box.'}
                             </p>
                           </div>
                           <Button 
@@ -365,7 +365,7 @@ export function ModelMappingDialog({
                             className="h-7 text-xs"
                           >
                             <Plus className="h-3 w-3 mr-1" />
-                            {isEn ? 'Add' : '添加'}
+                            {isEn ? 'Add' : 'Add to'}
                           </Button>
                         </div>
                         <div className="space-y-2">
@@ -374,7 +374,7 @@ export function ModelMappingDialog({
                               <Input 
                                 value={target}
                                 onChange={(e) => updateTargetModel(rule.id, targetIndex, e.target.value)}
-                                placeholder={isEn ? 'Target model name' : '目标模型名'}
+                                placeholder={isEn ? 'Target model name' : 'target model name'}
                                 className="flex-1"
                               />
                               {availableModels.length > 0 && (
@@ -385,7 +385,7 @@ export function ModelMappingDialog({
                                     if (e.target.value) updateTargetModel(rule.id, targetIndex, e.target.value)
                                   }}
                                 >
-                                  <option value="">{isEn ? 'Select' : '选择'}</option>
+                                  <option value="">{isEn ? 'Select' : 'choose'}</option>
                                   {availableModels.map(m => (
                                     <option key={m.id} value={m.id}>{m.id}</option>
                                   ))}
@@ -393,7 +393,7 @@ export function ModelMappingDialog({
                               )}
                               {rule.type === 'loadbalance' && (
                                 <div className="flex items-center gap-1">
-                                  <Label className="text-xs whitespace-nowrap">{isEn ? 'Weight' : '权重'}</Label>
+                                  <Label className="text-xs whitespace-nowrap">{isEn ? 'Weight' : 'weight'}</Label>
                                   <Input 
                                     type="number"
                                     min={1}
@@ -420,7 +420,7 @@ export function ModelMappingDialog({
 
                       {apiKeys.length > 0 && (
                         <div className="space-y-2">
-                          <Label>{isEn ? 'Apply to API Keys (empty = all keys)' : '适用 API Key（空 = 所有 Key）'}</Label>
+                          <Label>{isEn ? 'Apply to API Keys (empty = all keys)' : 'Applicable API Key(null = all Key）'}</Label>
                           <div className="flex flex-wrap gap-2">
                             {apiKeys.map(key => (
                               <Badge 
@@ -442,14 +442,14 @@ export function ModelMappingDialog({
             )}
           </div>
 
-          {/* 底部操作栏 */}
+          {/* Bottom action bar */}
           <div className="flex justify-end gap-2 pt-4 border-t mt-4">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              {isEn ? 'Cancel' : '取消'}
+              {isEn ? 'Cancel' : 'Cancel'}
             </Button>
             <Button onClick={handleSave} disabled={loading}>
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {isEn ? 'Save' : '保存'}
+              {isEn ? 'Save' : 'save'}
             </Button>
           </div>
         </CardContent>

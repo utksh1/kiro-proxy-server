@@ -1,9 +1,9 @@
-// 共享英文姓名库与随机生成逻辑
-// 用于注册时生成更自然、低重复率的「全名」与「邮箱前缀」。
-// 名字主体覆盖大量常见英文名/姓，邮箱前缀模拟真实用户的命名习惯，避免一眼机器生成。
+// Shared English name database and random generation logic
+// Used to generate a more natural and low-duplication "full name" and "email prefix" when registering.
+// The name body covers a large number of common English names/The surname and email prefix simulate the naming habits of real users to avoid machine generation at a glance.
 
 export const FIRST_NAMES: readonly string[] = [
-  // 男性常见名
+  // common male names
   'James', 'Robert', 'John', 'Michael', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Charles',
   'Christopher', 'Daniel', 'Matthew', 'Anthony', 'Mark', 'Donald', 'Steven', 'Paul', 'Andrew', 'Joshua',
   'Kenneth', 'Kevin', 'Brian', 'George', 'Timothy', 'Ronald', 'Edward', 'Jason', 'Jeffrey', 'Ryan',
@@ -18,7 +18,7 @@ export const FIRST_NAMES: readonly string[] = [
   'Miguel', 'Antonio', 'Victor', 'Marcus', 'Travis', 'Cole', 'Blake', 'Shawn', 'Trevor', 'Spencer',
   'Devin', 'Colin', 'Drew', 'Grant', 'Theodore', 'Oliver', 'Liam', 'Lucas', 'Nathaniel', 'Adrian',
   'Dean', 'Derek', 'Evan', 'Fred', 'Harry', 'Hayden', 'Leo', 'Brad',
-  // 女性常见名
+  // common female names
   'Mary', 'Patricia', 'Jennifer', 'Linda', 'Barbara', 'Elizabeth', 'Susan', 'Jessica', 'Sarah', 'Karen',
   'Lisa', 'Nancy', 'Betty', 'Margaret', 'Sandra', 'Ashley', 'Dorothy', 'Kimberly', 'Emily', 'Donna',
   'Michelle', 'Carol', 'Amanda', 'Melissa', 'Deborah', 'Stephanie', 'Rebecca', 'Sharon', 'Laura', 'Cynthia',
@@ -57,7 +57,7 @@ export const LAST_NAMES: readonly string[] = [
   'Arnold', 'Pierce', 'Vazquez', 'Hansen', 'Peters', 'Santos', 'Hart'
 ]
 
-// 常见英文昵称（小写），仅用于邮箱前缀，模拟真人随意取名
+// Common English nicknames (lowercase), only used for email prefixes, simulating random names given by real people
 export const NICKNAMES: readonly string[] = [
   'mike', 'dave', 'chris', 'alex', 'sam', 'jess', 'kate', 'tom', 'nick', 'joe',
   'dan', 'matt', 'rob', 'will', 'ben', 'jen', 'liz', 'beth', 'andy', 'tony',
@@ -77,7 +77,7 @@ function pick<T>(arr: readonly T[]): T {
   return arr[randInt(arr.length)]
 }
 
-// 少量随机小写字母后缀（1-2 个），仅在基础名字组合时用于补足唯一性
+// A small number of random lowercase letter suffixes (1-2 ), only used to supplement uniqueness when combining basic names
 function randomLetters(): string {
   const n = 1 + randInt(2)
   let s = ''
@@ -85,7 +85,7 @@ function randomLetters(): string {
   return s
 }
 
-// 随机全名（用于注册显示名），偶尔带中间名首字母，进一步降低重复率
+// Random full name (used to register display name), occasionally with middle initial to further reduce duplication rates
 export function randomFullName(): string {
   const first = pick(FIRST_NAMES)
   const last = pick(LAST_NAMES)
@@ -96,8 +96,8 @@ export function randomFullName(): string {
   return `${first} ${last}`
 }
 
-// 随机邮箱前缀：以真实名字成分组合为主（中间名、双姓等，无数字无乱码、最像真人），
-// 少量基础组合补 1-2 个随机字母保证唯一，整体低重复且自然
+// Random email prefix: mainly a combination of real name components (middle name, double surname, etc., no numbers, no garbled characters, most like a real person),
+// A small amount of basic combination supplement 1-2 The random letters are guaranteed to be unique, and the overall low repetition and natural
 export function randomEmailPrefix(): string {
   const first = pick(FIRST_NAMES).toLowerCase()
   const last = pick(LAST_NAMES).toLowerCase()
@@ -110,14 +110,14 @@ export function randomEmailPrefix(): string {
 
   const r = Math.random()
 
-  // 约 72%：真实名字多成分组合，高度唯一且最自然
+  // about 72%: A multi-component combination of real names, highly unique and the most natural
   if (r < 0.72) {
     const s = pick(['.', '.', '.', '_'])
     return pick([
       `${first}${s}${middle}${s}${last}`, // john.michael.smith
       `${first}${s}${mi}${s}${last}`,     // john.m.smith
       `${first}${mi}${s}${last}`,         // johnm.smith
-      `${first}${s}${last}${s}${last2}`,  // john.smith.brown（双姓）
+      `${first}${s}${last}${s}${last2}`,  // john.smith.brown(double surname)
       `${fi}${s}${middle}${s}${last}`,    // j.michael.smith
       `${first}${s}${middle}`,            // john.michael
       `${middle}${s}${last}`,             // michael.smith
@@ -125,7 +125,7 @@ export function randomEmailPrefix(): string {
     ])
   }
 
-  // 约 18%：基础名字组合 + 1-2 个随机字母，兼顾自然与唯一
+  // about 18%:Basic name combination + 1-2 random letters, taking into account nature and uniqueness
   if (r < 0.9) {
     const base = pick([
       `${first}${last}`,
@@ -138,7 +138,7 @@ export function randomEmailPrefix(): string {
     return `${base}${randomLetters()}`
   }
 
-  // 约 10%：纯净名字组合（无任何后缀），保留少量最简洁写法
+  // about 10%: Pure name combination (without any suffix), retaining a few simplest writing methods
   return pick([
     `${first}.${last}`,
     `${first}${last}`,

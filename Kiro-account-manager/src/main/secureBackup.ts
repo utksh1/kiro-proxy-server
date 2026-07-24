@@ -1,10 +1,10 @@
-// 安全备份：用 Electron safeStorage（OS 级加密：Windows DPAPI / macOS Keychain / Linux libsecret）
-// 加密容灾备份文件，避免账号 token、代理账密以明文 JSON 落在磁盘上。
+// Safe backup: use Electron safeStorage（OS Level encryption:Windows DPAPI / macOS Keychain / Linux libsecret）
+// Encrypt disaster recovery backup files to avoid account token, agency account secret in clear text JSON falls on the disk.
 //
-// 策略：
-//   - 写：safeStorage 可用 → 写加密文件 *.backup.enc，并清理旧明文 *.backup.json
-//          不可用（极少数 Linux 无 keyring）→ 退回明文 JSON，保证容灾不丢
-//   - 读：优先解密 *.backup.enc；失败/不存在再读旧明文 *.backup.json（平滑迁移）
+// Strategy:
+//   - Write:safeStorage Available → Write encrypted files *.backup.enc, and clean up old plaintext *.backup.json
+//          Not available (very few Linux none keyring）→ Return clear text JSON, ensuring that disaster recovery is not lost
+//   - Read: Decrypt first *.backup.enc;fail/Read the old plaintext if it does not exist *.backup.json(smooth migration)
 
 import { safeStorage } from 'electron'
 import * as fs from 'fs/promises'
@@ -20,7 +20,7 @@ function legacyPath(dir: string): string {
   return path.join(dir, LEGACY_JSON_NAME)
 }
 
-/** safeStorage 是否真正可用（部分 Linux 环境无密钥环时返回 false） */
+/** safeStorage Is it really available (partial Linux Returned when the environment does not have a keyring false） */
 export function isSecureBackupAvailable(): boolean {
   try {
     return safeStorage.isEncryptionAvailable()
@@ -29,33 +29,33 @@ export function isSecureBackupAvailable(): boolean {
   }
 }
 
-/** 写备份：优先加密；不可用则退回明文 JSON 以保证容灾不丢 */
+/** Write backup: Prioritize encryption; if unavailable, return to plain text JSON To ensure that disaster recovery is not lost */
 export async function writeSecureBackup(dir: string, data: unknown): Promise<void> {
   const json = JSON.stringify(data)
   if (isSecureBackupAvailable()) {
     const enc = safeStorage.encryptString(json)
     await fs.writeFile(encPath(dir), enc)
-    // 清理旧的明文备份，避免明文长期残留
-    try { await fs.unlink(legacyPath(dir)) } catch { /* 不存在则忽略 */ }
+    // Clean up old plaintext backups to avoid long-term retention of plaintext
+    try { await fs.unlink(legacyPath(dir)) } catch { /* Ignore if it does not exist */ }
     return
   }
-  // 兜底：环境不支持加密时仍写明文，优先保证不丢数据
+  // Get the bottom line: Even if the environment does not support encryption, still write plain text, and give priority to ensuring that no data is lost.
   await fs.writeFile(legacyPath(dir), JSON.stringify(data, null, 2), 'utf-8')
 }
 
-/** 读备份：优先解密 .enc，失败再读旧明文 .json。返回 null 表示无可用备份 */
+/** Read backup: decrypt first .enc, fail and read the old plaintext again .json. return null Indicates no backup available */
 export async function readSecureBackup(dir: string): Promise<unknown | null> {
-  // 1) 加密备份
+  // 1) Encrypted backup
   if (isSecureBackupAvailable()) {
     try {
       const buf = await fs.readFile(encPath(dir))
       const json = safeStorage.decryptString(buf)
       return JSON.parse(json)
     } catch {
-      /* .enc 不存在或解密失败 → 尝试明文 */
+      /* .enc Does not exist or decryption failed → try plaintext */
     }
   }
-  // 2) 旧明文备份（平滑迁移）
+  // 2) Old plain text backup (smooth migration)
   try {
     const content = await fs.readFile(legacyPath(dir), 'utf-8')
     return JSON.parse(content)

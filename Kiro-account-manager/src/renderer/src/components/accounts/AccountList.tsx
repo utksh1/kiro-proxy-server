@@ -12,9 +12,9 @@ interface AccountListProps {
   onEditAccount: (account: Account) => void
 }
 
-// 列表行高度（紧凑型，对齐卡片视觉细节）
+// List row height (compact, aligned card visual details)
 const ROW_HEIGHT = 72
-// 行间距（为 active-glow-border 和 box-shadow 留呼吸空间）
+// line spacing (for active-glow-border and box-shadow Leave breathing room)
 const ROW_GAP = 10
 
 export function AccountList({ onAddAccount, onEditAccount }: AccountListProps): React.ReactNode {
@@ -50,7 +50,7 @@ export function AccountList({ onAddAccount, onEditAccount }: AccountListProps): 
     }
   }
 
-  // 虚拟列表（每项含一个行高 + 间距）
+  // Virtual list (each item has a row height + spacing)
   const virtualizer = useVirtualizer({
     count: accounts.length,
     getScrollElement: () => parentRef.current,
@@ -100,7 +100,7 @@ export function AccountList({ onAddAccount, onEditAccount }: AccountListProps): 
           )
         })}
 
-        {/* 列表底部「添加账号」按钮 */}
+        {/* "Add Account" button at the bottom of the list */}
         {accounts.length > 0 && (
           <div
             style={{
@@ -116,29 +116,29 @@ export function AccountList({ onAddAccount, onEditAccount }: AccountListProps): 
               className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-muted-foreground/20 rounded-lg text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-colors"
             >
               <Plus className="h-4 w-4" />
-              <span className="text-sm">{isEn ? 'Add Account' : '添加账号'}</span>
+              <span className="text-sm">{isEn ? 'Add Account' : 'Add account'}</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* 空状态 */}
+      {/* Empty state */}
       {accounts.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-muted-foreground mb-4">{isEn ? 'No accounts yet' : '暂无账号'}</p>
+            <p className="text-muted-foreground mb-4">{isEn ? 'No accounts yet' : 'No account yet'}</p>
             <button
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={onAddAccount}
             >
               <Plus className="h-4 w-4" />
-              {isEn ? 'Add First Account' : '添加第一个账号'}
+              {isEn ? 'Add First Account' : 'Add first account'}
             </button>
           </div>
         </div>
       )}
 
-      {/* 账号详情对话框 */}
+      {/* Account details dialog box */}
       <AccountDetailDialog
         open={!!detailAccount}
         onOpenChange={(open) => !open && setDetailAccount(null)}

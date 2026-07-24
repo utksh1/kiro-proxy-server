@@ -1,5 +1,5 @@
 // ============================================
-// 多账号管理器类型定义
+// Multiple account manager type definition
 // ============================================
 
 export type IdpType = 'Google' | 'Github' | 'BuilderId' | 'Enterprise' | 'AWSIdC' | 'Internal' | 'IAM_SSO'
@@ -9,24 +9,24 @@ export type SubscriptionType = 'Free' | 'Pro' | 'Pro_Plus' | 'Enterprise' | 'Tea
 export type AccountStatus = 'active' | 'expired' | 'error' | 'refreshing' | 'unknown'
 
 /**
- * 账号凭证信息
+ * Account credential information
  */
 export interface AccountCredentials {
   accessToken: string
   csrfToken: string
   refreshToken?: string
-  clientId?: string      // OIDC 客户端 ID（用于刷新 token）
-  clientSecret?: string  // OIDC 客户端密钥
-  region?: string        // AWS 区域，默认 us-east-1
-  startUrl?: string      // SSO Start URL（Enterprise 账户专用）
-  expiresAt: number      // 时间戳
-  authMethod?: 'IdC' | 'social'  // 认证方式：IdC (BuilderId/Enterprise) 或 social (GitHub/Google)
-  provider?: 'BuilderId' | 'Enterprise' | 'Github' | 'Google' | 'IAM_SSO'  // 身份提供商
-  profileArn?: string    // Enterprise 真实 profileArn（从 ListAvailableProfiles 获取）
+  clientId?: string      // OIDC client ID(for refreshing token）
+  clientSecret?: string  // OIDC client key
+  region?: string        // AWS zone, default us-east-1
+  startUrl?: string      // SSO Start URL（Enterprise account only)
+  expiresAt: number      // Timestamp
+  authMethod?: 'IdC' | 'social'  // Authentication method:IdC (BuilderId/Enterprise) or social (GitHub/Google)
+  provider?: 'BuilderId' | 'Enterprise' | 'Github' | 'Google' | 'IAM_SSO'  // identity provider
+  profileArn?: string    // Enterprise reality profileArn(from ListAvailableProfiles Get)
 }
 
 /**
- * 奖励额度信息
+ * Reward amount information
  */
 export interface BonusUsage {
   code: string
@@ -37,40 +37,40 @@ export interface BonusUsage {
 }
 
 /**
- * 账号使用量信息
+ * Account usage information
  */
 export interface AccountUsage {
   current: number
   limit: number
   percentUsed: number
   lastUpdated: number
-  // 详细额度分解
-  baseLimit?: number      // 基础额度
-  baseCurrent?: number    // 基础已用
-  freeTrialLimit?: number // 试用额度
+  // Detailed credit breakdown
+  baseLimit?: number      // Basic amount
+  baseCurrent?: number    // Basic used
+  freeTrialLimit?: number // Trial amount
   freeTrialCurrent?: number
   freeTrialExpiry?: string
-  bonuses?: BonusUsage[]  // 奖励额度列表
-  nextResetDate?: string  // 重置日期
-  resourceDetail?: ResourceDetail // 资源详情
+  bonuses?: BonusUsage[]  // Reward amount list
+  nextResetDate?: string  // reset date
+  resourceDetail?: ResourceDetail // Resource details
 }
 
 /**
- * 账号订阅信息
+ * Account subscription information
  */
 export interface AccountSubscription {
   type: SubscriptionType
-  title?: string // 原始订阅标题，如 "KIRO PRO+"
-  rawType?: string // 原始订阅类型，如 "Q_DEVELOPER_STANDALONE_PRO_PLUS"
-  expiresAt?: number // 订阅到期时间戳
+  title?: string // Original subscription title, such as "KIRO PRO+"
+  rawType?: string // The original subscription type, such as "Q_DEVELOPER_STANDALONE_PRO_PLUS"
+  expiresAt?: number // Subscription expiration timestamp
   daysRemaining?: number
-  upgradeCapability?: string // 可升级能力
-  overageCapability?: string // 超额能力
-  managementTarget?: string // 订阅管理目标
+  upgradeCapability?: string // Upgradeability
+  overageCapability?: string // excess capacity
+  managementTarget?: string // Subscription management goals
 }
 
 /**
- * 资源使用详情
+ * Resource usage details
  */
 export interface ResourceDetail {
   resourceType?: string // CREDIT
@@ -84,7 +84,7 @@ export interface ResourceDetail {
 }
 
 /**
- * 账号标签
+ * Account label
  */
 export interface AccountTag {
   id: string
@@ -93,46 +93,46 @@ export interface AccountTag {
 }
 
 /**
- * 账号实体
+ * Account entity
  */
 export interface Account {
-  // 基本信息
+  // Basic information
   id: string
   email: string
-  password?: string // 注册密码（卡密导出/导入用）
-  nickname?: string // 自定义别名
+  password?: string // Registration password (card password export/for import)
+  nickname?: string // Custom alias
   idp: IdpType
   userId?: string
   visitorId?: string
-  machineId?: string // 账户绑定的设备 ID（64位十六进制）
+  machineId?: string // Device bound to the account ID（64bit hexadecimal)
   profileArn?: string // AWS Profile ARN
 
-  // 认证信息
+  // Certification information
   credentials: AccountCredentials
 
-  // 订阅信息
+  // Subscription information
   subscription: AccountSubscription
 
-  // 使用量
+  // Usage
   usage: AccountUsage
 
-  // 分组和标签
+  // Grouping and labeling
   groupId?: string
   tags: string[] // tag ids
 
-  // 状态
+  // state
   status: AccountStatus
   lastError?: string
-  isActive: boolean // 是否为当前激活账号
+  isActive: boolean // Is it the currently activated account?
 
-  // 时间戳
+  // Timestamp
   createdAt: number
   lastUsedAt: number
-  lastCheckedAt?: number // 上次状态检查时间
+  lastCheckedAt?: number // Last status check time
 }
 
 /**
- * 账号分组
+ * Account grouping
  */
 export interface AccountGroup {
   id: string
@@ -144,25 +144,25 @@ export interface AccountGroup {
 }
 
 /**
- * 筛选条件
+ * Filter criteria
  */
 export interface AccountFilter {
-  search?: string // 搜索关键词（邮箱/别名）
+  search?: string // Search keywords (email/alias)
   subscriptionTypes?: SubscriptionType[]
   statuses?: AccountStatus[]
   idps?: IdpType[]
   groupIds?: string[]
   tagIds?: string[]
-  emailDomains?: string[] // 邮箱域名后缀（@ 之后的部分，小写）
-  usageMin?: number // 使用量百分比
+  emailDomains?: string[] // Email domain name suffix (@ The following part, lowercase)
+  usageMin?: number // Usage percentage
   usageMax?: number
   daysRemainingMin?: number
   daysRemainingMax?: number
-  bannedOnly?: boolean // 仅显示封禁账号
+  bannedOnly?: boolean // Show only banned accounts
 }
 
 /**
- * 排序选项
+ * Sorting options
  */
 export type SortField =
   | 'email'
@@ -182,7 +182,7 @@ export interface AccountSort {
 }
 
 /**
- * 导入/导出格式
+ * import/Export format
  */
 export interface AccountExportData {
   version: string
@@ -193,7 +193,7 @@ export interface AccountExportData {
 }
 
 /**
- * 账号导入项（简化格式）
+ * Account import items (simplified format)
  */
 export interface AccountImportItem {
   email: string
@@ -211,7 +211,7 @@ export interface AccountImportItem {
 }
 
 /**
- * 批量操作结果
+ * Batch operation results
  */
 export interface BatchOperationResult {
   success: number
@@ -220,7 +220,7 @@ export interface BatchOperationResult {
 }
 
 /**
- * 账号统计
+ * Account statistics
  */
 export interface AccountStats {
   total: number
@@ -228,6 +228,6 @@ export interface AccountStats {
   bySubscription: Record<SubscriptionType, number>
   byIdp: Record<IdpType, number>
   activeCount: number
-  expiringSoonCount: number // 7天内到期
-  bannedCount: number // 封禁账号数
+  expiringSoonCount: number // 7Expires within days
+  bannedCount: number // Number of banned accounts
 }

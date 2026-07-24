@@ -28,7 +28,6 @@ import {
 import { openaiToKiro } from './proxy/translator'
 import { getSystemProxy, safeCreateProxyAgent } from './proxy/systemProxy'
 import { proxyLogStore, interceptConsole } from './proxy/logger'
-import { registerIPCHandlers as registerRegistrationHandlers } from './registration/ipc-handlers'
 import { registerProxyPoolIpcHandlers } from './ipc/proxyPool'
 import {
   createTray,
@@ -42,24 +41,24 @@ import {
   defaultTraySettings
 } from './tray'
 
-// ============ 自动更新配置 ============
+// ============ Automatically update configuration ============
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
 
 function setupAutoUpdater(): void {
-  // 检查更新出错
+  // Error checking for updates
   autoUpdater.on('error', (error) => {
     console.error('[AutoUpdater] Error:', error)
     mainWindow?.webContents.send('update-error', error.message)
   })
 
-  // 检查更新中
+  // Checking for updates
   autoUpdater.on('checking-for-update', () => {
     console.log('[AutoUpdater] Checking for update...')
     mainWindow?.webContents.send('update-checking')
   })
 
-  // 有可用更新
+  // Updates available
   autoUpdater.on('update-available', (info) => {
     console.log('[AutoUpdater] Update available:', info.version)
     mainWindow?.webContents.send('update-available', {
@@ -69,13 +68,13 @@ function setupAutoUpdater(): void {
     })
   })
 
-  // 没有可用更新
+  // No updates available
   autoUpdater.on('update-not-available', (info) => {
     console.log('[AutoUpdater] No update available, current:', info.version)
     mainWindow?.webContents.send('update-not-available', { version: info.version })
   })
 
-  // 下载进度
+  // Download progress
   autoUpdater.on('download-progress', (progress) => {
     console.log(`[AutoUpdater] Download progress: ${progress.percent.toFixed(1)}%`)
     mainWindow?.webContents.send('update-download-progress', {
@@ -86,7 +85,7 @@ function setupAutoUpdater(): void {
     })
   })
 
-  // 下载完成
+  // Download completed
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[AutoUpdater] Update downloaded:', info.version)
     mainWindow?.webContents.send('update-downloaded', {
@@ -97,37 +96,37 @@ function setupAutoUpdater(): void {
   })
 }
 
-// ============ Kiro API 调用 ============
+// ============ Kiro API call ============
 const KIRO_API_BASE = 'https://app.kiro.dev/service/KiroWebPortalService/operation'
-// REST API 端点配置 - 官方 Kiro 插件仅支持 us-east-1 和 eu-central-1
+// REST API Endpoint configuration - official Kiro The plugin only supports us-east-1 and eu-central-1
 const KIRO_REST_API_ENDPOINTS: Record<string, string> = {
   'us-east-1': 'https://q.us-east-1.amazonaws.com',
   'eu-central-1': 'https://q.eu-central-1.amazonaws.com'
 }
 
-// 根据 SSO 区域映射到最近的 REST API 端点
+// according to SSO area mapped to the nearest REST API endpoint
 function getRestApiBase(ssoRegion?: string): string {
   if (!ssoRegion) return KIRO_REST_API_ENDPOINTS['us-east-1']
-  // 如果是支持的端点区域，直接使用
+  // If it is a supported endpoint area, use it directly
   if (KIRO_REST_API_ENDPOINTS[ssoRegion]) return KIRO_REST_API_ENDPOINTS[ssoRegion]
-  // EU 区域映射到 eu-central-1
+  // EU area mapped to eu-central-1
   if (ssoRegion.startsWith('eu-')) return KIRO_REST_API_ENDPOINTS['eu-central-1']
-  // 其他区域默认 us-east-1
+  // Default for other areas us-east-1
   return KIRO_REST_API_ENDPOINTS['us-east-1']
 }
 
-// 获取备用 REST API 端点（用于 fallback）
+// Get backup REST API endpoint (for fallback）
 function getFallbackRestApiBase(ssoRegion?: string): string {
   const primary = getRestApiBase(ssoRegion)
-  // 返回另一个端点作为 fallback
+  // Return another endpoint as fallback
   return primary === KIRO_REST_API_ENDPOINTS['eu-central-1']
     ? KIRO_REST_API_ENDPOINTS['us-east-1']
     : KIRO_REST_API_ENDPOINTS['eu-central-1']
 }
 
-// API 类型配置
+// API Type configuration
 type UsageApiType = 'rest' | 'cbor'
-let currentUsageApiType: UsageApiType = 'rest' // 默认使用 REST API (GetUsageLimits)
+let currentUsageApiType: UsageApiType = 'rest' // Used by default REST API (GetUsageLimits)
 
 export function setUsageApiType(type: UsageApiType): void {
   currentUsageApiType = type
@@ -138,12 +137,12 @@ export function getUsageApiType(): UsageApiType {
   return currentUsageApiType
 }
 
-// 是否使用 K-Proxy 代理发送 API 请求
+// Whether to use K-Proxy Send as agent API ask
 let useKProxyForApi: boolean = false
 
 export function setUseKProxyForApi(enabled: boolean): void {
   useKProxyForApi = enabled
-  // 同步设置到 kiroApi.ts
+  // Sync settings to kiroApi.ts
   setUseKProxyForApiInProxy(enabled)
   console.log(`[API] Use K-Proxy for API requests: ${enabled}`)
 }
@@ -152,7 +151,7 @@ export function getUseKProxyForApi(): boolean {
   return useKProxyForApi
 }
 
-// 获取网络代理 agent（优先 K-Proxy，其次用户设置代理，其次系统代理）
+// Get network proxy agent(priority K-Proxy, secondly the user sets the proxy, then the system proxy)
 function getNetworkAgent(): Dispatcher | undefined {
   if (useKProxyForApi) {
     const kproxyService = getKProxyService()
@@ -170,19 +169,19 @@ function getNetworkAgent(): Dispatcher | undefined {
 }
 
 /**
- * 通用 fetch 函数
- * @param url 请求 URL
- * @param options fetch 选项
- * @param overrideProxyUrl 可选：账号绑定的代理 URL（优先级最高，覆盖全局代理逻辑）
+ * Universal fetch function
+ * @param url ask URL
+ * @param options fetch Options
+ * @param overrideProxyUrl Optional: Agent bound to the account URL(Highest priority, covering global proxy logic)
  *
- * 优先级：overrideProxyUrl > K-Proxy > 用户设置代理 > 系统代理 > 直连
+ * Priority:overrideProxyUrl > K-Proxy > User settings proxy > system agent > direct connection
  */
 async function fetchWithAppProxy(
   url: string,
   options: RequestInit,
   overrideProxyUrl?: string
 ): Promise<Response> {
-  // 优先尝试账号绑定代理
+  // Prioritize trying to bind the account to the agent
   if (overrideProxyUrl) {
     const accountAgent = safeCreateProxyAgent(overrideProxyUrl)
     if (accountAgent) {
@@ -196,12 +195,12 @@ async function fetchWithAppProxy(
   return await fetch(url, options)
 }
 
-// 兼容函数，指向 getNetworkAgent
+// Compatibility function, pointing to getNetworkAgent
 function getKProxyAgent(): Dispatcher | undefined {
   return getNetworkAgent()
 }
 
-// ============ OIDC Token 刷新 ============
+// ============ OIDC Token refresh ============
 interface OidcRefreshResult {
   success: boolean
   accessToken?: string
@@ -210,32 +209,32 @@ interface OidcRefreshResult {
   error?: string
 }
 
-// 社交登录 (GitHub/Google) 的 Token 刷新端点
+// social login (GitHub/Google) of Token refresh endpoint
 const KIRO_AUTH_ENDPOINT = 'https://prod.us-east-1.auth.desktop.kiro.dev'
 
-// ============ 代理设置 ============
+// ============ proxy settings ============
 
 /**
- * 规范化代理 URL，确保 protocol://host:port 格式。
- * 容错处理用户常见的格式错误：
- *   http:127.0.0.1:7890     → http://127.0.0.1:7890   (缺 //)
- *   http:/127.0.0.1:7890    → http://127.0.0.1:7890   (单 /)
- *   127.0.0.1:7890          → http://127.0.0.1:7890   (无 protocol)
- *   http://127.0.0.1:7890   → http://127.0.0.1:7890   (已规范)
+ * normalized proxy URL,make sure protocol://host:port Format.
+ * Error-tolerant handling of common format errors by users:
+ *   http:127.0.0.1:7890     → http://127.0.0.1:7890   (lack //)
+ *   http:/127.0.0.1:7890    → http://127.0.0.1:7890   (one /)
+ *   127.0.0.1:7890          → http://127.0.0.1:7890   (none protocol)
+ *   http://127.0.0.1:7890   → http://127.0.0.1:7890   (Standardized)
  */
 export function normalizeProxyUrl(url: string): string {
   const trimmed = (url || '').trim()
   if (!trimmed) return ''
-  // 已是标准 protocol:// 前缀
+  // Already the standard protocol:// prefix
   if (/^[a-z][a-z0-9+\-.]*:\/\//i.test(trimmed)) return trimmed
-  // 有 protocol: 但缺/少 //
+  // have protocol: But missing/few //
   const m = trimmed.match(/^([a-z][a-z0-9+\-.]*):(\/*)(.+)$/i)
   if (m) return `${m[1]}://${m[3]}`
-  // 无 protocol，默认 http
+  // none protocol,default http
   return `http://${trimmed}`
 }
 
-// 设置代理环境变量
+// Set proxy environment variables
 function applyProxySettings(enabled: boolean, url: string): void {
   if (enabled && url) {
     const normalized = normalizeProxyUrl(url)
@@ -244,7 +243,7 @@ function applyProxySettings(enabled: boolean, url: string): void {
     process.env.http_proxy = normalized
     process.env.https_proxy = normalized
     if (normalized !== url) {
-      console.log(`[Proxy] Enabled: ${normalized} (规范化自: ${url})`)
+      console.log(`[Proxy] Enabled: ${normalized} (Normalized from: ${url})`)
     } else {
       console.log(`[Proxy] Enabled: ${normalized}`)
     }
@@ -257,10 +256,10 @@ function applyProxySettings(enabled: boolean, url: string): void {
   }
 }
 
-// ============ 防抖 store 写入（减少磁盘 I/O） ============
+// ============ Anti-shake store write (reduce disk I/O） ============
 const pendingStoreWrites: Map<string, unknown> = new Map()
 let storeFlushTimer: ReturnType<typeof setTimeout> | null = null
-const STORE_FLUSH_INTERVAL = 5000 // 5 秒批量写入一次
+const STORE_FLUSH_INTERVAL = 5000 // 5 Write in batches once per second
 
 function debouncedStoreSet(key: string, value: unknown): void {
   pendingStoreWrites.set(key, value)
@@ -288,32 +287,32 @@ function debouncedUpdateTrayMenu(): void {
   }, 3000)
 }
 
-// ============ Kiro API 反代服务器 ============
+// ============ Kiro API Anti-generation server ============
 let proxyServer: ProxyServer | null = null
 
 function initProxyServer(): ProxyServer {
   if (proxyServer) return proxyServer
 
-  // 确保日志存储已初始化（app.whenReady 中已调用，此处兜底）
+  // Make sure the log storage is initialized (app.whenReady has been called, here is the bottom line)
   proxyLogStore.initialize(app.getPath('userData'))
 
-  // 从 store 加载保存的配置，如果没有则使用默认配置
+  // from store Load the saved configuration, or use the default configuration if not available
   const savedConfig = store?.get('proxyConfig') as Partial<ProxyConfig> | undefined
-  // 从 store 加载保存的 Usage API 类型
+  // from store load saved Usage API type
   const savedUsageApiType = store?.get('usageApiType') as 'rest' | 'cbor' | undefined
   if (savedUsageApiType) {
     setUsageApiType(savedUsageApiType)
   }
-  // 从 store 加载保存的 K-Proxy 代理设置
+  // from store load saved K-Proxy proxy settings
   const savedUseKProxyForApi = store?.get('useKProxyForApi') as boolean | undefined
   if (savedUseKProxyForApi !== undefined) {
     setUseKProxyForApi(savedUseKProxyForApi)
   }
-  // 从 store 加载保存的累计 credits 和 tokens
+  // from store Load saved totals credits and tokens
   const savedTotalCredits = (store?.get('proxyTotalCredits') as number) || 0
   const savedInputTokens = (store?.get('proxyInputTokens') as number) || 0
   const savedOutputTokens = (store?.get('proxyOutputTokens') as number) || 0
-  // 从 store 加载保存的请求统计
+  // from store Load saved request statistics
   const savedTotalRequests = (store?.get('proxyTotalRequests') as number) || 0
   const savedSuccessRequests = (store?.get('proxySuccessRequests') as number) || 0
   const savedFailedRequests = (store?.get('proxyFailedRequests') as number) || 0
@@ -327,25 +326,25 @@ function initProxyServer(): ProxyServer {
     maxConcurrent: 10,
     maxRetries: 3,
     retryDelayMs: 1000,
-    tokenRefreshBeforeExpiry: 300, // 5分钟提前刷新
+    tokenRefreshBeforeExpiry: 300, // 5Refresh minutes in advance
     clientDrivenToolExecution: true,
     enableTokenBufferReserve: false,
     tokenBufferReserve: 20000
   }
   
-  // 合并保存的配置和默认配置
+  // Merge saved configuration with default configuration
   const config: ProxyConfig = savedConfig ? { ...defaultConfig, ...savedConfig } : defaultConfig
 
-  // 恢复 payload 大小限制
+  // recover payload size limit
   if (config.payloadSizeLimitKB) {
     setPayloadSizeLimitKB(config.payloadSizeLimitKB)
   }
-  // 恢复 Token buffer reserve（开关 + 数值）
+  // recover Token buffer reserve(switch + numerical value)
   setEnableTokenBufferReserve(config.enableTokenBufferReserve === true)
   if (config.tokenBufferReserve) {
     setTokenBufferReserve(config.tokenBufferReserve)
   }
-  // 恢复 Agent 模式（vibe / spec）
+  // recover Agent model(vibe / spec）
   if (config.agentMode) {
     setAgentMode(config.agentMode)
   }
@@ -366,7 +365,7 @@ function initProxyServer(): ProxyServer {
       onStatusChange: (running, port) => {
         mainWindow?.webContents.send('proxy-status-change', { running, port })
       },
-      // Token 刷新回调 - 复用已有的刷新逻辑，含账号绑定代理
+      // Token refresh callback - Reuse existing refresh logic, including account binding agent
       onTokenRefresh: async (account) => {
         try {
           console.log(`[ProxyServer] Refreshing token for ${account.email || account.id}${account.proxyUrl ? ' [via bound proxy]' : ''}`)
@@ -376,7 +375,7 @@ function initProxyServer(): ProxyServer {
             account.clientSecret || '',
             account.region || 'us-east-1',
             account.authMethod,
-            account.proxyUrl  // 账号绑定的代理（如有）
+            account.proxyUrl  // Agent bound to the account (if any)
           )
 
           if (refreshResult.success && refreshResult.accessToken) {
@@ -387,12 +386,12 @@ function initProxyServer(): ProxyServer {
               expiresAt: Date.now() + (refreshResult.expiresIn || 3600) * 1000
             }
           }
-          return { success: false, error: refreshResult.error || 'Token 刷新失败' }
+          return { success: false, error: refreshResult.error || 'Token Refresh failed' }
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
         }
       },
-      // 账号更新回调 - 通知渲染进程更新账号数据
+      // Account update callback - Notify the rendering process to update account data
       onAccountUpdate: (account) => {
         mainWindow?.webContents.send('proxy-account-update', {
           id: account.id,
@@ -401,11 +400,11 @@ function initProxyServer(): ProxyServer {
           expiresAt: account.expiresAt
         })
       },
-      // 账号被 Kiro 后端长期封禁 - 通知渲染进程标记 lastError + 持久化到 store
-      // 不同于 token 失效，需要人工解封；账号池已自动跳过该账号
+      // The account was Kiro Backend long-term ban - Notify rendering process flag lastError + persist to store
+      // different from token Invalid and needs to be manually unblocked; the account pool has automatically skipped the account
       onAccountSuspended: (info) => {
         console.warn(`[ProxyServer] Account suspended: ${info.email || info.accountId} (${info.reason})`)
-        // 推送 IPC 事件给前端 store
+        // push IPC Events to the front end store
         mainWindow?.webContents.send('proxy-account-suspended', {
           id: info.accountId,
           email: info.email,
@@ -413,9 +412,9 @@ function initProxyServer(): ProxyServer {
           message: info.message,
           suspendedAt: Date.now()
         })
-        // 持久化封禁状态：依赖 renderer store 接收 IPC 后通过 saveToStorage 防抖落盘，
-        // 主进程仅在 lastSavedData 内存快照上做轻量更新，避免每次封禁都触发整库加解密 IO。
-        // 这能从根本上消除频繁封禁场景下的主进程阻塞（旧代码 store.get + store.set 各做一次 AES 全库加解密）
+        // Persistent ban status: dependency renderer store take over IPC After passing saveToStorage Anti-shake drop plate,
+        // The main process is only in lastSavedData Perform light updates on memory snapshots to avoid triggering encryption and decryption of the entire database every time a ban is issued IO。
+        // This can fundamentally eliminate main process blocking in frequent ban scenarios (old code store.get + store.set Do it once each AES Full database encryption and decryption)
         if (lastSavedData && typeof lastSavedData === 'object') {
           try {
             const data = lastSavedData as { accounts?: Record<string, Record<string, unknown>> }
@@ -432,24 +431,24 @@ function initProxyServer(): ProxyServer {
           }
         }
       },
-      // Credits 更新回调 - 使用防抖持久化
+      // Credits update callback - Use anti-shake persistence
       onCreditsUpdate: (totalCredits) => {
         debouncedStoreSet('proxyTotalCredits', totalCredits)
       },
-      // Tokens 更新回调 - 使用防抖持久化
+      // Tokens update callback - Use anti-shake persistence
       onTokensUpdate: (inputTokens, outputTokens) => {
         debouncedStoreSet('proxyInputTokens', inputTokens)
         debouncedStoreSet('proxyOutputTokens', outputTokens)
       },
-      // 请求统计更新回调 - 使用防抖持久化
+      // Request statistics update callback - Use anti-shake persistence
       onRequestStatsUpdate: (totalRequests, successRequests, failedRequests) => {
         debouncedStoreSet('proxyTotalRequests', totalRequests)
         debouncedStoreSet('proxySuccessRequests', successRequests)
         debouncedStoreSet('proxyFailedRequests', failedRequests)
-        // 更新托盘菜单（也防抖，避免频繁重建菜单）
+        // Update tray menu (also anti-shake to avoid frequent menu rebuilding)
         debouncedUpdateTrayMenu()
       },
-      // 账号池为空时懒加载 - 从 store 读取账号数据同步到 pool
+      // Lazy loading when the account pool is empty - from store Read account data and synchronize to pool
       onPoolEmpty: async () => {
         await initStore()
         if (!store) return
@@ -460,7 +459,7 @@ function initProxyServer(): ProxyServer {
         } | undefined
         if (!accountData?.accounts) return
 
-        // 构建 accountId → proxyUrl 映射（用于反代时 N:1 分桶）
+        // Build accountId → proxyUrl Mapping (used for anti-generation N:1 Bucketing)
         const bindings = accountData.accountProxyBindings || {}
         const proxyPool = accountData.proxyPool || {}
         const buildProxyUrl = (accountId: string): string | undefined => {
@@ -498,20 +497,20 @@ function initProxyServer(): ProxyServer {
     }
   )
 
-  // P1-6 注入 webhook 触发器：让反代关键事件（封号 / 全员配额耗尽 / 限流）能推送通知
+  // P1-6 injection webhook Trigger: Let the key event of anti-generation (account ban / All quotas exhausted / Current limit) can push notifications
   proxyServer.setWebhookTrigger((event, payload) => {
-    // 通过 IPC 转发到 renderer，由 useWebhookStore.triggerEvent 实际发送
+    // pass IPC forward to renderer,Depend on useWebhookStore.triggerEvent actually sent
     mainWindow?.webContents.send('proxy-webhook-trigger', { event, payload })
   })
 
-  // Enterprise profileArn 自愈持久化：运行时首次解析出真实 profileArn 时，
-  // 回写到账号池 + 内存快照 + 通知 renderer 落盘，避免每次请求重复获取。
+  // Enterprise profileArn Self-healing persistence: Reality is resolved for the first time at runtime profileArn hour,
+  // Write back to account pool + memory snapshot + notify renderer Place it on the disk to avoid repeated acquisition for each request.
   setProfileArnPersistCallback((accountId, profileArn) => {
     try {
       proxyServer?.getAccountPool().updateAccount(accountId, { profileArn })
-      // 推送 IPC，让 renderer store 把 profileArn 写入账号数据
+      // push IPC,let renderer store Bundle profileArn Write account data
       mainWindow?.webContents.send('proxy-account-update', { id: accountId, profileArn })
-      // 同步更新内存快照，确保下次整库落盘时带上 profileArn
+      // Synchronously update the memory snapshot to ensure that the entire database is brought to disk next time profileArn
       if (lastSavedData && typeof lastSavedData === 'object') {
         const data = lastSavedData as { accounts?: Record<string, Record<string, unknown>> }
         if (data.accounts?.[accountId]) {
@@ -524,34 +523,34 @@ function initProxyServer(): ProxyServer {
     }
   })
 
-  // 恢复保存的累计 credits
+  // Restore saved totals credits
   if (savedTotalCredits > 0) {
     proxyServer.setTotalCredits(savedTotalCredits)
   }
 
-  // 恢复保存的累计 tokens
+  // Restore saved totals tokens
   if (savedInputTokens > 0 || savedOutputTokens > 0) {
     proxyServer.setTotalTokens(savedInputTokens, savedOutputTokens)
   }
 
-  // 恢复保存的请求统计
+  // Restore saved request statistics
   if (savedTotalRequests > 0 || savedSuccessRequests > 0 || savedFailedRequests > 0) {
     proxyServer.setRequestStats(savedTotalRequests, savedSuccessRequests, savedFailedRequests)
   }
 
-  // 加载 Steering 文件（如果配置了工作区路径）
+  // load Steering File (if workspace path is configured)
   proxyServer.loadSteering()
 
   return proxyServer
 }
 
-// ============ 隐私模式打开浏览器 ============
+// ============ Open browser in private mode ============
 import { exec, execSync } from 'child_process'
 
-// 获取 Windows 默认浏览器
+// get Windows Default browser
 function getWindowsDefaultBrowser(): string {
   try {
-    // 从注册表读取默认浏览器
+    // Read default browser from registry
     const progId = execSync(
       'reg query "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice" /v ProgId',
       { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
@@ -569,14 +568,14 @@ function getWindowsDefaultBrowser(): string {
   }
 }
 
-// 使用隐私模式打开浏览器
+// Open your browser in private mode
 function openBrowserInPrivateMode(url: string): void {
   const platform = process.platform
   console.log(`[Browser] Opening in private mode on ${platform}: ${url}`)
 
   try {
     if (platform === 'win32') {
-      // Windows: 检测默认浏览器并使用对应的隐私模式参数
+      // Windows: Detect default browser and use corresponding privacy mode parameters
       const defaultBrowser = getWindowsDefaultBrowser()
       console.log(`[Browser] Detected default browser: ${defaultBrowser}`)
       
@@ -598,7 +597,7 @@ function openBrowserInPrivateMode(url: string): void {
           command = `start opera --private "${url}"`
           break
         default:
-          // 未知浏览器，尝试常见浏览器
+          // Unknown browser, try a common browser
           console.log('[Browser] Unknown default browser, trying common browsers...')
           exec(`start chrome --incognito "${url}"`, (err) => {
             if (err) {
@@ -624,7 +623,7 @@ function openBrowserInPrivateMode(url: string): void {
         }
       })
     } else if (platform === 'darwin') {
-      // macOS: 尝试 Chrome -> Firefox -> 默认浏览器
+      // macOS: try Chrome -> Firefox -> Default browser
       exec(`open -na "Google Chrome" --args --incognito "${url}"`, (err) => {
         if (err) {
           exec(`open -a Firefox --args -private-window "${url}"`, (err2) => {
@@ -636,7 +635,7 @@ function openBrowserInPrivateMode(url: string): void {
         }
       })
     } else {
-      // Linux: 尝试 Chrome -> Chromium -> Firefox
+      // Linux: try Chrome -> Chromium -> Firefox
       exec(`google-chrome --incognito "${url}"`, (err) => {
         if (err) {
           exec(`chromium --incognito "${url}"`, (err2) => {
@@ -658,13 +657,13 @@ function openBrowserInPrivateMode(url: string): void {
   }
 }
 
-// IdC (BuilderId) 的 OIDC Token 刷新
+// IdC (BuilderId) of OIDC Token refresh
 async function refreshOidcToken(
   refreshToken: string,
   clientId: string,
   clientSecret: string,
   region: string = 'us-east-1',
-  proxyUrl?: string  // 账号绑定的代理 URL（可选，优先级最高）
+  proxyUrl?: string  // Account bound agent URL(optional, highest priority)
 ): Promise<OidcRefreshResult> {
   console.log(`[OIDC] Refreshing token with clientId: ${clientId.substring(0, 20)}...${proxyUrl ? ' [via bound proxy]' : ''}`)
 
@@ -698,7 +697,7 @@ async function refreshOidcToken(
     return {
       success: true,
       accessToken: data.accessToken,
-      refreshToken: data.refreshToken || refreshToken, // 可能不返回新的 refreshToken
+      refreshToken: data.refreshToken || refreshToken, // May not return new refreshToken
       expiresIn: data.expiresIn
     }
   } catch (error) {
@@ -707,10 +706,10 @@ async function refreshOidcToken(
   }
 }
 
-// 社交登录 (GitHub/Google) 的 Token 刷新
+// social login (GitHub/Google) of Token refresh
 async function refreshSocialToken(
   refreshToken: string,
-  proxyUrl?: string  // 账号绑定的代理 URL（可选，优先级最高）
+  proxyUrl?: string  // Account bound agent URL(optional, highest priority)
 ): Promise<OidcRefreshResult> {
   console.log(`[Social] Refreshing token...${proxyUrl ? ' [via bound proxy]' : ''}`)
 
@@ -748,20 +747,20 @@ async function refreshSocialToken(
   }
 }
 
-// 通用 Token 刷新 - 根据 authMethod 选择刷新方式
+// Universal Token refresh - according to authMethod Select refresh method
 async function refreshTokenByMethod(
   token: string,
   clientId: string,
   clientSecret: string,
   region: string = 'us-east-1',
   authMethod?: string,
-  proxyUrl?: string  // 账号绑定的代理 URL（可选，优先级最高）
+  proxyUrl?: string  // Account bound agent URL(optional, highest priority)
 ): Promise<OidcRefreshResult> {
-  // 如果是社交登录，使用 Kiro Auth Service 刷新
+  // For social login, use Kiro Auth Service refresh
   if (authMethod === 'social') {
     return refreshSocialToken(token, proxyUrl)
   }
-  // 否则使用 OIDC 刷新 (IdC/BuilderId)
+  // Otherwise use OIDC refresh (IdC/BuilderId)
   return refreshOidcToken(token, clientId, clientSecret, region, proxyUrl)
 }
 
@@ -773,7 +772,7 @@ function generateInvocationId(): string {
   })
 }
 
-// Kiro 版本和 User-Agent 生成
+// Kiro version and User-Agent generate
 const KIRO_VERSION = '0.6.18'
 
 function getKiroUserAgent(machineId?: string): string {
@@ -792,7 +791,7 @@ function getCurrentMachineId(): string | undefined {
   return kproxyService.getDeviceId()
 }
 
-// ============ AWS SSO 设备授权流程 ============
+// ============ AWS SSO Device authorization process ============
 interface SsoAuthResult {
   success: boolean
   accessToken?: string
@@ -815,7 +814,7 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
   let deviceSessionToken: string
   let interval = 1
 
-  // Step 1: 注册 OIDC 客户端
+  // Step 1: register OIDC client
   console.log('[SSO] Step 1: Registering OIDC client...')
   try {
     const regRes = await fetchWithAppProxy(`${oidcBase}/client/register`, {
@@ -835,10 +834,10 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
     clientSecret = regData.clientSecret
     console.log(`[SSO] Client registered: ${clientId.substring(0, 30)}...`)
   } catch (e) {
-    return { success: false, error: `注册客户端失败: ${e}` }
+    return { success: false, error: `Failed to register client: ${e}` }
   }
 
-  // Step 2: 发起设备授权
+  // Step 2: Initiate device authorization
   console.log('[SSO] Step 2: Starting device authorization...')
   try {
     const devRes = await fetchWithAppProxy(`${oidcBase}/device_authorization`, {
@@ -853,10 +852,10 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
     interval = devData.interval || 1
     console.log(`[SSO] Device code obtained, user_code: ${userCode}`)
   } catch (e) {
-    return { success: false, error: `设备授权失败: ${e}` }
+    return { success: false, error: `Device authorization failed: ${e}` }
   }
 
-  // Step 3: 验证 Bearer Token (whoAmI)
+  // Step 3: verify Bearer Token (whoAmI)
   console.log('[SSO] Step 3: Verifying bearer token...')
   try {
     const whoRes = await fetchWithAppProxy(`${portalBase}/token/whoAmI`, {
@@ -866,10 +865,10 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
     if (!whoRes.ok) throw new Error(`whoAmI failed: ${whoRes.status}`)
     console.log('[SSO] Bearer token verified')
   } catch (e) {
-    return { success: false, error: `Token 验证失败: ${e}` }
+    return { success: false, error: `Token Authentication failed: ${e}` }
   }
 
-  // Step 4: 获取设备会话令牌
+  // Step 4: Get device session token
   console.log('[SSO] Step 4: Getting device session token...')
   try {
     const sessRes = await fetchWithAppProxy(`${portalBase}/session/device`, {
@@ -882,10 +881,10 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
     deviceSessionToken = sessData.token
     console.log('[SSO] Device session token obtained')
   } catch (e) {
-    return { success: false, error: `获取设备会话失败: ${e}` }
+    return { success: false, error: `Failed to get device session: ${e}` }
   }
 
-  // Step 5: 接受用户代码
+  // Step 5: Accept user code
   console.log('[SSO] Step 5: Accepting user code...')
   let deviceContext: { deviceContextId?: string; clientId?: string; clientType?: string } | null = null
   try {
@@ -899,10 +898,10 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
     deviceContext = acceptData.deviceContext || null
     console.log('[SSO] User code accepted')
   } catch (e) {
-    return { success: false, error: `接受用户代码失败: ${e}` }
+    return { success: false, error: `Failed to accept user code: ${e}` }
   }
 
-  // Step 6: 批准授权
+  // Step 6: approve authorization
   if (deviceContext?.deviceContextId) {
     console.log('[SSO] Step 6: Approving authorization...')
     try {
@@ -921,14 +920,14 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
       if (!approveRes.ok) throw new Error(`Approve failed: ${approveRes.status}`)
       console.log('[SSO] Authorization approved')
     } catch (e) {
-      return { success: false, error: `批准授权失败: ${e}` }
+      return { success: false, error: `Authorization failed: ${e}` }
     }
   }
 
-  // Step 7: 轮询获取 Token
+  // Step 7: Polling to obtain Token
   console.log('[SSO] Step 7: Polling for token...')
   const startTime = Date.now()
-  const timeout = 120000 // 2 分钟超时
+  const timeout = 120000 // 2 minutes timeout
 
   while (Date.now() - startTime < timeout) {
     await new Promise(r => setTimeout(r, interval * 1000))
@@ -962,11 +961,11 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
       if (tokenRes.status === 400) {
         const errData = await tokenRes.json() as { error?: string }
         if (errData.error === 'authorization_pending') {
-          continue // 继续轮询
+          continue // Continue polling
         } else if (errData.error === 'slow_down') {
           interval += 5
         } else {
-          return { success: false, error: `Token 获取失败: ${errData.error}` }
+          return { success: false, error: `Token Failed to obtain: ${errData.error}` }
         }
       }
     } catch (e) {
@@ -974,24 +973,24 @@ async function ssoDeviceAuth(bearerToken: string, region: string = 'us-east-1'):
     }
   }
 
-  return { success: false, error: '授权超时，请重试' }
+  return { success: false, error: 'Authorization timed out, please try again' }
 }
 
 async function kiroApiRequest<T>(
   operation: string,
   body: Record<string, unknown>,
   accessToken: string,
-  idp: string = 'BuilderId',  // 支持 BuilderId, Github, Google
-  accountMachineId?: string,  // 账户绑定的设备 ID
-  email?: string              // 用于日志标识
+  idp: string = 'BuilderId',  // support BuilderId, Github, Google
+  accountMachineId?: string,  // Device bound to the account ID
+  email?: string              // Used for log identification
 ): Promise<T> {
-  // 优先使用账户绑定的设备 ID，其次使用 K-Proxy 全局设备 ID
+  // Prioritize the use of devices bound to the account ID, followed by using K-Proxy global device ID
   const machineId = accountMachineId || getCurrentMachineId()
   const logTag = email || `token:${accessToken?.slice(-6) || '?'}`
   console.log(`[Kiro API] ${operation} [${logTag}] ${idp} machineId=${machineId?.slice(0, 8) || 'none'}`)
   const agent = getKProxyAgent()
   
-  // 使用 undici fetch 支持代理
+  // use undici fetch support agent
   const headers: Record<string, string> = {
     'accept': 'application/cbor',
     'content-type': 'application/cbor',
@@ -1020,22 +1019,22 @@ async function kiroApiRequest<T>(
   }
 
   if (!response.ok) {
-    // 尝试解析 CBOR 格式的错误响应
+    // try to parse CBOR format error response
     let errorMessage = `HTTP ${response.status}`
     const errorBuffer = await response.arrayBuffer()
     try {
       const errorData = decode(Buffer.from(errorBuffer)) as { __type?: string; message?: string }
       if (errorData.__type && errorData.message) {
-        // 提取错误类型名称（去掉命名空间）
+        // Extract error type name (remove namespace)
         const errorType = errorData.__type.split('#').pop() || errorData.__type
-        // 在错误消息中包含 HTTP 状态码，便于封禁检测
+        // Include in error message HTTP Status code to facilitate ban detection
         errorMessage = `HTTP ${response.status}: ${errorType}: ${errorData.message}`
       } else if (errorData.message) {
         errorMessage = `HTTP ${response.status}: ${errorData.message}`
       }
       console.error(`[Kiro API] Error:`, errorData)
     } catch {
-      // 如果 CBOR 解析失败，显示原始内容
+      // if CBOR Parsing failed, original content displayed
       const errorText = Buffer.from(errorBuffer).toString('utf-8')
       console.error(`[Kiro API] Error (raw): ${errorText}`)
     }
@@ -1044,16 +1043,16 @@ async function kiroApiRequest<T>(
 
   const arrayBuffer = await response.arrayBuffer()
   const result = decode(Buffer.from(arrayBuffer)) as T
-  // 精简响应日志：一行摘要 + 完整数据放 data（ⓘ 展开）
+  // Compact response log: one line summary + Complete data put data（ⓘ Expand)
   const r = result as Record<string, unknown>
   const resSummary = r.email ? `${r.email} [${r.status || 'ok'}]` : `${response.status}`
   console.log(`[Kiro API] ${operation} [${logTag}] → ${resSummary}`, result)
   return result
 }
 
-// ============ GetUsageLimits REST API (官方格式) ============
+// ============ GetUsageLimits REST API (official format) ============
 interface UsageLimitsResponse {
-  // REST API 实际返回 usageBreakdownList（不是 usageBreakdowns）
+  // REST API actual return usageBreakdownList(no usageBreakdowns）
   usageBreakdownList?: Array<{
     type?: string
     resourceType?: string
@@ -1077,7 +1076,7 @@ interface UsageLimitsResponse {
       freeTrialStatus?: string
       freeTrialExpiry?: string
     }
-    // REST API 直接返回 freeTrialInfo（与 freeTrialUsage 结构相同）
+    // REST API Return directly freeTrialInfo(and freeTrialUsage structure is the same)
     freeTrialInfo?: {
       currentUsage?: number
       currentUsageWithPrecision?: number
@@ -1094,12 +1093,12 @@ interface UsageLimitsResponse {
       usageLimitWithPrecision?: number
       currentUsage?: number
       currentUsageWithPrecision?: number
-      expiresAt?: number | string  // REST API 返回数字时间戳
+      expiresAt?: number | string  // REST API Returns a numeric timestamp
       redeemedAt?: number | string
       status?: string
     }>
   }>
-  nextDateReset?: number | string  // Unix 时间戳（秒）或 ISO 字符串
+  nextDateReset?: number | string  // Unix timestamp (seconds) or ISO string
   subscriptionInfo?: {
     subscriptionName?: string
     subscriptionTitle?: string
@@ -1122,11 +1121,11 @@ interface UsageLimitsResponse {
   }
 }
 
-// 辅助函数：将 Unix 时间戳（秒）或 ISO 字符串转换为 ISO 字符串
+// Auxiliary function: will Unix timestamp (seconds) or ISO String converted to ISO string
 function normalizeResetDate(value: number | string | undefined): string | undefined {
   if (value === undefined || value === null) return undefined
   if (typeof value === 'number') {
-    // Unix 时间戳（秒），转换为毫秒后创建 Date
+    // Unix Timestamp (seconds), created after conversion to milliseconds Date
     return new Date(value * 1000).toISOString()
   }
   return value
@@ -1159,11 +1158,11 @@ async function fetchRestApi(
 async function getUsageLimitsRest(
   accessToken: string,
   profileArn?: string,
-  accountMachineId?: string,  // 账户绑定的设备 ID
-  ssoRegion?: string,         // SSO 区域，用于选择正确的 REST API 端点
-  email?: string              // 用于日志标识
+  accountMachineId?: string,  // Device bound to the account ID
+  ssoRegion?: string,         // SSO area for selecting the correct REST API endpoint
+  email?: string              // Used for log identification
 ): Promise<UsageLimitsResponse> {
-  // 优先使用账户绑定的设备 ID，其次使用 K-Proxy 全局设备 ID
+  // Prioritize the use of devices bound to the account ID, followed by using K-Proxy global device ID
   const machineId = accountMachineId || getCurrentMachineId()
   const logTag = email || `token:${accessToken?.slice(-6) || '?'}`
   console.log(`[Kiro REST API] GetUsageLimits [${logTag}] region=${ssoRegion || 'default'}`)
@@ -1178,13 +1177,13 @@ async function getUsageLimitsRest(
   }
   const path = `/getUsageLimits?${params.toString()}`
   
-  // 根据 SSO 区域选择主端点
+  // according to SSO Region selection primary endpoint
   const primaryBase = getRestApiBase(ssoRegion)
   const fallbackBase = getFallbackRestApiBase(ssoRegion)
   
   let response = await fetchRestApi(primaryBase, path, accessToken, machineId)
   
-  // 如果主端点返回 403，尝试备用端点
+  // If the main endpoint returns 403, try the alternate endpoint
   if (response.status === 403) {
     console.log(`[Kiro REST API] Primary 403, fallback → ${fallbackBase}`)
     response = await fetchRestApi(fallbackBase, path, accessToken, machineId)
@@ -1201,7 +1200,7 @@ async function getUsageLimitsRest(
   return result
 }
 
-// 统一的用量查询接口 - 根据配置选择 API 类型
+// Unified usage query interface - Choose according to configuration API type
 interface UnifiedUsageResponse {
   usageBreakdownList?: Array<{
     resourceType?: string
@@ -1260,14 +1259,14 @@ async function getUsageAndLimits(
   accessToken: string,
   idp: string = 'BuilderId',
   profileArn?: string,
-  accountMachineId?: string,  // 账户绑定的设备 ID
-  ssoRegion?: string,         // SSO 区域，用于选择正确的 REST API 端点
-  email?: string              // 用于日志标识
+  accountMachineId?: string,  // Device bound to the account ID
+  ssoRegion?: string,         // SSO area for selecting the correct REST API endpoint
+  email?: string              // Used for log identification
 ): Promise<UnifiedUsageResponse> {
   if (currentUsageApiType === 'rest') {
-    // 使用 REST API (GetUsageLimits)
+    // use REST API (GetUsageLimits)
     const result = await getUsageLimitsRest(accessToken, profileArn, accountMachineId, ssoRegion, email)
-    // REST API 返回的字段名和 CBOR API 相同，直接返回
+    // REST API Returned field names and CBOR API Same, return directly
     return {
       usageBreakdownList: result.usageBreakdownList?.map(b => ({
         resourceType: b.resourceType || b.type,
@@ -1282,14 +1281,14 @@ async function getUsageAndLimits(
         overageRate: b.overageRate,
         overageCap: b.overageCap,
         type: b.type,
-        // REST API 直接返回 freeTrialInfo，CBOR API 返回 freeTrialUsage
+        // REST API Return directly freeTrialInfo，CBOR API return freeTrialUsage
         freeTrialInfo: b.freeTrialInfo ? {
           freeTrialStatus: b.freeTrialInfo.freeTrialStatus,
           usageLimit: b.freeTrialInfo.usageLimit,
           usageLimitWithPrecision: b.freeTrialInfo.usageLimitWithPrecision,
           currentUsage: b.freeTrialInfo.currentUsage,
           currentUsageWithPrecision: b.freeTrialInfo.currentUsageWithPrecision,
-          // REST API 返回数字时间戳，需要转换为 ISO 字符串
+          // REST API Returns a numeric timestamp, which needs to be converted to ISO string
           freeTrialExpiry: typeof b.freeTrialInfo.freeTrialExpiry === 'number' 
             ? new Date(b.freeTrialInfo.freeTrialExpiry * 1000).toISOString() 
             : b.freeTrialInfo.freeTrialExpiry
@@ -1301,7 +1300,7 @@ async function getUsageAndLimits(
           currentUsageWithPrecision: b.freeTrialUsage.currentUsageWithPrecision,
           freeTrialExpiry: b.freeTrialUsage.freeTrialExpiry
         } : undefined),
-        // 转换 bonuses 中的时间戳为 ISO 字符串
+        // Convert bonuses The timestamp in is ISO string
         bonuses: b.bonuses?.map(bonus => ({
           ...bonus,
           expiresAt: typeof bonus.expiresAt === 'number' 
@@ -1309,16 +1308,16 @@ async function getUsageAndLimits(
             : bonus.expiresAt
         }))
       })),
-      // REST API 返回的 nextDateReset 是 Unix 时间戳（秒），需要转换为 ISO 字符串
+      // REST API returned nextDateReset yes Unix Timestamp (seconds), needs to be converted to ISO string
       nextDateReset: normalizeResetDate(result.nextDateReset),
       subscriptionInfo: result.subscriptionInfo,
       overageConfiguration: result.overageConfiguration,
       userInfo: result.userInfo
     }
   } else {
-    // 使用 CBOR API (GetUserUsageAndLimits)
-    // CBOR API (app.kiro.dev) 是网页端门户，仅支持 BuilderId 认证
-    // Enterprise/IdC 账号可能返回 401，需要 fallback 到 REST API
+    // use CBOR API (GetUserUsageAndLimits)
+    // CBOR API (app.kiro.dev) It is a web portal and only supports BuilderId Certification
+    // Enterprise/IdC Account may return 401,need fallback arrive REST API
     try {
       return await kiroApiRequest<UnifiedUsageResponse>(
         'GetUserUsageAndLimits',
@@ -1330,7 +1329,7 @@ async function getUsageAndLimits(
       )
     } catch (cborError) {
       const errorMsg = cborError instanceof Error ? cborError.message : ''
-      // CBOR 401/403 时自动 fallback 到 REST API
+      // CBOR 401/403 automatically fallback arrive REST API
       if (errorMsg.includes('401') || errorMsg.includes('403')) {
         console.log(`[API] CBOR API failed (${errorMsg}), falling back to REST API...`)
         const result = await getUsageLimitsRest(accessToken, profileArn, accountMachineId, ssoRegion, email)
@@ -1383,7 +1382,7 @@ async function getUsageAndLimits(
   }
 }
 
-// GetUserInfo API - 只需要 accessToken 即可调用
+// GetUserInfo API - Just need accessToken Can be called
 interface UserInfoResponse {
   email?: string
   userId?: string
@@ -1396,17 +1395,17 @@ async function getUserInfo(accessToken: string, idp: string = 'BuilderId', accou
   return kiroApiRequest<UserInfoResponse>('GetUserInfo', { origin: 'KIRO_IDE' }, accessToken, idp, accountMachineId, email)
 }
 
-// 定义自定义协议
+// Define custom protocols
 const PROTOCOL_PREFIX = 'kiro'
 
-// electron-store 实例（延迟初始化）
+// electron-store Example (lazy initialization)
 let store: {
   get: (key: string, defaultValue?: unknown) => unknown
   set: (key: string, value: unknown) => void
   path: string
 } | null = null
 
-// 最后保存的数据（用于崩溃恢复）
+// Last saved data (for crash recovery)
 let lastSavedData: unknown = null
 
 async function initStore(): Promise<void> {
@@ -1421,7 +1420,7 @@ async function initStore(): Promise<void> {
   
   store = storeInstance as unknown as typeof store
   
-  // 尝试从备份恢复数据（如果主数据损坏）。备份优先读加密 .enc，兼容旧明文 .json
+  // Attempt to restore data from backup (if primary data is corrupted). Backup read-first encryption .enc, compatible with old plaintext .json
   try {
     const mainData = storeInstance.get('accountData')
 
@@ -1435,22 +1434,22 @@ async function initStore(): Promise<void> {
           console.log('[Store] Data restored from backup successfully')
         }
       } catch {
-        // 备份也不存在，忽略
+        // The backup does not exist either, ignore it.
       }
     }
   } catch (error) {
     console.error('[Store] Error checking backup:', error)
   }
 
-  // 一次性迁移：清理 BuilderId 占位符 profileArn 等脏数据
-  // 详见 migrateAccountDataIfNeeded 注释
+  // One-time migration: cleanup BuilderId placeholder profileArn Waiting for dirty data
+  // See details migrateAccountDataIfNeeded Comment
   try {
     migrateAccountDataIfNeeded()
   } catch (error) {
     console.error('[Store] Account data migration failed:', error)
   }
 
-  // 加载主动续期开关状态（默认关闭）
+  // Load active renewal switch status (off by default)
   try {
     proactiveRenewalEnabled = !!storeInstance.get('proactiveRenewalEnabled', false)
     console.log(`[ProactiveRenewal] Loaded from settings: ${proactiveRenewalEnabled ? 'enabled' : 'disabled'}`)
@@ -1459,23 +1458,23 @@ async function initStore(): Promise<void> {
   }
 }
 
-// ============ Kiro IDE Auth Token 反向同步 ============
+// ============ Kiro IDE Auth Token reverse sync ============
 //
-// Kiro IDE 桌面端自己也有 refresh loop：每 N 秒检查 token 是否快到期，到期就用磁盘里的
-// refreshToken 调 OIDC，得到新 access + 新 refresh 后写回 ~/.aws/sso/cache/kiro-auth-token.json。
+// Kiro IDE It’s also available on the desktop refresh loop:Every N Check in seconds token If it is about to expire, use the one in the disk when it expires.
+// refreshToken tune OIDC, get new access + new refresh write back later ~/.aws/sso/cache/kiro-auth-token.json。
 //
-// 反代如果不感知这种"IDE 自己改了 token 文件"，下次反代再调 refresh 时还在用废的旧 refresh
-// → OIDC 拒绝 → 后续 IDE 自动刷新也连环挂掉。
+// If you are anti-generation and do not perceive this kind of"IDE I changed it myself token document", adjust again next time refresh I'm still using the old stuff refresh
+// → OIDC reject → Follow-up IDE Automatic refresh also hangs continuously.
 //
-// 这里启动一个 fs.watchFile 监听器：
-//   - 检测到磁盘 token 变化 + 不是反代自己刚写的（lastWrittenTokenSignature 不一致）
-//   - 把新 access/refresh/expiresAt 同步回反代 store
-//   - 通过 webContents.send 通知 renderer 重新 loadAccounts，UI 立刻刷新
+// Start one here fs.watchFile Listener:
+//   - disk detected token change + It’s not that I’m going against what I just wrote (lastWrittenTokenSignature inconsistent)
+//   - put new access/refresh/expiresAt Synchronize back to generation store
+//   - pass webContents.send notify renderer again loadAccounts，UI Refresh immediately
 //
-// 账号匹配优先级（任一命中即视为同一账号）：
-//   1) accessToken JWT 解 sub，与反代 store 里某账号 cached accessToken claims 的 sub 一致
-//   2) lastSwitchedAccountId（反代刚 switch-account 过的那一个）
-//   3) refreshToken 旧值匹配（IDE 第一次自刷新前，磁盘 refresh 还等于 store 里的）
+// Account matching priority (any hit is considered the same account):
+//   1) accessToken JWT untie sub, and countergeneration store An account in cached accessToken claims of sub consistent
+//   2) lastSwitchedAccountId(Anti-generation Gang switch-account The one that passed)
+//   3) refreshToken old value match (IDE Before the first self-refresh, the disk refresh Still equal to store inside)
 let stopKiroAuthTokenWatcher: (() => void) | null = null
 
 function startKiroAuthTokenWatcher(): void {
@@ -1483,11 +1482,11 @@ function startKiroAuthTokenWatcher(): void {
   stopKiroAuthTokenWatcher = watchKiroAuthTokenFile(async (token) => {
     const sig = `${token.accessToken}|${token.refreshToken}`
     if (sig === lastWrittenTokenSignature) {
-      // 反代自己刚写的，跳过避免回环
+      // Replacing what you just wrote, skipping to avoid loops
       return
     }
     if (sig === lastSyncedFromIdeSignature) {
-      // 之前一次 IDE 同步已处理过这份内容，跳过
+      // once before IDE Synchronization has processed this content, skip it
       return
     }
     lastSyncedFromIdeSignature = sig
@@ -1526,7 +1525,7 @@ async function syncIdeTokenChangeToStore(token: {
     return
   }
 
-  // 1) JWT sub 匹配（最准）
+  // 1) JWT sub Match (most accurate)
   const newClaims = parseAccessTokenClaims(token.accessToken)
   let matchedId: string | null = null
   let matchedReason = ''
@@ -1543,17 +1542,17 @@ async function syncIdeTokenChangeToStore(token: {
     }
   }
 
-  // 2) lastSwitchedAccountId 兜底
+  // 2) lastSwitchedAccountId reveal all the details
   if (!matchedId && lastSwitchedAccountId && accountData.accounts[lastSwitchedAccountId]) {
     matchedId = lastSwitchedAccountId
     matchedReason = 'lastSwitchedAccountId fallback'
   }
 
-  // 3) 旧 refreshToken 匹配
+  // 3) old refreshToken match
   if (!matchedId) {
     for (const [id, acc] of Object.entries(accountData.accounts)) {
       if (acc.credentials?.accessToken === token.accessToken) {
-        // store 和 disk access 完全一致，无需同步
+        // store and disk access Completely consistent, no synchronization required
         return
       }
       if (acc.credentials?.refreshToken && acc.credentials.refreshToken === token.refreshToken) {
@@ -1567,7 +1566,7 @@ async function syncIdeTokenChangeToStore(token: {
   if (!matchedId) {
     console.warn(
       '[KiroAuthSync] IDE token file changed but no matching account in store. ' +
-        'This usually means the user signed in directly inside Kiro IDE without going through 反代切号. ' +
+        'This usually means the user signed in directly inside Kiro IDE without going through Anti-generation number. ' +
         'sub=',
       newClaims?.sub
     )
@@ -1598,15 +1597,15 @@ async function syncIdeTokenChangeToStore(token: {
   }
 }
 
-// ============ 主动续期实现 ============
+// ============ Active renewal implementation ============
 //
-// 设计要点：
-//  - 仅对"当前 IDE 激活账号"调度 timer（最多 1 个 in-flight timer）
-//  - schedule 之前总是 clear，确保 timer 不会泄漏（switch 到另一账号、关闭功能、登出都会 clear）
-//  - runProactiveRenewal 内部调 refreshTokenByMethod + writeKiroAuthTokenFile（复用现有逻辑）
-//  - 续期成功后自动 schedule 下一次（基于新 token 的 expiresAt）
-//  - 续期失败：不再调度，避免无限重试；让 IDE 自己的 refresh loop 兜底（双向同步仍生效）
-//  - 通过 webContents.send('kiro-ide-token-changed') 通知 renderer 重新加载，UI 立刻刷新
+// Design points:
+//  - only for"current IDE Activate account"Scheduling timer(most 1 indivual in-flight timer）
+//  - schedule Always before clear,make sure timer will not leak (switch Go to another account, turn off functions, and log out. clear）
+//  - runProactiveRenewal internal adjustment refreshTokenByMethod + writeKiroAuthTokenFile(Reuse existing logic)
+//  - Automatically after successful renewal schedule next time (based on new token of expiresAt）
+//  - Renewal failed: No more scheduling to avoid infinite retries; let IDE own refresh loop Stay safe (two-way synchronization is still in effect)
+//  - pass webContents.send('kiro-ide-token-changed') notify renderer reload,UI Refresh immediately
 
 function clearProactiveRenewal(reason?: string): void {
   if (proactiveRenewalTimer) {
@@ -1617,14 +1616,14 @@ function clearProactiveRenewal(reason?: string): void {
 }
 
 /**
- * 在 token 剩余 (PROACTIVE_RENEWAL_LEAD_MS) 时触发续期。
- * 调用者负责传入准确的 expiresAt（来自 OIDC 真实 expiresIn），不读 store 避免不一致。
+ * exist token Remaining (PROACTIVE_RENEWAL_LEAD_MS) Renewal is triggered.
+ * The caller is responsible for passing in the exact expiresAt(from OIDC reality expiresIn), do not read store Avoid inconsistencies.
  */
 function scheduleProactiveRenewal(accountId: string, expiresAtMs: number): void {
   clearProactiveRenewal()
   if (!proactiveRenewalEnabled) return
   const msUntilRenewal = expiresAtMs - Date.now() - PROACTIVE_RENEWAL_LEAD_MS
-  // 若已经在窗口内（包括已过期），立刻续期
+  // If it is already within the window (including expired), renew immediately
   const delay = Math.max(msUntilRenewal, 0)
   console.log(
     `[ProactiveRenewal] Scheduled in ${Math.round(delay / 1000)}s for account ${accountId} ` +
@@ -1699,7 +1698,7 @@ async function runProactiveRenewal(accountId: string): Promise<void> {
     region: creds.region
   })
 
-  // 1. 写磁盘（同步给 IDE）
+  // 1. Write to disk (synchronously to IDE）
   try {
     await writeKiroAuthTokenFile({
       accessToken: newAccess,
@@ -1719,7 +1718,7 @@ async function runProactiveRenewal(accountId: string): Promise<void> {
     console.warn('[ProactiveRenewal] Failed to write IDE token file (will still try store sync):', e)
   }
 
-  // 2. 写 store（同步反代/UI）
+  // 2. Write store(synchronous reverse generation/UI）
   if (store) {
     account.credentials = {
       ...creds,
@@ -1730,14 +1729,14 @@ async function runProactiveRenewal(accountId: string): Promise<void> {
     store.set('accountData', accountData)
   }
 
-  // 3. 通知 renderer reload
+  // 3. notify renderer reload
   try {
     mainWindow?.webContents.send('kiro-ide-token-changed', {
       accountId,
       reason: 'proactive-renewal'
     })
   } catch {
-    /* renderer 可能已关闭 */
+    /* renderer may be closed */
   }
 
   console.log(
@@ -1745,14 +1744,14 @@ async function runProactiveRenewal(accountId: string): Promise<void> {
       `Next renewal in ${expiresIn - PROACTIVE_RENEWAL_LEAD_MS / 1000}s`
   )
 
-  // 4. 调度下一次
+  // 4. Schedule next time
   scheduleProactiveRenewal(accountId, newExpiresAt)
 }
 
 /**
- * 账号数据迁移（已停用）：曾用于清理 profileArn 占位符，
- * 但 Kiro IDE 内部逻辑依赖该字段存在，移除后导致严重问题，已回退。
- * 保留函数壳和标记写入，防止旧版本回滚时重复执行。
+ * Account data migration (deactivated): used for cleanup profileArn placeholder,
+ * but Kiro IDE Internal logic relies on the existence of this field. Removing it caused serious problems and has been rolled back.
+ * Preserve the function shell and mark writing to prevent repeated execution when the old version is rolled back.
  */
 function migrateAccountDataIfNeeded(): void {
   if (!store) return
@@ -1771,26 +1770,26 @@ function migrateAccountDataIfNeeded(): void {
     return
   }
 
-  // profileArn 占位符不再清理 —— Kiro IDE 内部逻辑依赖该字段存在
-  // 保留迁移标记写入以避免旧版本回滚时重复执行
+  // profileArn Placeholders are no longer cleaned up —— Kiro IDE Internal logic relies on the existence of this field
+  // Preserve migration mark writes to avoid duplication when rolling back old versions
 
   if (!migrationState[FLAG]) {
     store.set(MIGRATION_KEY, { ...migrationState, [FLAG]: 1 })
   }
 }
 
-// ============ 备份节流配置 ============
-// 备份是为容灾兜底，不需要每次保存都全量重写文件，按时间节流即可大幅降低磁盘 IO。
-const BACKUP_THROTTLE_MS = 5 * 60 * 1000 // 5 分钟最多写一次备份
+// ============ Backup throttling configuration ============
+// Backup is for disaster recovery. There is no need to completely rewrite the file every time it is saved. Throttling based on time can significantly reduce disk usage. IO。
+const BACKUP_THROTTLE_MS = 5 * 60 * 1000 // 5 Backup can be written at most once every minute
 let lastBackupTime = 0
 let pendingBackupData: unknown = null
 let pendingBackupTimer: ReturnType<typeof setTimeout> | null = null
 
 /**
- * 创建数据备份（节流）
- * - 距上次备份不足 BACKUP_THROTTLE_MS 时，仅记录数据指针，不立即写盘
- * - 节流窗口结束后，自动 flush 最新一份数据
- * - 退出前可手动调用 flushBackupNow() 强制写盘
+ * Create data backup (throttling)
+ * - Not enough time since last backup BACKUP_THROTTLE_MS When, only the data pointer is recorded and the disk is not written immediately.
+ * - After the throttling window ends, automatically flush The latest data
+ * - Can be called manually before exiting flushBackupNow() Force disk writing
  */
 async function createBackup(data: unknown): Promise<void> {
   pendingBackupData = data
@@ -1798,12 +1797,12 @@ async function createBackup(data: unknown): Promise<void> {
   const elapsed = now - lastBackupTime
 
   if (elapsed >= BACKUP_THROTTLE_MS) {
-    // 节流窗口已过，立即写盘
+    // The throttling window has passed, write disk immediately
     await writeBackupNow()
     return
   }
 
-  // 在节流窗口内：调度一次延迟 flush（如果尚未调度）
+  // Within the throttling window: schedule a delay flush(if not scheduled yet)
   if (!pendingBackupTimer) {
     const delay = BACKUP_THROTTLE_MS - elapsed
     pendingBackupTimer = setTimeout(() => {
@@ -1814,7 +1813,7 @@ async function createBackup(data: unknown): Promise<void> {
 }
 
 /**
- * 真正执行备份写盘。仅当 pendingBackupData 非空时写入。
+ * Really perform backup and write to disk. only if pendingBackupData Written when not empty.
  */
 async function writeBackupNow(): Promise<void> {
   if (!store || pendingBackupData == null) return
@@ -1832,7 +1831,7 @@ async function writeBackupNow(): Promise<void> {
 }
 
 /**
- * 强制 flush 待写的备份（用于退出前兜底）
+ * force flush Backup to be written (for backup before exiting)
  */
 async function flushBackupNow(): Promise<void> {
   if (pendingBackupTimer) {
@@ -1846,33 +1845,33 @@ async function flushBackupNow(): Promise<void> {
 
 let mainWindow: BrowserWindow | null = null
 
-// ============ Kiro IDE Auth 同步状态 ============
-// 账号管理器上一次写入 kiro-auth-token.json 时对应的 accountId，watcher 反向同步时优先用它
+// ============ Kiro IDE Auth Sync status ============
+// Account Manager last written kiro-auth-token.json corresponding to accountId，watcher Use it first during reverse synchronization
 let lastSwitchedAccountId: string | null = null
-// 账号管理器上一次写入时的 token 签名（access|refresh）。
-// watcher 触发时若签名一致，说明是账号管理器自己写的，跳过反向同步，避免回环。
+// The account manager was last written to token sign(access|refresh）。
+// watcher If the signatures are consistent when triggered, it means that the account manager wrote it itself, skipping reverse synchronization and avoiding loopbacks.
 let lastWrittenTokenSignature: string | null = null
-// 上一次反向同步成功时刷写过的 store 数据签名，用于 dedupe webContents.send
+// Flashed when the last reverse synchronization was successful store data signature for dedupe webContents.send
 let lastSyncedFromIdeSignature: string | null = null
 
-// ============ 主动续期（Proactive Token Renewal） ============
-// 思路：在 Kiro IDE 内部 refresh loop 触发之前（token 剩 10 分钟时）抢先 refresh，
-//   让 IDE 永远拿到剩余时间充足的 token，IDE 自己永远不需要调 OIDC → 彻底消除 race。
-// 仅对"当前 IDE 激活账号"（lastSwitchedAccountId）维护一个 timer，开销小。
-// 默认关闭，需用户在 Settings 中显式打开。
+// ============ Active renewal (Proactive Token Renewal） ============
+// Idea: in Kiro IDE internal refresh loop before triggering (token left 10 minutes) take the lead refresh，
+//   let IDE Always get enough time left token，IDE You never need to adjust yourself OIDC → completely eliminate race。
+// only for"current IDE Activate account"（lastSwitchedAccountId) maintain a timer, low overhead.
+// It is closed by default and requires the user to Settings Open explicitly in .
 let proactiveRenewalEnabled = false
 let proactiveRenewalTimer: NodeJS.Timeout | null = null
-// 在 token 剩余多久时触发主动续期。15 分钟 > Kiro IDE 的 10 分钟阈值，确保抢先。
+// exist token How much time remains to trigger active renewal.15 minute > Kiro IDE of 10 Minute threshold to ensure priority.
 const PROACTIVE_RENEWAL_LEAD_MS = 15 * 60 * 1000
 
-// ============ 账号池 token 主动刷新（主进程调度，不依赖窗口存活）============
+// ============ Account pool token Active refresh (main process scheduling, does not rely on window survival)============
 //
-// 背景：原先只有渲染进程的 setInterval 调度池内 token 刷新，窗口最小化到托盘后会被
-// Chromium 后台节流，导致 token 过期数分钟才刷新。这里把"调度"搬到主进程：主进程定时器
-// 不受窗口可见性影响，到点读 store 里的账号、刷新即将过期的 token，结果经
-// background-refresh-result 事件回流给渲染进程持久化（窗口隐藏但仍存活）。
-// 渲染进程定时器保留（已关后台节流）做信息同步/自动换号；两边的 token 刷新由
-// poolRefreshInFlightIds 去重，避免对同一 refreshToken 并发刷新把其中一个用作废。
+// Background: Originally there was only the rendering process setInterval In the scheduling pool token Refresh, the window will be minimized to the tray
+// Chromium Background throttling, resulting in token It will be refreshed after a few minutes after expiration. Put here"Scheduling"Moved to the main process: main process timer
+// Unaffected by window visibility, read on point store Accounts in, refresh those that are about to expire token, the result is
+// background-refresh-result Events are streamed back to the rendering process for persistence (the window is hidden but still alive).
+// The rendering process timer is retained (background throttling is turned off) for information synchronization/Automatic number change; both sides token refreshed by
+// poolRefreshInFlightIds Remove duplicates and avoid duplicates of the same refreshToken Concurrent refresh invalidates one of them.
 type BackgroundRefreshAccount = {
   id: string
   idp?: string
@@ -1890,15 +1889,15 @@ type BackgroundRefreshAccount = {
     profileArn?: string
   }
 }
-/** background-batch-refresh 的核心实现（由 IPC 与主进程调度器共用）。在 whenReady 中赋值。 */
+/** background-batch-refresh The core implementation (by IPC Shared with the main process scheduler). exist whenReady assigned value. */
 let backgroundBatchRefreshImpl:
   | ((accounts: BackgroundRefreshAccount[], concurrency?: number, syncInfo?: boolean) => Promise<{ success: boolean; completed: number; successCount: number; failedCount: number }>)
   | null = null
-/** 正在刷新中的账号 ID 去重集合，渲染进程与主进程调度器共享，防止同一 refreshToken 被并发刷新。 */
+/** Account being refreshed ID Deduplication collection, the rendering process is shared with the main process scheduler to prevent the same refreshToken Refreshed concurrently. */
 const poolRefreshInFlightIds = new Set<string>()
 let mainPoolRefreshTimer: NodeJS.Timeout | null = null
 
-/** 主进程侧的封禁/挂起判定，镜像渲染进程的 isBannedAccountError */
+/** Ban on the main process side/Suspension determination, mirror rendering process isBannedAccountError */
 function isBannedAccountErrorMain(error?: string): boolean {
   if (!error) return false
   const e = error.toLowerCase()
@@ -1906,16 +1905,16 @@ function isBannedAccountErrorMain(error?: string): boolean {
     || e.includes('account suspended')
     || e.includes('temporarily_suspended')
     || e.includes('temporarily suspended')
-    || e.includes('已封禁')
+    || e.includes('Banned')
     || /\b423\b/.test(e)
 }
 
-/** 刷新提前量：≥ 2× 检查间隔且不少于 10 分钟，确保 token 不会在两次 tick 之间过期。 */
+/** Refresh advance amount: ≥ 2× The check interval must be no less than 10 minutes, make sure token not twice tick expire between. */
 function mainTokenRefreshLeadMs(intervalMin: number): number {
   return Math.max(intervalMin * 2 * 60 * 1000, 10 * 60 * 1000)
 }
 
-/** 读取 store 里的账号，刷新即将过期的池内 token（仅刷 token，信息同步仍由渲染进程负责）。 */
+/** read store account in the pool, refresh the pool that is about to expire token(only brush token, information synchronization is still the responsibility of the rendering process). */
 async function runMainPoolTokenRefreshTick(): Promise<void> {
   if (!backgroundBatchRefreshImpl) return
   try {
@@ -1959,7 +1958,7 @@ async function runMainPoolTokenRefreshTick(): Promise<void> {
       if (!creds?.refreshToken) continue
       if (isBannedAccountErrorMain(acc.lastError)) continue
       const expiresAt = creds.expiresAt
-      // 只刷"即将过期/已过期"的；没有 expiresAt 的跳过（无从判断）
+      // Just brush"Expires soon/Expired"of; no expiresAt Skip (unable to judge)
       if (!expiresAt || expiresAt - now > leadMs) continue
       toRefresh.push({
         id,
@@ -1982,18 +1981,18 @@ async function runMainPoolTokenRefreshTick(): Promise<void> {
 
     if (toRefresh.length === 0) return
     console.log(`[MainPoolRefresh] ${toRefresh.length} token(s) expiring within ${Math.round(leadMs / 60000)}min, refreshing...`)
-    // syncInfo=false：仅刷 token；用量/订阅等信息同步由渲染进程定时器负责，避免主进程跑重活
+    // syncInfo=false: brush only token;Dosage/The rendering process timer is responsible for synchronizing information such as subscriptions to avoid heavy work in the main process.
     await backgroundBatchRefreshImpl(toRefresh, concurrency, false)
   } catch (err) {
     console.warn('[MainPoolRefresh] tick failed:', err instanceof Error ? err.message : err)
   }
 }
 
-/** 启动主进程池 token 刷新调度器（不依赖窗口可见/存活）。 */
+/** Start the main process pool token Refresh scheduler (does not depend on window being visible)/survive). */
 function startMainPoolTokenRefresh(): void {
   stopMainPoolTokenRefresh()
-  // 启动后稍等片刻先跑一次（让 store 与账号池就绪），之后每分钟检查一次；
-  // 实际是否需要刷新由 runMainPoolTokenRefreshTick 内按 expiresAt + 提前量判定。
+  // After starting, wait for a while and run it first (let the store and the account pool is ready), and then check it every minute;
+  // Whether it actually needs to be refreshed depends on runMainPoolTokenRefreshTick Internal press expiresAt + Advance judgment.
   setTimeout(() => { void runMainPoolTokenRefreshTick() }, 15_000)
   mainPoolRefreshTimer = setInterval(() => { void runMainPoolTokenRefreshTick() }, 60_000)
   console.log('[MainPoolRefresh] Scheduler started (main process, checks every 60s)')
@@ -2006,14 +2005,14 @@ function stopMainPoolTokenRefresh(): void {
   }
 }
 
-// ============ 托盘相关变量 ============
+// ============ Pallet related variables ============
 let traySettings: TraySettings = { ...defaultTraySettings }
-let isQuitting = false // 标记是否真正退出应用
+let isQuitting = false // Flag whether the app is actually exited
 
-// ============ 全局快捷键设置 ============
+// ============ Global shortcut key settings ============
 let showWindowShortcut = process.platform === 'darwin' ? 'Command+Shift+K' : 'Ctrl+Shift+K'
 
-// 加载快捷键设置
+// Load shortcut key settings
 async function loadShortcutSettings(): Promise<void> {
   try {
     await initStore()
@@ -2026,7 +2025,7 @@ async function loadShortcutSettings(): Promise<void> {
   }
 }
 
-// 保存快捷键设置
+// Save shortcut key settings
 async function saveShortcutSettings(): Promise<void> {
   try {
     await initStore()
@@ -2036,9 +2035,9 @@ async function saveShortcutSettings(): Promise<void> {
   }
 }
 
-// 注册显示主窗口的快捷键
+// Register the shortcut key for displaying the main window
 function registerShowWindowShortcut(): void {
-  // 先注销所有已注册的快捷键
+  // Unregister all registered shortcut keys first
   globalShortcut.unregisterAll()
   
   if (!showWindowShortcut) return
@@ -2046,7 +2045,7 @@ function registerShowWindowShortcut(): void {
   try {
     const success = globalShortcut.register(showWindowShortcut, () => {
       if (mainWindow) {
-        // macOS: 显示窗口时恢复 Dock 图标
+        // macOS: Restore when window is shown Dock icon
         if (process.platform === 'darwin' && app.dock) {
           app.dock.show()
         }
@@ -2067,7 +2066,7 @@ function registerShowWindowShortcut(): void {
 let currentProxyAccount: { id: string; email: string; idp: string; status: string; subscription?: string; usage?: { usedCredits: number; totalCredits: number; totalRequests: number; successRequests: number; failedRequests: number } } | null = null
 let allAccounts: { id: string; email: string; idp: string; status: string }[] = []
 
-// 加载托盘设置
+// Load tray settings
 async function loadTraySettings(): Promise<void> {
   try {
     await initStore()
@@ -2080,7 +2079,7 @@ async function loadTraySettings(): Promise<void> {
   }
 }
 
-// 保存托盘设置
+// Save tray settings
 async function saveTraySettings(): Promise<void> {
   try {
     await initStore()
@@ -2090,14 +2089,14 @@ async function saveTraySettings(): Promise<void> {
   }
 }
 
-// 初始化托盘
+// Initialize tray
 function initTray(): void {
   if (!traySettings.enabled) return
 
   createTray({
     onShowWindow: () => {
       if (mainWindow) {
-        // macOS: 显示窗口时恢复 Dock 图标
+        // macOS: Restore when window is shown Dock icon
         if (process.platform === 'darwin' && app.dock) {
           app.dock.show()
         }
@@ -2151,49 +2150,49 @@ function initTray(): void {
     }
   })
 
-  // 设置初始提示
-  setTrayTooltip(`Kiro 账号管理器 v${app.getVersion()}`)
+  // Set initial prompt
+  setTrayTooltip(`Kiro Account manager v${app.getVersion()}`)
 }
 
 function createWindow(): void {
   // Create the browser window.
   const isMac = process.platform === 'darwin'
   mainWindow = new BrowserWindow({
-    title: `Kiro 账号管理器 v${app.getVersion()}`,
-    width: 1200,   // 刚好容纳 3 列卡片 (340*3 + 16*2 + 边距)
+    title: `Kiro Account manager v${app.getVersion()}`,
+    width: 1200,   // Just enough to accommodate 3 Column cards (340*3 + 16*2 + margin)
     height: 1200,
     minWidth: 800,
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
     icon,
-    // 自定义 titlebar：mac 保留红绿黄灯 + 隐藏标题栏；win/linux 完全无 frame
+    // Customize titlebar：mac Keep traffic lights + Hide title bar;win/linux Absolutely nothing frame
     frame: isMac,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 14, y: 12 } : undefined,
-    // 不透明窗口（关闭透明 + Mica/Vibrancy 避免桌面元素干扰）
+    // Opaque window (turn off transparency + Mica/Vibrancy Avoid distractions from desktop elements)
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      // 关闭后台节流：最小化到托盘后窗口被隐藏，Chromium 默认会把渲染进程里的
-      // setInterval（含 token 自动刷新定时器）重度降频（对齐到约每分钟甚至更慢），
-      // 导致挂托盘时 token 过期好几分钟才刷新。关掉它保证定时器照常运行。
+      // Turn off background throttling: the window is hidden after minimizing to the tray,Chromium By default, the rendering process will
+      // setInterval(Including token auto-refresh timer) heavily downclocked (aligned to about every minute or even slower),
+      // When the pallet is hung token It took several minutes to refresh after expiration. Turn it off to keep the timer running.
       backgroundThrottling: false
     }
   })
 
-  // ============ 自定义 titlebar IPC ============
+  // ============ Customize titlebar IPC ============
   mainWindow.on('maximize', () => mainWindow?.webContents.send('window-maximize-changed', true))
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send('window-maximize-changed', false))
 
   mainWindow.on('ready-to-show', () => {
-    // 设置带版本号的标题（HTML 加载后会覆盖初始标题）
-    mainWindow?.setTitle(`Kiro 账号管理器 v${app.getVersion()}`)
+    // Set title with version number (HTML Initial title will be overwritten after loading)
+    mainWindow?.setTitle(`Kiro Account manager v${app.getVersion()}`)
     mainWindow?.show()
     
-    // 检查代理服务自启动配置
+    // Check the proxy service auto-start configuration
     setTimeout(async () => {
       try {
         await initStore()
@@ -2206,7 +2205,7 @@ function createWindow(): void {
         const server = initProxyServer()
         server.updateConfig(savedProxyConfig)
         
-        // 自启动时同步账号到代理池（含重试机制应对冷启动数据延迟）
+        // Synchronize the account to the agent pool during startup (including retry mechanism to deal with cold start data delay)
         const syncAccountsToPool = (): number => {
           const accountData = store!.get('accountData') as {
             accounts?: Record<string, any>
@@ -2231,8 +2230,8 @@ function createWindow(): void {
               const provider = acc.credentials?.provider || acc.idp
               const authMethod = acc.credentials?.authMethod
               const profileArn = acc.profileArn || acc.credentials?.profileArn
-              // BuilderId/Social 不需要预填 profileArn（resolveProfileArn 会兜底，流式端点自动不传占位符）
-              // Enterprise 留给自愈获取真实 ARN
+              // BuilderId/Social No pre-filling required profileArn（resolveProfileArn Will tell you the truth, the streaming endpoint automatically does not pass the placeholder)
+              // Enterprise Leave it to self-healing to get the truth ARN
               return {
                 id: acc.id,
                 email: acc.email,
@@ -2261,7 +2260,7 @@ function createWindow(): void {
         if (syncedCount > 0) {
           console.log('[ProxyServer] Auto-synced', syncedCount, 'accounts')
         } else {
-          // 冷启动时 store 可能还没有数据（渲染进程尚未初始化完成），延迟重试
+          // cold start store There may be no data yet (the rendering process has not been initialized yet), delay and retry.
           console.log('[ProxyServer] No accounts found on initial sync, will retry...')
           const retrySync = (attempt: number) => {
             setTimeout(() => {
@@ -2284,7 +2283,7 @@ function createWindow(): void {
         console.error('[ProxyServer] Auto-start failed:', error)
       }
 
-      // K-Proxy MITM 自启动
+      // K-Proxy MITM self start
       try {
         const savedKProxyConfig = store?.get('kproxyConfig') as KProxyConfig | undefined
         if (savedKProxyConfig?.autoStart) {
@@ -2318,33 +2317,33 @@ function createWindow(): void {
   })
 
   mainWindow.on('close', (event) => {
-    // 托盘最小化逻辑 - 必须同步检查并调用 preventDefault
+    // Pallet minimization logic - Must be checked and called synchronously preventDefault
     if (traySettings.enabled && !isQuitting) {
       if (traySettings.closeAction === 'minimize') {
-        // 直接最小化到托盘
+        // Minimize directly to tray
         event.preventDefault()
         mainWindow?.hide()
-        // macOS: 隐藏窗口时隐藏 Dock 图标
+        // macOS: Hide when window is hidden Dock icon
         if (process.platform === 'darwin' && app.dock) {
           app.dock.hide()
         }
         return
       } else if (traySettings.closeAction === 'ask' && mainWindow) {
-        // 询问用户 - 先阻止关闭，再异步处理
+        // Ask user - Prevent shutdown first, then process it asynchronously
         event.preventDefault()
-        // 通知渲染进程显示自定义对话框
+        // Notify the rendering process to display a custom dialog box
         mainWindow.webContents.send('show-close-confirm-dialog')
         return
       }
-      // closeAction === 'quit' 时继续关闭流程
+      // closeAction === 'quit' Continue closing process when
     }
 
-    // 窗口关闭前保存数据（同步保存，不等待备份）
+    // Save data before closing the window (save simultaneously, without waiting for backup)
     if (lastSavedData && store) {
       try {
         console.log('[Window] Saving data before close...')
         store.set('accountData', lastSavedData)
-        // 备份异步进行，不阻塞关闭
+        // Backup is performed asynchronously and does not block shutdown.
         createBackup(lastSavedData).then(() => {
           console.log('[Window] Backup created')
         }).catch(err => {
@@ -2375,9 +2374,9 @@ function createWindow(): void {
   }
 }
 
-// 注册自定义协议
+// Register a custom agreement
 function registerProtocol(): void {
-  // 先注销旧的注册（防止上次异常退出未注销）
+  // Log out the old registration first (to prevent the last abnormal exit from not logging out)
   unregisterProtocol()
   
   if (process.defaultApp) {
@@ -2392,7 +2391,7 @@ function registerProtocol(): void {
   console.log(`[Protocol] Registered ${PROTOCOL_PREFIX}:// protocol`)
 }
 
-// 注销自定义协议 (应用退出时调用)
+// Unregister custom agreement (Called when the application exits)
 function unregisterProtocol(): void {
   if (process.defaultApp) {
     if (process.argv.length >= 2) {
@@ -2406,7 +2405,7 @@ function unregisterProtocol(): void {
   console.log(`[Protocol] Unregistered ${PROTOCOL_PREFIX}:// protocol`)
 }
 
-// 处理协议 URL (用于 OAuth 回调)
+// Processing Agreement URL (used for OAuth callback)
 function handleProtocolUrl(url: string): void {
   if (!url.startsWith(`${PROTOCOL_PREFIX}://`)) return
 
@@ -2414,7 +2413,7 @@ function handleProtocolUrl(url: string): void {
     const urlObj = new URL(url)
     const pathname = urlObj.pathname.replace(/^\/+/, '')
 
-    // 处理 auth 回调
+    // deal with auth callback
     if (pathname === 'auth/callback' || urlObj.host === 'auth') {
       const code = urlObj.searchParams.get('code')
       const state = urlObj.searchParams.get('state')
@@ -2433,25 +2432,25 @@ function handleProtocolUrl(url: string): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
-  // 初始化日志系统（尽早拦截，确保所有 console 输出都进入日志存储）
+  // Initialize the log system (intercept as early as possible to ensure all console The output goes into log storage)
   proxyLogStore.initialize(app.getPath('userData'))
   interceptConsole()
 
-  // 启动 Kiro IDE token 文件监听（反向同步：IDE 自己 refresh 后把新 token 同步回反代 store）
-  // 见 syncIdeTokenChangeToStore 注释
+  // start up Kiro IDE token File monitoring (reverse synchronization:IDE Own refresh Put the new one later token Synchronize back to generation store）
+  // See syncIdeTokenChangeToStore Comment
   startKiroAuthTokenWatcher()
 
-  // 注册自定义协议
+  // Register a custom agreement
   registerProtocol()
 
-  // 加载托盘设置并初始化托盘
+  // Load tray settings and initialize the tray
   await loadTraySettings()
   initTray()
 
-  // 初始化自动更新（仅生产环境）
+  // Initialize automatic updates (production environment only)
   if (!is.dev) {
     setupAutoUpdater()
-    // 启动后延迟检查更新
+    // Delay checking for updates after startup
     setTimeout(() => {
       autoUpdater.checkForUpdates().catch(console.error)
     }, 3000)
@@ -2467,7 +2466,7 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC: 打开外部链接
+  // IPC: Open external link
   ipcMain.on('open-external', (_event, url: string, usePrivateMode?: boolean) => {
     if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
       if (usePrivateMode) {
@@ -2478,17 +2477,16 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ 注册功能 IPC ============
-  registerRegistrationHandlers(() => mainWindow)
+  // ============ Registration function IPC ============
 
-  // ============ 托盘相关 IPC ============
+  // ============ Pallet related IPC ============
 
-  // IPC: 获取托盘设置
+  // IPC: Get tray settings
   ipcMain.handle('get-tray-settings', () => {
     return traySettings
   })
 
-  // ============ 自定义 titlebar IPC ============
+  // ============ Customize titlebar IPC ============
   ipcMain.on('window-minimize', () => mainWindow?.minimize())
   ipcMain.on('window-maximize-toggle', () => {
     if (!mainWindow) return
@@ -2499,12 +2497,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('window-is-maximized', () => !!mainWindow?.isMaximized())
   ipcMain.handle('window-get-platform', () => process.platform)
 
-  // IPC: 获取显示主窗口快捷键
+  // IPC: Get the shortcut key to display the main window
   ipcMain.handle('get-show-window-shortcut', () => {
     return showWindowShortcut
   })
 
-  // IPC: 设置显示主窗口快捷键
+  // IPC: Set the shortcut key to display the main window
   ipcMain.handle('set-show-window-shortcut', async (_event, shortcut: string) => {
     try {
       showWindowShortcut = shortcut
@@ -2516,13 +2514,13 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 保存托盘设置
+  // IPC: Save tray settings
   ipcMain.handle('save-tray-settings', async (_event, settings: Partial<TraySettings>) => {
     try {
       traySettings = { ...traySettings, ...settings }
       await saveTraySettings()
       
-      // 根据设置启用/禁用托盘
+      // Enable based on settings/Disable tray
       if (settings.enabled !== undefined) {
         if (settings.enabled) {
           initTray()
@@ -2538,45 +2536,45 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 更新托盘账户信息（从渲染进程调用）
+  // IPC: Update tray account information (called from the render process)
   ipcMain.on('update-tray-account', (_event, account: typeof currentProxyAccount) => {
     currentProxyAccount = account
     updateCurrentAccount(account)
     
-    // 更新托盘提示
+    // Update tray tips
     if (account) {
-      setTrayTooltip(`Kiro 账号管理器\n当前账户: ${account.email}`)
+      setTrayTooltip(`Kiro Account manager\ncurrent account: ${account.email}`)
     } else {
-      setTrayTooltip(`Kiro 账号管理器 v${app.getVersion()}`)
+      setTrayTooltip(`Kiro Account manager v${app.getVersion()}`)
     }
   })
 
-  // IPC: 更新托盘账户列表（从渲染进程调用）
+  // IPC: Update tray account list (called from render process)
   ipcMain.on('update-tray-account-list', (_event, accounts: typeof allAccounts) => {
     allAccounts = accounts
     updateAccountList(accounts)
   })
 
-  // IPC: 刷新托盘菜单
+  // IPC: Refresh tray menu
   ipcMain.on('refresh-tray-menu', () => {
     updateTrayMenu()
   })
 
-  // IPC: 更新托盘语言
+  // IPC: Update tray language
   ipcMain.on('update-tray-language', (_event, language: 'en' | 'zh') => {
     updateTrayLanguage(language)
   })
 
-  // IPC: 关闭确认对话框响应
+  // IPC: Close confirmation dialog response
   ipcMain.on('close-confirm-response', (_event, action: 'minimize' | 'quit' | 'cancel', rememberChoice: boolean) => {
     if (action === 'minimize') {
       mainWindow?.hide()
-      // macOS: 隐藏窗口时隐藏 Dock 图标
+      // macOS: Hide when window is hidden Dock icon
       if (process.platform === 'darwin' && app.dock) {
         app.dock.hide()
       }
     } else if (action === 'quit') {
-      // 如果用户选择记住选择
+      // If the user chooses to remember the selection
       if (rememberChoice) {
         traySettings.closeAction = 'quit'
         saveTraySettings()
@@ -2584,24 +2582,24 @@ app.whenReady().then(async () => {
       isQuitting = true
       app.quit()
     }
-    // cancel 时不做任何操作
+    // cancel Do nothing when
     
-    // 如果用户选择记住"最小化"选择
+    // If the user chooses to remember"minimize"choose
     if (action === 'minimize' && rememberChoice) {
       traySettings.closeAction = 'minimize'
       saveTraySettings()
     }
   })
 
-  // IPC: 获取应用版本
+  // IPC: Get application version
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
   })
 
-  // IPC: 检查更新
+  // IPC: Check for updates
   ipcMain.handle('check-for-updates', async () => {
     if (is.dev) {
-      return { hasUpdate: false, message: '开发环境不支持更新检查' }
+      return { hasUpdate: false, message: 'The development environment does not support update checks' }
     }
     try {
       const result = await autoUpdater.checkForUpdates()
@@ -2616,10 +2614,10 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 下载更新
+  // IPC: Download updates
   ipcMain.handle('download-update', async () => {
     if (is.dev) {
-      return { success: false, message: '开发环境不支持更新' }
+      return { success: false, message: 'The development environment does not support updates' }
     }
     try {
       await autoUpdater.downloadUpdate()
@@ -2630,12 +2628,12 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 安装更新并重启
+  // IPC: Install updates and reboot
   ipcMain.handle('install-update', () => {
     autoUpdater.quitAndInstall(false, true)
   })
 
-  // IPC: 手动检查更新（使用 GitHub API，用于 AboutPage）
+  // IPC: Check for updates manually (using GitHub API, used for AboutPage）
   const GITHUB_REPO = 'chaogei/Kiro-account-manager'
   const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
   
@@ -2653,11 +2651,11 @@ app.whenReady().then(async () => {
       
       if (!response.ok) {
         if (response.status === 403) {
-          throw new Error('GitHub API 请求次数超限，请稍后再试')
+          throw new Error('GitHub API The number of requests has exceeded the limit, please try again later.')
         } else if (response.status === 404) {
-          throw new Error('未找到发布版本')
+          throw new Error('Release version not found')
         }
-        throw new Error(`GitHub API 错误: ${response.status}`)
+        throw new Error(`GitHub API mistake: ${response.status}`)
       }
       
       const release = await response.json() as {
@@ -2675,7 +2673,7 @@ app.whenReady().then(async () => {
       
       const latestVersion = release.tag_name.replace(/^v/, '')
       
-      // 比较版本号
+      // Compare version numbers
       const compareVersions = (v1: string, v2: string): number => {
         const parts1 = v1.split('.').map(Number)
         const parts2 = v2.split('.').map(Number)
@@ -2710,15 +2708,15 @@ app.whenReady().then(async () => {
       console.error('[Update] Manual check failed:', error)
       return {
         hasUpdate: false,
-        error: error instanceof Error ? error.message : '检查更新失败'
+        error: error instanceof Error ? error.message : 'Check for updates failed'
       }
     }
   })
 
-  // ============ 一键诊断 ============
+  // ============ One-click diagnosis ============
   /**
-   * 测试一组目标 URL 的连通性（用于诊断面板）
-   * 支持指定代理 URL；返回每个目标的延迟与错误
+   * Test a set of goals URL connectivity (for diagnostic panels)
+   * Support designated agents URL;Return the delay and error for each target
    */
   ipcMain.handle('diagnose:run', async (_event, params: {
     proxyUrl?: string
@@ -2759,7 +2757,7 @@ app.whenReady().then(async () => {
           url: t.url,
           success: false,
           latencyMs: Date.now() - start,
-          error: controller.signal.aborted ? '超时' : errMsg
+          error: controller.signal.aborted ? 'time out' : errMsg
         }
       } finally {
         clearTimeout(timer)
@@ -2769,23 +2767,23 @@ app.whenReady().then(async () => {
     return { results }
   })
 
-  // ============ 代理池验活 ============
+  // ============ Agent pool verification ============
   /**
-   * 通过指定代理 URL 请求测试地址，返回延迟与出口 IP
-   * 仅支持 http/https 协议代理（受 undici ProxyAgent 限制；socks 协议会被 safeCreateProxyAgent 静默跳过）
+   * by designated agent URL Request test address, return delay and exit IP
+   * Only supports http/https Agreement agent (subject to undici ProxyAgent limit;socks The agreement will be safeCreateProxyAgent Skip silently)
    */
-  // 代理池相关 IPC handler 已拆分到独立模块，便于后续维护
+  // Agent pool related IPC handler Split into independent modules to facilitate subsequent maintenance
   registerProxyPoolIpcHandlers()
 
-  // ============ 账号-代理绑定（反代时 N 账号一个 IP）============
+  // ============ account-Agent binding (when reverse generation N One account IP）============
   /**
-   * 设置账号在反代场景下使用的出口代理 URL
-   * 同时更新：反代账号池里现存的 ProxyAccount.proxyUrl + store 持久化的 accountProxyBindings
+   * Set the export proxy used by the account in anti-generation scenarios URL
+   * Also updated: existing accounts in the anti-generation account pool ProxyAccount.proxyUrl + store persistent accountProxyBindings
    */
   ipcMain.handle('account-set-proxy-binding', async (_event, accountId: string, proxyUrl: string | undefined) => {
     try {
       if (!accountId) return { success: false }
-      // 更新反代账号池内存中的 proxyUrl
+      // Update the memory of the anti-generation account pool proxyUrl
       if (proxyServer) {
         const pool = proxyServer.getAccountPool()
         const acc = pool.getAccount(accountId)
@@ -2801,10 +2799,10 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ 通用 HTTP 诊断探测 ============
+  // ============ Universal HTTP diagnostic detection ============
   /**
-   * 使用应用代理设置发起一次 GET/HEAD 请求，返回延迟、状态码、错误信息。
-   * 用于"一键诊断"面板中检测 Kiro API / 邮箱服务 / 公网连通性。
+   * Initiate once using app proxy settings GET/HEAD Request, return delay, status code, error information.
+   * used for"One-click diagnosis"Detection in panel Kiro API / Email service / Public network connectivity.
    */
   ipcMain.handle('diagnose:http-probe', async (_event, params: {
     url: string
@@ -2836,8 +2834,8 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 账号测活 —— 指定账号走反代逻辑（callKiroApi，与反代服务器同一底层调用）
-  // 给指定模型发一条测试消息，验证账号是否能正常返回，用于一键诊断"账号测活"功能
+  // IPC: Account activity test —— Specify the account to follow the reverse logic (callKiroApi, the same underlying call as the reverse generation server)
+  // Send a test message to the specified model to verify whether the account can be returned normally for one-click diagnosis"Account activity test"Function
   ipcMain.handle('diagnose:account-liveness', async (_event, params: {
     account: {
       id?: string
@@ -2865,13 +2863,13 @@ app.whenReady().then(async () => {
     const start = Date.now()
 
     if (!acc || !acc.accessToken) {
-      return { success: false, error: '账号缺少 accessToken', latencyMs: 0 }
+      return { success: false, error: 'Account missing accessToken', latencyMs: 0 }
     }
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      // 1) Token 即将过期/已过期 → 先刷新（走账号绑定代理）
+      // 1) Token Expires soon/Expired → Refresh first (use the account binding agent)
       let accessToken = acc.accessToken
       const needsRefresh = acc.expiresAt ? (acc.expiresAt - Date.now() < 60_000) : false
       if (needsRefresh && acc.refreshToken) {
@@ -2885,10 +2883,10 @@ app.whenReady().then(async () => {
             acc.proxyUrl
           )
           if (r.success && r.accessToken) accessToken = r.accessToken
-        } catch { /* 刷新失败则用原 token 尝试，让真实错误暴露出来 */ }
+        } catch { /* If the refresh fails, the original token Try and let the real mistakes come to light */ }
       }
 
-      // 2) 构建 ProxyAccount（callKiroApi 需要的账号结构）
+      // 2) Build ProxyAccount（callKiroApi Account structure required)
       const proxyAccount: ProxyAccount = {
         id: acc.id || 'diagnose',
         email: acc.email,
@@ -2905,7 +2903,7 @@ app.whenReady().then(async () => {
         expiresAt: acc.expiresAt
       }
 
-      // 3) 构建最小 OpenAI chat 请求 → 转 Kiro payload
+      // 3) Build minimal OpenAI chat ask → change Kiro payload
       const payload = openaiToKiro({
         model,
         messages: [{ role: 'user', content: message }],
@@ -2913,7 +2911,7 @@ app.whenReady().then(async () => {
         max_tokens: 64
       }, proxyAccount.profileArn)
 
-      // 4) 调用（与反代服务器内部完全相同的底层调用）
+      // 4) call (exactly the same underlying call as inside the reverse generation server)
       const result = await callKiroApi(proxyAccount, payload, controller.signal)
       const latencyMs = Date.now() - start
       const content = (result.content || '').trim()
@@ -2935,14 +2933,14 @@ app.whenReady().then(async () => {
         success: false,
         latencyMs: Date.now() - start,
         model,
-        error: isAbort ? `超时 (${timeoutMs}ms)` : rawMsg
+        error: isAbort ? `time out (${timeoutMs}ms)` : rawMsg
       }
     } finally {
       clearTimeout(timer)
     }
   })
 
-  // IPC: 加载账号数据
+  // IPC: Load account data
   ipcMain.handle('load-accounts', async () => {
     try {
       await initStore()
@@ -2953,16 +2951,16 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 保存账号数据
+  // IPC: Save account data
   ipcMain.handle('save-accounts', async (_event, data) => {
     try {
       await initStore()
       store!.set('accountData', data)
       
-      // 保存最后的数据（用于崩溃恢复）
+      // Save last data (for crash recovery)
       lastSavedData = data
       
-      // 每次保存时也创建备份
+      // Also creates a backup every time you save
       await createBackup(data)
     } catch (error) {
       console.error('Failed to save accounts:', error)
@@ -2970,28 +2968,28 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 刷新账号 Token（支持 IdC 和社交登录）
+  // IPC: Refresh account Token(support IdC and social login)
   ipcMain.handle('refresh-account-token', async (_event, account) => {
     try {
       const { refreshToken, clientId, clientSecret, region, authMethod, startUrl, provider } = account.credentials || {}
 
       if (!refreshToken) {
-        return { success: false, error: { message: '缺少 Refresh Token' } }
+        return { success: false, error: { message: 'Lack Refresh Token' } }
       }
 
-      // 社交登录只需要 refreshToken，IdC 登录需要 clientId 和 clientSecret
+      // Social login only requires refreshToken，IdC Login required clientId and clientSecret
       if (authMethod !== 'social' && (!clientId || !clientSecret)) {
-        return { success: false, error: { message: '缺少 OIDC 刷新凭证 (clientId/clientSecret)' } }
+        return { success: false, error: { message: 'Lack OIDC Refresh credentials (clientId/clientSecret)' } }
       }
 
-      // 查找账号绑定的代理 URL（账号池中已有 proxyUrl 字段）
+      // Find the agent bound to the account URL(Already in the account pool proxyUrl field)
       const boundProxyUrl = proxyServer
         ? (proxyServer.getAccountPool().getAccount(account.id || '')?.proxyUrl)
         : undefined
 
       console.log(`[IPC] Refreshing token (authMethod: ${authMethod || 'IdC'})...${boundProxyUrl ? ' [via bound proxy]' : ''}`)
 
-      // 根据 authMethod 选择刷新方式（透传账号绑定代理）
+      // according to authMethod Select the refresh method (transparent transmission of account binding agent)
       const refreshResult = await refreshTokenByMethod(
         refreshToken,
         clientId || '',
@@ -3002,18 +3000,18 @@ app.whenReady().then(async () => {
       )
 
       if (!refreshResult.success || !refreshResult.accessToken) {
-        return { success: false, error: { message: refreshResult.error || 'Token 刷新失败' } }
+        return { success: false, error: { message: refreshResult.error || 'Token Refresh failed' } }
       }
 
       const newAccess = refreshResult.accessToken
       const newRefresh = refreshResult.refreshToken || refreshToken
       const expiresIn = refreshResult.expiresIn ?? 3600
 
-      // bug B 修复：仅当该账号是 Kiro IDE 当前激活账号时，同步写入磁盘 token 文件
-      // 判定优先级（任一命中即视为"是当前激活账号"）：
-      //   1) 磁盘 token 的 refreshToken === renderer 传入的 account.credentials.refreshToken（最准）
-      //   2) account.id === lastSwitchedAccountId（反代刚切过号的兜底）
-      // 不同步的场景：用户在反代里刷新的是"非当前激活账号"，避免误覆盖 IDE 当前账号
+      // bug B Fix: Only if the account is Kiro IDE When the account is currently activated, it is written to disk synchronously. token document
+      // Determine priority (any hit is considered"is the currently activated account"）：
+      //   1) disk token of refreshToken === renderer incoming account.credentials.refreshToken(most accurate)
+      //   2) account.id === lastSwitchedAccountId(Anti-generation of someone who has just had his account cut off)
+      // Out-of-sync scenario: What the user refreshes in reverse generation is"Not currently active account", to avoid mistaken coverage IDE Current account
       let syncedToIde = false
       let syncSkipReason: string | undefined
       try {
@@ -3039,26 +3037,26 @@ app.whenReady().then(async () => {
             clientSecret: clientSecret || undefined,
             profileArn: resolvedProfileArn
           })
-          // 记录刚写入的签名，避免 watcher 触发反向同步回环
+          // Record the signature just written to avoid watcher Trigger reverse sync loopback
           lastWrittenTokenSignature = `${newAccess}|${newRefresh}`
           if (account.id) lastSwitchedAccountId = account.id
           syncedToIde = true
           console.log(`[Refresh] Synced refreshed token to Kiro IDE for account ${account.email || account.id}`)
-          // 重新 schedule 主动续期 timer（基于新 expiresAt，覆盖任何旧 timer）
+          // again schedule Active renewal timer(Based on new expiresAt, overwriting any old timer）
           if (proactiveRenewalEnabled && account.id) {
             scheduleProactiveRenewal(account.id, Date.now() + expiresIn * 1000)
           }
         } else {
           syncSkipReason = diskToken
-            ? '该账号不是 Kiro IDE 当前激活账号，跳过磁盘同步'
-            : '磁盘上未找到 kiro-auth-token.json（IDE 未登录），跳过磁盘同步'
+            ? 'This account is not Kiro IDE Currently activated account, skip disk synchronization'
+            : 'not found on disk kiro-auth-token.json（IDE Not logged in), skip disk synchronization'
         }
       } catch (e) {
-        syncSkipReason = `磁盘同步异常：${e instanceof Error ? e.message : String(e)}`
+        syncSkipReason = `Disk synchronization exception:${e instanceof Error ? e.message : String(e)}`
         console.warn('[Refresh] Failed to sync token to IDE:', e)
       }
 
-      // 刷新后自动获取 profileArn（仅 Enterprise 需要调 API，其他类型不调）
+      // Get it automatically after refreshing profileArn(only Enterprise Need to adjust API, other types are not adjusted)
       let resolvedEnterpriseArn: string | undefined
       const existingProfileArn = account.profileArn || account.credentials?.profileArn
       if (!existingProfileArn) {
@@ -3080,7 +3078,7 @@ app.whenReady().then(async () => {
             console.warn('[Refresh] Failed to fetch Enterprise profileArn:', e)
           }
         }
-        // BuilderId/Social 不调 API，不需要返回 profileArn（反代自愈时用 resolveProfileArn 兜底）
+        // BuilderId/Social Out of tune API, no need to return profileArn(Used for anti-generation and self-healing) resolveProfileArn reveal all the details)
       }
 
       return {
@@ -3089,9 +3087,9 @@ app.whenReady().then(async () => {
           accessToken: newAccess,
           refreshToken: newRefresh,
           expiresIn,
-          // Enterprise 自动获取的 profileArn（renderer 需要存储到账号数据）
+          // Enterprise automatically obtained profileArn（renderer Need to be stored in account data)
           profileArn: resolvedEnterpriseArn || undefined,
-          // 让 renderer 决定是否给用户显示"已同步到 IDE"的反馈
+          // let renderer Decide whether to display it to the user"Already synced to IDE"Feedback
           syncedToIde,
           syncSkipReason
         }
@@ -3104,10 +3102,10 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ 主动续期开关 IPC ============
-  // 启用后，账号管理器会在 IDE 当前激活账号的 token 剩 PROACTIVE_RENEWAL_LEAD_MS（默认 15 分钟）时
-  // 抢先 refresh + 写磁盘，IDE 永远拿到剩余 ≥ 45 分钟的 token，IDE 内部 refresh loop 不会触发，
-  // 彻底消除 IDE 与账号管理器同时 refresh 撞车的可能。
+  // ============ Active renewal switch IPC ============
+  // Once enabled, the account manager will IDE Currently activated account token left PROACTIVE_RENEWAL_LEAD_MS(default 15 minutes) hours
+  // Be the first refresh + write to disk,IDE Always get the remainder ≥ 45 minutes token，IDE internal refresh loop will not trigger,
+  // completely eliminate IDE Simultaneously with Account Manager refresh Possibility of crash.
   ipcMain.handle('set-proactive-renewal-enabled', async (_event, enabled: boolean) => {
     try {
       await initStore()
@@ -3116,7 +3114,7 @@ app.whenReady().then(async () => {
       console.log(`[ProactiveRenewal] ${proactiveRenewalEnabled ? 'Enabled' : 'Disabled'} by user`)
 
       if (proactiveRenewalEnabled) {
-        // 启用时：若当前已有 IDE 激活账号，立刻 schedule
+        // When enabled: If there is currently IDE Activate your account immediately schedule
         if (lastSwitchedAccountId) {
           const accountData = store?.get('accountData') as
             | { accounts?: Record<string, { credentials?: { expiresAt?: number } }> }
@@ -3161,19 +3159,19 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 从 SSO Token 导入账号 (x-amz-sso_authn)
+  // IPC: from SSO Token Import account (x-amz-sso_authn)
   ipcMain.handle('import-from-sso-token', async (_event, bearerToken: string, region: string = 'us-east-1') => {
     console.log('[IPC] import-from-sso-token called')
     
     try {
-      // 执行 SSO 设备授权流程
+      // implement SSO Device authorization process
       const ssoResult = await ssoDeviceAuth(bearerToken, region)
       
       if (!ssoResult.success || !ssoResult.accessToken) {
-        return { success: false, error: { message: ssoResult.error || 'SSO 授权失败' } }
+        return { success: false, error: { message: ssoResult.error || 'SSO Authorization failed' } }
       }
 
-      // 并行获取用户信息和使用量
+      // Get user information and usage in parallel
       interface UsageBreakdownItem {
         resourceType?: string
         currentUsage?: number
@@ -3214,11 +3212,11 @@ app.whenReady().then(async () => {
         console.error('[IPC] API calls failed:', e)
       }
 
-      // 解析使用量数据
+      // Parse usage data
       const creditUsage = usageData?.usageBreakdownList?.find(b => b.resourceType === 'CREDIT')
       const subscriptionTitle = usageData?.subscriptionInfo?.subscriptionTitle || 'KIRO'
       
-      // 规范化订阅类型（注意检查顺序：先检查更具体的类型）
+      // Normalized subscription types (note the order of checks: check more specific types first)
       let subscriptionType = 'Free'
       const titleUpper = subscriptionTitle.toUpperCase()
       if (titleUpper.includes('PRO+') || titleUpper.includes('PRO_PLUS') || titleUpper.includes('PROPLUS')) {
@@ -3233,11 +3231,11 @@ app.whenReady().then(async () => {
         subscriptionType = 'Teams'
       }
 
-      // 基础额度（使用精确小数）
+      // Basic amount (use exact decimals)
       const baseLimit = creditUsage?.usageLimitWithPrecision ?? creditUsage?.usageLimit ?? 0
       const baseCurrent = creditUsage?.currentUsageWithPrecision ?? creditUsage?.currentUsage ?? 0
 
-      // 试用额度（使用精确小数）
+      // Trial amount (use exact decimal)
       let freeTrialLimit = 0, freeTrialCurrent = 0, freeTrialExpiry: string | undefined
       if (creditUsage?.freeTrialInfo?.freeTrialStatus === 'ACTIVE') {
         freeTrialLimit = creditUsage.freeTrialInfo.usageLimitWithPrecision ?? creditUsage.freeTrialInfo.usageLimit ?? 0
@@ -3245,7 +3243,7 @@ app.whenReady().then(async () => {
         freeTrialExpiry = creditUsage.freeTrialInfo.freeTrialExpiry
       }
 
-      // 奖励额度（使用精确小数）
+      // Reward amount (use exact decimal)
       const bonuses = (creditUsage?.bonuses || []).map(b => ({
         code: b.bonusCode || '',
         name: b.displayName || '',
@@ -3310,7 +3308,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 检查账号状态（支持自动刷新 Token）
+  // IPC: Check account status (supports automatic refresh Token）
   ipcMain.handle('check-account-status', async (_event, account) => {
     console.log(`[IPC] check-account-status [${account?.email || 'unknown'}]`)
 
@@ -3322,7 +3320,7 @@ app.whenReady().then(async () => {
       currentUsage?: number
       currentUsageWithPrecision?: number
       status?: string
-      expiresAt?: string  // API 返回的是 expiresAt
+      expiresAt?: string  // API What is returned is expiresAt
     }
 
     interface FreeTrialInfo {
@@ -3377,7 +3375,7 @@ app.whenReady().then(async () => {
       userInfo?: UserInfo
     }
 
-    // 解析 API 响应的辅助函数
+    // parse API Response helper function
     const parseUsageResponse = (result: UsageResponse, newCredentials?: {
       accessToken: string
       refreshToken?: string
@@ -3385,17 +3383,17 @@ app.whenReady().then(async () => {
     }, userInfo?: UserInfoResponse) => {
       console.log(`[Kiro API] Usage [${account?.email || userInfo?.email || 'unknown'}]`, result)
 
-      // 解析 Credits 使用量（resourceType 为 CREDIT）
+      // parse Credits Usage (resourceType for CREDIT）
       const creditUsage = result.usageBreakdownList?.find(
         (b) => b.resourceType === 'CREDIT' || b.displayName === 'Credits'
       )
 
-      // 解析使用量（详细，使用精确小数）
-      // 基础额度
+      // Parse usage (verbose, use exact decimals)
+      // Basic amount
       const baseLimit = creditUsage?.usageLimitWithPrecision ?? creditUsage?.usageLimit ?? 0
       const baseCurrent = creditUsage?.currentUsageWithPrecision ?? creditUsage?.currentUsage ?? 0
       
-      // 试用额度
+      // Trial amount
       let freeTrialLimit = 0
       let freeTrialCurrent = 0
       let freeTrialExpiry: string | undefined
@@ -3405,7 +3403,7 @@ app.whenReady().then(async () => {
         freeTrialExpiry = creditUsage.freeTrialInfo.freeTrialExpiry
       }
       
-      // 奖励额度
+      // Reward amount
       const bonusesData: { code: string; name: string; current: number; limit: number; expiresAt?: string }[] = []
       if (creditUsage?.bonuses) {
         for (const bonus of creditUsage.bonuses) {
@@ -3421,12 +3419,12 @@ app.whenReady().then(async () => {
         }
       }
       
-      // 计算总额度
+      // Calculate total amount
       const totalLimit = baseLimit + freeTrialLimit + bonusesData.reduce((sum, b) => sum + b.limit, 0)
       const totalUsed = baseCurrent + freeTrialCurrent + bonusesData.reduce((sum, b) => sum + b.current, 0)
       const nextResetDate = result.nextDateReset
 
-      // 解析订阅类型
+      // Parse subscription type
       const subscriptionTitle = result.subscriptionInfo?.subscriptionTitle ?? 'Free'
       let subscriptionType = account.subscription?.type ?? 'Free'
       if (subscriptionTitle.toUpperCase().includes('PRO')) {
@@ -3437,7 +3435,7 @@ app.whenReady().then(async () => {
         subscriptionType = 'Teams'
       }
 
-      // 解析重置时间并计算剩余天数
+      // Parse reset time and calculate remaining days
       let expiresAt: number | undefined
       let daysRemaining: number | undefined
       if (result.nextDateReset) {
@@ -3446,7 +3444,7 @@ app.whenReady().then(async () => {
         daysRemaining = Math.max(0, Math.ceil((expiresAt - now) / (1000 * 60 * 60 * 24)))
       }
 
-      // 资源详情
+      // Resource details
       const resourceDetail = creditUsage ? {
         resourceType: creditUsage.resourceType,
         displayName: creditUsage.displayName,
@@ -3492,7 +3490,7 @@ app.whenReady().then(async () => {
             overageCapability: result.subscriptionInfo?.overageCapability,
             managementTarget: result.subscriptionInfo?.subscriptionManagementTarget
           },
-          // 如果刷新了 token，返回新的凭证
+          // If refreshed token, return new credentials
           newCredentials: newCredentials ? {
             accessToken: newCredentials.accessToken,
             refreshToken: newCredentials.refreshToken,
@@ -3507,13 +3505,13 @@ app.whenReady().then(async () => {
     try {
       const { accessToken, refreshToken, clientId, clientSecret, region, authMethod, provider } = account.credentials || {}
 
-      // 查询账号绑定的代理（账号池）
+      // Query the agent bound to the account (account pool)
       const boundProxyUrl = proxyServer
         ? proxyServer.getAccountPool().getAccount(account.id || '')?.proxyUrl
         : undefined
 
-      // 确定正确的 idp：优先使用 credentials.provider，否则回退到 account.idp
-      // 社交登录使用实际的 provider (Github/Google)，IdC 使用 BuilderId
+      // determine the correct idp: priority use credentials.provider, otherwise fall back to account.idp
+      // social login using actual provider (Github/Google)，IdC use BuilderId
       let idp = 'BuilderId'
       if (authMethod === 'social') {
         idp = provider || account.idp || 'BuilderId'
@@ -3523,18 +3521,18 @@ app.whenReady().then(async () => {
 
       if (!accessToken) {
         console.log('[IPC] Missing accessToken')
-        return { success: false, error: { message: '缺少 accessToken' } }
+        return { success: false, error: { message: 'Lack accessToken' } }
       }
 
-      // 获取账户绑定的设备 ID
+      // Get the device bound to the account ID
       const accountMachineId = account?.machineId as string | undefined
 
-      // 第一次尝试：使用当前 accessToken
+      // First try: use current accessToken
       try {
-        // 并行调用 GetUserInfo 和 getUsageAndLimits
+        // Parallel calls GetUserInfo and getUsageAndLimits
         const [userInfoResult, usageResult] = await Promise.all([
           getUserInfo(accessToken, idp, accountMachineId, account?.email).catch((err: Error) => {
-            // 封禁错误不能吞掉，必须向上抛出
+            // Banning errors cannot be swallowed and must be thrown upwards
             if (err.message.includes('423') || err.message.includes('AccountSuspended')) {
               throw err
             }
@@ -3546,7 +3544,7 @@ app.whenReady().then(async () => {
       } catch (apiError) {
         const errorMsg = apiError instanceof Error ? apiError.message : ''
         
-        // 检查是否是明确封禁错误（423 或 AccountSuspendedException）
+        // Check if it is an explicit ban error (423 or AccountSuspendedException）
         if (errorMsg.includes('AccountSuspendedException') || errorMsg.includes('423')) {
           console.log('[IPC] Account suspended/banned')
           return {
@@ -3555,13 +3553,13 @@ app.whenReady().then(async () => {
           }
         }
         
-        // 检查是否是 401 错误（token 过期）
-        // 社交登录只需要 refreshToken，IdC 登录需要 clientId 和 clientSecret
+        // Check if it is 401 mistake(token Expired)
+        // Social login only requires refreshToken，IdC Login required clientId and clientSecret
         const canRefresh = refreshToken && (authMethod === 'social' || (clientId && clientSecret))
         if (errorMsg.includes('401') && canRefresh) {
           console.log(`[IPC] Token expired, attempting to refresh (authMethod: ${authMethod || 'IdC'})...${boundProxyUrl ? ' [via bound proxy]' : ''}`)
 
-          // 尝试刷新 token - 根据 authMethod 选择刷新方式（透传账号代理）
+          // try to refresh token - according to authMethod Select the refresh method (transparent account proxy)
           const refreshResult = await refreshTokenByMethod(
             refreshToken,
             clientId || '',
@@ -3574,7 +3572,7 @@ app.whenReady().then(async () => {
           if (refreshResult.success && refreshResult.accessToken) {
             console.log('[IPC] Token refreshed, retrying API call...')
             
-            // 用新 token 并行调用 GetUserInfo 和 getUsageAndLimits
+            // Use new token Parallel calls GetUserInfo and getUsageAndLimits
             const [userInfoResult, usageResult] = await Promise.all([
               getUserInfo(refreshResult.accessToken, idp, accountMachineId).catch((err: Error) => {
                 if (err.message.includes('423') || err.message.includes('AccountSuspended')) {
@@ -3585,7 +3583,7 @@ app.whenReady().then(async () => {
               getUsageAndLimits(refreshResult.accessToken, idp, undefined, accountMachineId, region)
             ])
             
-            // 返回结果并包含新凭证
+            // Return the result and include the new credentials
             return parseUsageResponse(usageResult, {
               accessToken: refreshResult.accessToken,
               refreshToken: refreshResult.refreshToken,
@@ -3595,12 +3593,12 @@ app.whenReady().then(async () => {
             console.error('[IPC] Token refresh failed:', refreshResult.error)
             return {
               success: false,
-              error: { message: `Token 过期且刷新失败: ${refreshResult.error}` }
+              error: { message: `Token Expired and failed to refresh: ${refreshResult.error}` }
             }
           }
         }
         
-        // 不是 401 或没有刷新凭证，抛出原错误
+        // no 401 Or the credentials are not refreshed and the original error is thrown.
         throw apiError
       }
     } catch (error) {
@@ -3612,7 +3610,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 后台批量刷新账号（在主进程执行，不阻塞 UI）
+  // IPC: Refresh accounts in batches in the background (executed in the main process, without blocking UI）
   const backgroundBatchRefresh = async (accounts: BackgroundRefreshAccount[], concurrency: number = 10, syncInfo: boolean = true): Promise<{ success: boolean; completed: number; successCount: number; failedCount: number }> => {
     console.log(`[BackgroundRefresh] Starting batch refresh for ${accounts.length} accounts, concurrency: ${concurrency}, syncInfo: ${syncInfo}`)
     
@@ -3620,29 +3618,29 @@ app.whenReady().then(async () => {
     let success = 0
     let failed = 0
 
-    // 串行处理每批，避免并发过高
+    // Process each batch serially to avoid excessive concurrency
     for (let i = 0; i < accounts.length; i += concurrency) {
       const batch = accounts.slice(i, i + concurrency)
       
       await Promise.allSettled(
         batch.map(async (account) => {
-          // 去重：渲染进程定时器与主进程调度器可能同时触发刷新，
-          // 对同一账号并发刷新会让其中一个用到被 rotate 作废的旧 refreshToken。
-          // 已在途则跳过本次（不计入成败，等在途那次的结果回流即可）。
+          // Deduplication: The rendering process timer and the main process scheduler may trigger refresh at the same time.
+          // Concurrent refreshes on the same account will cause one of them to be used rotate obsolete old refreshToken。
+          // If you are already on the way, skip this time (success or failure will not be counted, just wait for the results of the time on the way to be returned).
           if (account.id && poolRefreshInFlightIds.has(account.id)) {
             return
           }
           if (account.id) poolRefreshInFlightIds.add(account.id)
           try {
             const { refreshToken, clientId, clientSecret, region, authMethod, accessToken, provider } = account.credentials
-            const needsTokenRefresh = account.needsTokenRefresh !== false // 默认为 true（兼容旧版本）
+            const needsTokenRefresh = account.needsTokenRefresh !== false // Default is true(compatible with older versions)
 
-            // 查询账号绑定的代理（从主进程账号池）
+            // Query the agent bound to the account (from the main process account pool)
             const boundProxyUrl = proxyServer
               ? proxyServer.getAccountPool().getAccount(account.id)?.proxyUrl
               : undefined
 
-            // 确定正确的 idp
+            // determine the correct idp
             let idp = 'BuilderId'
             if (authMethod === 'social') {
               idp = provider || account.idp || 'BuilderId'
@@ -3654,7 +3652,7 @@ app.whenReady().then(async () => {
             let newRefreshToken = refreshToken
             let newExpiresIn: number | undefined
 
-            // 只有需要刷新 Token 时才刷新
+            // Only need to refresh Token Refresh only when
             if (needsTokenRefresh) {
               if (!refreshToken) {
                 failed++
@@ -3662,7 +3660,7 @@ app.whenReady().then(async () => {
                 return
               }
 
-              // 刷新 Token（透传账号绑定代理）
+              // refresh Token(Transparent account binding agent)
               const refreshResult = await refreshTokenByMethod(
                 refreshToken,
                 clientId || '',
@@ -3675,7 +3673,7 @@ app.whenReady().then(async () => {
               if (!refreshResult.success) {
                 failed++
                 completed++
-                // 通知渲染进程刷新失败
+                // Notify the rendering process that the refresh failed
                 mainWindow?.webContents.send('background-refresh-result', {
                   id: account.id,
                   success: false,
@@ -3688,9 +3686,9 @@ app.whenReady().then(async () => {
               newRefreshToken = refreshResult.refreshToken || refreshToken
               newExpiresIn = refreshResult.expiresIn
 
-              // 仅当该账号是 Kiro IDE 当前激活账号时，同步新 token 到磁盘 token 文件。
-              // 否则 IDE 在 ~50min 后会用磁盘上"被自动刷新作废"的旧 refreshToken 调 OIDC → 401 → logoutAndForget。
-              // 判定优先级（任一命中）：1) 磁盘 refresh 匹配账号  2) lastSwitchedAccountId 匹配
+              // Only if the account is Kiro IDE When the account is currently activated, synchronize the new token to disk token document.
+              // otherwise IDE exist ~50min will be used on disk later"Invalidated by automatic refresh"old refreshToken tune OIDC → 401 → logoutAndForget。
+              // Determine priority (any hit):1) disk refresh Match account  2) lastSwitchedAccountId match
               if (newAccessToken && newRefreshToken && newExpiresIn) {
                 try {
                   const diskToken = await readKiroAuthTokenFile()
@@ -3710,8 +3708,8 @@ app.whenReady().then(async () => {
                       authMethod: (authMethod === 'social' ? 'social' : 'IdC'),
                       provider: provider || (diskToken?.provider as string | undefined) || 'BuilderId',
                       region: region || diskToken?.region,
-                      // background-batch-refresh 没传 startUrl，但 disk 的 clientIdHash 不再变；
-                      // helper 会用默认 startUrl 计算同一 hash，写入的 client 注册文件路径也不会变
+                      // background-batch-refresh Didn't pass startUrl,but disk of clientIdHash no longer changes;
+                      // helper Will use the default startUrl Calculate the same hash, written client The registration file path will not change
                       clientId: clientId || undefined,
                       clientSecret: clientSecret || undefined,
                       profileArn: resolvedProfileArn
@@ -3729,7 +3727,7 @@ app.whenReady().then(async () => {
               }
             }
 
-            // Enterprise 账号：后台刷新后自动获取 profileArn（BuilderId/Social 不需要调 API）
+            // Enterprise Account: automatically obtained after background refresh profileArn（BuilderId/Social No need to adjust API）
             const existingProfileArn = account.profileArn || account.credentials?.profileArn
             let resolvedBgProfileArn: string | undefined
             const isEnt = (provider || account.idp) === 'Enterprise' || authMethod === 'external_idp'
@@ -3751,14 +3749,14 @@ app.whenReady().then(async () => {
               }
             }
 
-            // 获取账号信息
+            // Get account information
             if (!newAccessToken) {
               failed++
               completed++
               return
             }
 
-            // 根据 syncInfo 决定是否检测账户信息
+            // according to syncInfo Decide whether to check account information
             let parsedUsage: {
               current: number
               limit: number
@@ -3786,7 +3784,7 @@ app.whenReady().then(async () => {
             let errorMessage: string | undefined
 
             if (syncInfo) {
-              // 调用 getUsageAndLimits API（根据配置选择 REST 或 CBOR 格式）
+              // call getUsageAndLimits API(Select according to configuration REST or CBOR Format)
               try {
                 interface UsageBreakdownItem {
                   resourceType?: string
@@ -3833,7 +3831,7 @@ app.whenReady().then(async () => {
                 console.log(`[BackgroundRefresh] Account ${account.id} machineId: ${account.machineId || 'undefined'}`)
                 const rawUsage = await getUsageAndLimits(newAccessToken, idp, undefined, account.machineId, region) as UsageResponse
                 
-                // 解析使用量数据
+                // Parse usage data
                 const creditUsage = rawUsage.usageBreakdownList?.find(b => b.resourceType === 'CREDIT')
                 const baseCurrent = creditUsage?.currentUsageWithPrecision ?? creditUsage?.currentUsage ?? 0
                 const baseLimit = creditUsage?.usageLimitWithPrecision ?? creditUsage?.usageLimit ?? 0
@@ -3884,7 +3882,7 @@ app.whenReady().then(async () => {
                   } : undefined
                 }
                 
-                // 解析订阅信息（注意检查顺序：先检查更具体的类型）
+                // Parse subscription information (note the order of checks: check more specific types first)
                 const subscriptionTitle = rawUsage.subscriptionInfo?.subscriptionTitle || 'Free'
                 let subscriptionType = 'Free'
                 const titleUpper = subscriptionTitle.toUpperCase()
@@ -3900,7 +3898,7 @@ app.whenReady().then(async () => {
                   subscriptionType = 'Teams'
                 }
                 
-                // 计算剩余天数和到期时间
+                // Calculate remaining days and expiration time
                 let daysRemaining: number | undefined
                 let expiresAt: number | undefined
                 if (rawUsage.nextDateReset) {
@@ -3926,7 +3924,7 @@ app.whenReady().then(async () => {
                 }
               }
 
-              // 调用 GetUserInfo API 获取用户状态
+              // call GetUserInfo API Get user status
               try {
                 userInfoData = await getUserInfo(newAccessToken, idp, account.machineId)
               } catch (apiError) {
@@ -3941,7 +3939,7 @@ app.whenReady().then(async () => {
             success++
             completed++
 
-            // 通知渲染进程更新账号
+            // Notify the rendering process to update the account
             mainWindow?.webContents.send('background-refresh-result', {
               id: account.id,
               success: true,
@@ -3971,7 +3969,7 @@ app.whenReady().then(async () => {
         })
       )
 
-      // 通知进度
+      // Notify progress
       mainWindow?.webContents.send('background-refresh-progress', {
         completed,
         total: accounts.length,
@@ -3979,7 +3977,7 @@ app.whenReady().then(async () => {
         failed
       })
 
-      // 批次间延迟，让主进程有喘息时间
+      // Delay between batches to give the main process breathing time
       if (i + concurrency < accounts.length) {
         await new Promise(resolve => setTimeout(resolve, 100))
       }
@@ -3988,13 +3986,13 @@ app.whenReady().then(async () => {
     console.log(`[BackgroundRefresh] Completed: ${success} success, ${failed} failed`)
     return { success: true, completed, successCount: success, failedCount: failed }
   }
-  // 暴露给主进程调度器复用（startMainPoolTokenRefresh）
+  // Exposed to the main process scheduler for reuse (startMainPoolTokenRefresh）
   backgroundBatchRefreshImpl = backgroundBatchRefresh
   ipcMain.handle('background-batch-refresh', (_event, accounts: BackgroundRefreshAccount[], concurrency: number = 10, syncInfo: boolean = true) => backgroundBatchRefresh(accounts, concurrency, syncInfo))
-  // 启动主进程池 token 刷新调度器（不依赖窗口可见/存活，挂托盘也照常刷新）
+  // Start the main process pool token Refresh scheduler (does not depend on window being visible)/Survive, the hanging tray is also refreshed as usual)
   startMainPoolTokenRefresh()
 
-  // IPC: 后台批量检查账号状态（不刷新 Token，只检查状态）
+  // IPC: Check account status in batches in the background (without refreshing Token, only check status)
   ipcMain.handle('background-batch-check', async (_event, accounts: Array<{
     id: string
     email: string
@@ -4015,7 +4013,7 @@ app.whenReady().then(async () => {
     let success = 0
     let failed = 0
 
-    // 串行处理每批
+    // Process each batch serially
     for (let i = 0; i < accounts.length; i += concurrency) {
       const batch = accounts.slice(i, i + concurrency)
       
@@ -4030,18 +4028,18 @@ app.whenReady().then(async () => {
               mainWindow?.webContents.send('background-check-result', {
                 id: account.id,
                 success: false,
-                error: '缺少 accessToken'
+                error: 'Lack accessToken'
               })
               return
             }
 
-            // 确定 idp
+            // Sure idp
             let idp = account.idp || 'BuilderId'
             if (authMethod === 'social' && provider) {
               idp = provider
             }
 
-            // 调用 API 获取用量和用户信息（根据配置选择 REST 或 CBOR 格式）
+            // call API Get usage and user information (selected based on configuration REST or CBOR Format)
             const [usageRes, userInfoRes] = await Promise.allSettled([
               getUsageAndLimits(accessToken, idp, undefined, undefined, account.credentials?.region, account.email) as Promise<{
                 usageBreakdownList?: Array<{
@@ -4094,7 +4092,7 @@ app.whenReady().then(async () => {
                 status?: string
                 idp?: string
               }>('GetUserInfo', { origin: 'KIRO_IDE' }, accessToken, idp, undefined, account.email).catch((err: Error) => {
-                // 封禁错误不能吞掉，需要在后续逻辑中检测
+                // Banning errors cannot be swallowed and need to be detected in subsequent logic.
                 if (err.message.includes('423') || err.message.includes('AccountSuspended')) {
                   throw err
                 }
@@ -4102,7 +4100,7 @@ app.whenReady().then(async () => {
               })
             ])
 
-            // 解析响应（kiroApiRequest 直接返回数据或抛出异常）
+            // parse response(kiroApiRequest Return data directly or throw an exception)
             let usageData: {
               current: number
               limit: number
@@ -4141,10 +4139,10 @@ app.whenReady().then(async () => {
             let status = 'active'
             let errorMessage: string | undefined
 
-            // 处理用量响应
+            // Handling usage responses
             if (usageRes.status === 'fulfilled') {
               const rawUsage = usageRes.value
-              // 解析 Credits 使用量（和单个检查一致）
+              // parse Credits Usage (same as single check)
               const creditUsage = rawUsage.usageBreakdownList?.find(
                 (b) => b.resourceType === 'CREDIT' || b.displayName === 'Credits'
               )
@@ -4160,7 +4158,7 @@ app.whenReady().then(async () => {
                 freeTrialExpiry = creditUsage.freeTrialInfo.freeTrialExpiry
               }
               
-              // 解析 bonuses
+              // parse bonuses
               const bonuses: Array<{ code: string; name: string; current: number; limit: number; expiresAt?: string }> = []
               if (creditUsage?.bonuses) {
                 for (const bonus of creditUsage.bonuses) {
@@ -4191,7 +4189,7 @@ app.whenReady().then(async () => {
                 nextResetDate: rawUsage.nextDateReset
               }
 
-              // 解析资源详情（含超额信息）
+              // Parse resource details (including excess information)
               if (creditUsage) {
                 resourceDetail = {
                   displayName: creditUsage.displayName,
@@ -4205,7 +4203,7 @@ app.whenReady().then(async () => {
                 }
               }
 
-              // 解析订阅信息（注意检查顺序：先检查更具体的类型）
+              // Parse subscription information (note the order of checks: check more specific types first)
               const subscriptionTitle = rawUsage.subscriptionInfo?.subscriptionTitle ?? 'Free'
               let subscriptionType = 'Free'
               const titleUpper = subscriptionTitle.toUpperCase()
@@ -4221,7 +4219,7 @@ app.whenReady().then(async () => {
                 subscriptionType = 'Teams'
               }
               
-              // 计算剩余天数和到期时间
+              // Calculate remaining days and expiration time
               let daysRemaining: number | undefined
               let expiresAt: number | undefined
               if (rawUsage.nextDateReset) {
@@ -4239,7 +4237,7 @@ app.whenReady().then(async () => {
                 subscriptionManagementTarget: rawUsage.subscriptionInfo?.subscriptionManagementTarget
               }
             } else if (usageRes.status === 'rejected') {
-              // API 调用失败（可能是封禁或 Token 过期）
+              // API The call failed (possibly due to ban or Token Expired)
               const errorMsg = usageRes.reason?.message || String(usageRes.reason)
               console.log(`[BackgroundCheck] Usage API failed for ${account.email}:`, errorMsg)
               if (errorMsg.includes('AccountSuspendedException') || errorMsg.includes('423')) {
@@ -4247,14 +4245,14 @@ app.whenReady().then(async () => {
                 errorMessage = errorMsg
               } else if (errorMsg.includes('401')) {
                 status = 'expired'
-                errorMessage = 'Token 已过期，请刷新'
+                errorMessage = 'Token Expired, please refresh'
               } else {
                 status = 'error'
                 errorMessage = errorMsg
               }
             }
 
-            // 处理用户信息响应
+            // Handle user information response
             if (userInfoRes.status === 'fulfilled' && userInfoRes.value) {
               const rawUserInfo = userInfoRes.value
               userInfoData = {
@@ -4262,13 +4260,13 @@ app.whenReady().then(async () => {
                 userId: rawUserInfo.userId,
                 status: rawUserInfo.status
               }
-              // 检查用户状态（Stale 视为正常，仅 Suspended/Disabled 等视为异常）
+              // Check user status (Stale considered normal, only Suspended/Disabled etc. as abnormal)
               if (rawUserInfo.status && rawUserInfo.status !== 'Active' && rawUserInfo.status !== 'Stale' && status !== 'error') {
                 status = 'error'
-                errorMessage = `用户状态异常: ${rawUserInfo.status}`
+                errorMessage = `Abnormal user status: ${rawUserInfo.status}`
               }
             } else if (userInfoRes.status === 'rejected') {
-              // GetUserInfo 失败（封禁错误会到这里）
+              // GetUserInfo Failed (banning error will go here)
               const errMsg = userInfoRes.reason?.message || String(userInfoRes.reason)
               if (errMsg.includes('423') || errMsg.includes('AccountSuspended')) {
                 status = 'error'
@@ -4279,7 +4277,7 @@ app.whenReady().then(async () => {
             success++
             completed++
 
-            // 通知渲染进程更新账号
+            // Notify the rendering process to update the account
             mainWindow?.webContents.send('background-check-result', {
               id: account.id,
               success: true,
@@ -4303,7 +4301,7 @@ app.whenReady().then(async () => {
         })
       )
 
-      // 通知进度
+      // Notify progress
       mainWindow?.webContents.send('background-check-progress', {
         completed,
         total: accounts.length,
@@ -4311,7 +4309,7 @@ app.whenReady().then(async () => {
         failed
       })
 
-      // 批次间延迟
+      // inter-batch delay
       if (i + concurrency < accounts.length) {
         await new Promise(resolve => setTimeout(resolve, 100))
       }
@@ -4321,11 +4319,11 @@ app.whenReady().then(async () => {
     return { success: true, completed, successCount: success, failedCount: failed }
   })
 
-  // IPC: 导出到文件
+  // IPC: export to file
   ipcMain.handle('export-to-file', async (_event, data: string, filename: string) => {
     try {
       const result = await dialog.showSaveDialog(mainWindow!, {
-        title: '导出账号数据',
+        title: 'Export account data',
         defaultPath: filename,
         filters: [{ name: 'JSON Files', extensions: ['json'] }]
       })
@@ -4341,13 +4339,13 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 从文件导入
+  // IPC: import from file
   ipcMain.handle('import-from-file', async () => {
     try {
       const result = await dialog.showOpenDialog(mainWindow!, {
-        title: '导入账号数据',
+        title: 'Import account data',
         filters: [
-          { name: '所有支持的格式', extensions: ['json', 'csv', 'txt'] },
+          { name: 'All supported formats', extensions: ['json', 'csv', 'txt'] },
           { name: 'JSON Files', extensions: ['json'] },
           { name: 'CSV Files', extensions: ['csv'] },
           { name: 'TXT Files', extensions: ['txt'] }
@@ -4368,43 +4366,43 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 验证凭证并获取账号信息（用于添加账号）
+  // IPC: Verify credentials and obtain account information (used to add accounts)
   ipcMain.handle('verify-account-credentials', async (_event, credentials: {
     refreshToken: string
     clientId: string
     clientSecret: string
     region?: string
     authMethod?: string
-    provider?: string  // 'BuilderId', 'Github', 'Google' 等
+    provider?: string  // 'BuilderId', 'Github', 'Google' wait
   }) => {
     console.log('[IPC] verify-account-credentials called')
     
     try {
       const { refreshToken, clientId, clientSecret, region = 'us-east-1', authMethod, provider } = credentials
-      // 确定 idp：社交登录使用 provider，IdC 也需要根据 provider 区分 BuilderId 和 Enterprise
+      // Sure idp: Social login use provider，IdC It also needs to be based on provider distinguish BuilderId and Enterprise
       const idp = provider && (provider === 'Enterprise' || provider === 'Github' || provider === 'Google') 
         ? provider 
         : 'BuilderId'
       
-      // 社交登录只需要 refreshToken，IdC 需要 clientId 和 clientSecret
+      // Social login only requires refreshToken，IdC need clientId and clientSecret
       if (!refreshToken) {
-        return { success: false, error: '请填写 Refresh Token' }
+        return { success: false, error: 'Please fill in Refresh Token' }
       }
       if (authMethod !== 'social' && (!clientId || !clientSecret)) {
-        return { success: false, error: '请填写 Client ID 和 Client Secret' }
+        return { success: false, error: 'Please fill in Client ID and Client Secret' }
       }
       
-      // Step 1: 使用合适的方式刷新获取 accessToken
+      // Step 1: Use the appropriate method to refresh the acquisition accessToken
       console.log(`[Verify] Step 1: Refreshing token (authMethod: ${authMethod || 'IdC'})...`)
       const refreshResult = await refreshTokenByMethod(refreshToken, clientId, clientSecret, region, authMethod)
       
       if (!refreshResult.success || !refreshResult.accessToken) {
-        return { success: false, error: `Token 刷新失败: ${refreshResult.error}` }
+        return { success: false, error: `Token Refresh failed: ${refreshResult.error}` }
       }
       
       console.log('[Verify] Step 2: Getting user info...')
       
-      // Step 2: 调用 GetUserUsageAndLimits 获取用户信息
+      // Step 2: call GetUserUsageAndLimits Get user information
       interface Bonus {
         bonusCode?: string
         displayName?: string
@@ -4413,7 +4411,7 @@ app.whenReady().then(async () => {
         currentUsage?: number
         currentUsageWithPrecision?: number
         status?: string
-        expiresAt?: string  // API 返回的是 expiresAt
+        expiresAt?: string  // API What is returned is expiresAt
       }
       
       interface FreeTrialInfo {
@@ -4457,11 +4455,11 @@ app.whenReady().then(async () => {
       
       const usageResult = await getUsageAndLimits(refreshResult.accessToken, idp, undefined, undefined, region) as UsageResponse
       
-      // 解析用户信息
+      // Parse user information
       const email = usageResult.userInfo?.email || ''
       const userId = usageResult.userInfo?.userId || ''
       
-      // 解析订阅类型（注意检查顺序：先检查更具体的类型）
+      // Parse subscription types (note the order of checks: check more specific types first)
       const subscriptionTitle = usageResult.subscriptionInfo?.subscriptionTitle || 'Free'
       let subscriptionType = 'Free'
       const titleUpper = subscriptionTitle.toUpperCase()
@@ -4477,14 +4475,14 @@ app.whenReady().then(async () => {
         subscriptionType = 'Teams'
       }
       
-      // 解析使用量（详细，使用精确小数）
+      // Parse usage (verbose, use exact decimals)
       const creditUsage = usageResult.usageBreakdownList?.find(b => b.resourceType === 'CREDIT')
       
-      // 基础额度
+      // Basic amount
       const baseLimit = creditUsage?.usageLimitWithPrecision ?? creditUsage?.usageLimit ?? 0
       const baseCurrent = creditUsage?.currentUsageWithPrecision ?? creditUsage?.currentUsage ?? 0
       
-      // 试用额度
+      // Trial amount
       let freeTrialLimit = 0
       let freeTrialCurrent = 0
       let freeTrialExpiry: string | undefined
@@ -4494,7 +4492,7 @@ app.whenReady().then(async () => {
         freeTrialExpiry = creditUsage.freeTrialInfo.freeTrialExpiry
       }
       
-      // 奖励额度
+      // Reward amount
       const bonuses: { code: string; name: string; current: number; limit: number; expiresAt?: string }[] = []
       if (creditUsage?.bonuses) {
         for (const bonus of creditUsage.bonuses) {
@@ -4510,11 +4508,11 @@ app.whenReady().then(async () => {
         }
       }
       
-      // 计算总额度
+      // Calculate total amount
       const totalLimit = baseLimit + freeTrialLimit + bonuses.reduce((sum, b) => sum + b.limit, 0)
       const totalUsed = baseCurrent + freeTrialCurrent + bonuses.reduce((sum, b) => sum + b.current, 0)
       
-      // 计算重置剩余天数
+      // Calculate days remaining for reset
       let daysRemaining: number | undefined
       let expiresAt: number | undefined
       const nextResetDate = usageResult.nextDateReset
@@ -4525,7 +4523,7 @@ app.whenReady().then(async () => {
       
       console.log('[Verify] Success! Email:', email)
 
-      // Enterprise 账号：验证时自动获取 profileArn（BuilderId/Social 不需要调 API）
+      // Enterprise Account: automatically obtained during verification profileArn（BuilderId/Social No need to adjust API）
       let enterpriseProfileArn: string | undefined
       const isEnt = provider === 'Enterprise' || authMethod === 'external_idp'
       if (isEnt) {
@@ -4589,11 +4587,11 @@ app.whenReady().then(async () => {
       }
     } catch (error) {
       console.error('[Verify] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '验证失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Authentication failed' }
     }
   })
 
-  // IPC: 获取本地 SSO 缓存中当前使用的账号信息
+  // IPC: Get local SSO The account information currently used in the cache
   ipcMain.handle('get-local-active-account', async () => {
     const os = await import('os')
     const path = await import('path')
@@ -4606,7 +4604,7 @@ app.whenReady().then(async () => {
       const tokenData = JSON.parse(tokenContent)
       
       if (!tokenData.refreshToken) {
-        return { success: false, error: '本地缓存中没有 refreshToken' }
+        return { success: false, error: 'Not in local cache refreshToken' }
       }
       
       return {
@@ -4619,11 +4617,11 @@ app.whenReady().then(async () => {
         }
       }
     } catch {
-      return { success: false, error: '无法读取本地 SSO 缓存' }
+      return { success: false, error: 'Unable to read local SSO cache' }
     }
   })
 
-  // IPC: 从 Kiro 本地配置导入凭证
+  // IPC: from Kiro Local configuration import credentials
   ipcMain.handle('load-kiro-credentials', async () => {
     const os = await import('os')
     const path = await import('path')
@@ -4631,7 +4629,7 @@ app.whenReady().then(async () => {
     const fs = await import('fs/promises')
     
     try {
-      // 从 ~/.aws/sso/cache/kiro-auth-token.json 读取 token
+      // from ~/.aws/sso/cache/kiro-auth-token.json read token
       const ssoCache = path.join(os.homedir(), '.aws', 'sso', 'cache')
       const tokenPath = path.join(ssoCache, 'kiro-auth-token.json')
       console.log('[Kiro Credentials] Reading token from:', tokenPath)
@@ -4649,17 +4647,17 @@ app.whenReady().then(async () => {
         const tokenContent = await readFile(tokenPath, 'utf-8')
         tokenData = JSON.parse(tokenContent)
       } catch {
-        return { success: false, error: '找不到 kiro-auth-token.json 文件，请先在 Kiro IDE 中登录' }
+        return { success: false, error: 'not found kiro-auth-token.json file, please first Kiro IDE Log in' }
       }
       
       if (!tokenData.refreshToken) {
-        return { success: false, error: 'kiro-auth-token.json 中缺少 refreshToken' }
+        return { success: false, error: 'kiro-auth-token.json missing in refreshToken' }
       }
       
-      // 确定 clientIdHash：优先使用文件中的，否则计算默认值
+      // Sure clientIdHash: Use the one in the file first, otherwise calculate the default value
       let clientIdHash = tokenData.clientIdHash
       if (!clientIdHash) {
-        // 使用标准的 startUrl 计算 hash（与 Kiro 客户端一致）
+        // Use standard startUrl calculate hash(and Kiro Client consistent)
         const startUrl = 'https://view.awsapps.com/start'
         clientIdHash = crypto.createHash('sha1')
           .update(JSON.stringify({ startUrl }))
@@ -4667,7 +4665,7 @@ app.whenReady().then(async () => {
         console.log('[Kiro Credentials] Calculated clientIdHash:', clientIdHash)
       }
       
-      // 读取客户端注册信息
+      // Read client registration information
       let clientRegPath = path.join(ssoCache, `${clientIdHash}.json`)
       console.log('[Kiro Credentials] Trying client registration from:', clientRegPath)
       
@@ -4680,7 +4678,7 @@ app.whenReady().then(async () => {
         const clientContent = await readFile(clientRegPath, 'utf-8')
         clientData = JSON.parse(clientContent)
       } catch {
-        // 如果找不到，尝试搜索目录中的其他 .json 文件（排除 kiro-auth-token.json）
+        // If not found, try searching the directory for other .json files (exclude kiro-auth-token.json）
         console.log('[Kiro Credentials] Client file not found, searching cache directory...')
         try {
           const files = await fs.readdir(ssoCache)
@@ -4695,20 +4693,20 @@ app.whenReady().then(async () => {
                   break
                 }
               } catch {
-                // 忽略无法解析的文件
+                // Ignore unresolved files
               }
             }
           }
         } catch {
-          // 忽略目录读取错误
+          // Ignore directory read errors
         }
       }
       
-      // 社交登录不需要 clientId/clientSecret
+      // Social login not required clientId/clientSecret
       const isSocialAuth = tokenData.authMethod === 'social'
       
       if (!isSocialAuth && (!clientData || !clientData.clientId || !clientData.clientSecret)) {
-        return { success: false, error: '找不到客户端注册文件，请确保已在 Kiro IDE 中完成登录' }
+        return { success: false, error: 'The client registration file cannot be found, please make sure it is Kiro IDE Complete login in' }
       }
       
       console.log(`[Kiro Credentials] Successfully loaded credentials (authMethod: ${tokenData.authMethod || 'IdC'})`)
@@ -4727,20 +4725,20 @@ app.whenReady().then(async () => {
       }
     } catch (error) {
       console.error('[Kiro Credentials] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '未知错误' }
+      return { success: false, error: error instanceof Error ? error.message : 'unknown error' }
     }
   })
 
-  // IPC: 切换账号 - 写入凭证到本地 SSO 缓存
+  // IPC: Switch account - Write credentials to local SSO cache
   //
-  // 关键设计：切号前必先 refresh 一次，但与旧实现不同——
-  //   1. (bug A 修复) 把 OIDC 返回的新 refreshToken 也写入磁盘
-  //      （旧实现只更新 accessToken，refreshToken 仍是已被服务端 rotate 作废的 v1，
-  //       导致 Kiro IDE ~55min 后用 v1 刷新 → 401 → logoutAndForget）
-  //   2. (bug C 修复) expiresAt 用 OIDC 返回的真实 expiresIn，不再硬编码 3600
-  //   3. (bug D 修复) refresh 失败时直接报错并拒绝写入文件，避免埋雷
-  //   4. (bug F 支持) 通过 refreshedCredentials 把新 refresh 回传 renderer，让反代 store 同步
-  //   5. 记录 lastSwitchedAccountId，供 fs.watch 反向同步时用作账号匹配兜底
+  // Key design: Before cutting number, you must first refresh Once, but not the same as the old implementation -
+  //   1. (bug A repair) Bundle OIDC return new refreshToken Also writes to disk
+  //      (Old implementations only update accessToken，refreshToken Still has been server-side rotate void v1，
+  //       lead to Kiro IDE ~55min for later use v1 refresh → 401 → logoutAndForget）
+  //   2. (bug C repair) expiresAt use OIDC return true expiresIn, no longer hard-coded 3600
+  //   3. (bug D repair) refresh When failure occurs, an error is reported directly and the file is refused to be written to avoid burying the hatchet.
+  //   4. (bug F support) pass refreshedCredentials put new refresh return renderer, let the anti-generation store synchronous
+  //   5. Record lastSwitchedAccountId,for fs.watch Used as a backup for account matching during reverse synchronization
   ipcMain.handle('switch-account', async (_event, credentials: {
     accessToken: string
     refreshToken: string
@@ -4769,28 +4767,28 @@ app.whenReady().then(async () => {
       let finalRefreshToken = refreshToken
       let finalExpiresIn = 3600
 
-      // 切号前先 refresh，确保磁盘里写的是最新 access + 最新 refresh（rotating）
+      // Before cutting number refresh, make sure that what is written on the disk is the latest access + up to date refresh（rotating）
       if (refreshToken) {
         console.log(`[Switch Account] Refreshing token before switch (authMethod: ${authMethod})...`)
         const refreshResult = await refreshTokenByMethod(refreshToken, clientId, clientSecret, region, authMethod)
         if (refreshResult.success && refreshResult.accessToken) {
           finalAccessToken = refreshResult.accessToken
-          // bug A 修复：OIDC 返回新 refreshToken 时必须替换；否则下次 IDE/反代 refresh 会撞已作废的 v1
+          // bug A repair:OIDC return new refreshToken must be replaced; otherwise next time IDE/Anti-generational refresh It will hit the invalid one v1
           finalRefreshToken = refreshResult.refreshToken || refreshToken
           finalExpiresIn = refreshResult.expiresIn ?? 3600
           console.log('[Switch Account] Token refreshed successfully (rotated refreshToken updated)')
         } else {
-          // bug D 修复：refresh 失败不写文件 + 直接报错，避免给 IDE 留下"半坏"token
+          // bug D repair:refresh Failure does not write file + Report errors directly to avoid giving IDE Leave"half bad"token
           const errMsg = refreshResult.error || 'Unknown refresh error'
           console.warn(`[Switch Account] Token refresh failed, aborting switch: ${errMsg}`)
           return {
             success: false,
-            error: `刷新 Token 失败，未写入 Kiro IDE 磁盘文件，避免下次自动刷新失败导致 IDE 强制登出。原因：${errMsg}`
+            error: `refresh Token failed, not written Kiro IDE Disk file to avoid automatic refresh failure next time IDE Force logout. reason:${errMsg}`
           }
         }
       }
 
-      // profileArn 决策统一由 helper：Enterprise 用区域化备用 ARN，BuilderId 用占位符
+      // profileArn Decision-making unified by helper：Enterprise Use regionalized backup ARN，BuilderId Use placeholders
       const resolvedProfileArn = resolveProfileArnForWrite({
         profileArn,
         authMethod,
@@ -4798,7 +4796,7 @@ app.whenReady().then(async () => {
         region
       })
 
-      // bug C 修复：用真实 expiresIn 算 expiresAt
+      // bug C Fix: use real expiresIn Calculate expiresAt
       const expiresAtIso = new Date(Date.now() + finalExpiresIn * 1000).toISOString()
 
       const { tokenPath, clientRegPath } = await writeKiroAuthTokenFile({
@@ -4818,12 +4816,12 @@ app.whenReady().then(async () => {
         console.log('[Switch Account] Client registration written to:', clientRegPath)
       }
 
-      // 记录 lastSwitchedAccountId（供 watcher 反向同步时识别 IDE 当前账号）
+      // Record lastSwitchedAccountId(for watcher Recognition during reverse synchronization IDE current account)
       if (accountId) {
         lastSwitchedAccountId = accountId
-        // 同步记录 access/refresh 的"信任源头"，避免 watcher 把刚写的同一份数据再回写一次
+        // Synchronous recording access/refresh of"trust source",avoid watcher Write the same data you just wrote back again
         lastWrittenTokenSignature = `${finalAccessToken}|${finalRefreshToken}`
-        // 如启用了主动续期，立刻 schedule 下一次（基于刚写入的 expiresAt）
+        // If active renewal is enabled, immediately schedule Next time (based on what was just written expiresAt）
         if (proactiveRenewalEnabled) {
           scheduleProactiveRenewal(accountId, Date.now() + finalExpiresIn * 1000)
         }
@@ -4831,7 +4829,7 @@ app.whenReady().then(async () => {
 
       return {
         success: true,
-        // bug F 支持：回传 refresh 后的最新 credentials 让 renderer 更新 store
+        // bug F Support: passback refresh Latest after credentials let renderer renew store
         refreshedCredentials: {
           accessToken: finalAccessToken,
           refreshToken: finalRefreshToken,
@@ -4840,12 +4838,12 @@ app.whenReady().then(async () => {
       }
     } catch (error) {
       console.error('[Switch Account] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '切换失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Switch failed' }
     }
   })
 
-  // IPC: 切换账号到 Kiro CLI - 写入凭证到 SQLite 数据库
-  // kiro-cli 使用 ~/.local/share/kiro-cli/data.sqlite3 中的 auth_kv 表
+  // IPC: Switch account to Kiro CLI - Write credentials to SQLite database
+  // kiro-cli use ~/.local/share/kiro-cli/data.sqlite3 in auth_kv surface
   ipcMain.handle('switch-account-cli', async (_event, credentials: {
     accessToken: string
     refreshToken: string
@@ -4872,7 +4870,7 @@ app.whenReady().then(async () => {
       } = credentials
       let { accessToken } = credentials
 
-      // 切号前先刷新 token（和 IDE 切号一致）
+      // Refresh before switching numbers token(and IDE Cut numbers are the same)
       if (refreshToken) {
         const authMethod = (provider === 'Google' || provider === 'Github') ? 'social' : undefined
         console.log(`[Switch CLI] Refreshing token before switch (provider: ${provider})...`)
@@ -4885,7 +4883,7 @@ app.whenReady().then(async () => {
         }
       }
 
-      // kiro-cli SQLite 数据库路径
+      // kiro-cli SQLite Database path
       // Windows: %LOCALAPPDATA%\kiro-cli\data.sqlite3
       // macOS/Linux: ~/.local/share/kiro-cli/data.sqlite3
       const dataDir = process.platform === 'win32'
@@ -4894,13 +4892,13 @@ app.whenReady().then(async () => {
       await mkdir(dataDir, { recursive: true })
       const dbPath = path.join(dataDir, 'data.sqlite3')
 
-      // 判断 token key：social 登录用 social:token，IdC 登录用 odic:token
+      // judge token key：social For login social:token，IdC For login odic:token
       const isSocial = provider === 'Google' || provider === 'Github'
       const preferredTokenKey = isSocial ? 'kirocli:social:token' : 'kirocli:odic:token'
       const preferredRegKey = 'kirocli:odic:device-registration'
 
-      // profileArn 决策统一由 helper：BuilderId 不带 profileArn
-      // kiro-cli 同样不应该在 SQLite 里塞占位符 ARN（实测会触发 REST 端点 403）
+      // profileArn Decision-making unified by helper：BuilderId Without profileArn
+      // kiro-cli The same should not be in SQLite Riese placeholder ARN(Actual measurement will trigger REST endpoint 403）
       const resolvedProfileArn = resolveProfileArnForWrite({
         profileArn,
         authMethod: isSocial ? 'social' : 'IdC',
@@ -4908,7 +4906,7 @@ app.whenReady().then(async () => {
         region
       })
 
-      // 构建 token JSON（snake_case 字段名，与 kiro-cli Rust 结构一致）
+      // Build token JSON（snake_case field name, with kiro-cli Rust structurally consistent)
       const expiresAt = new Date(Date.now() + 3600 * 1000).toISOString()
       const tokenData: Record<string, unknown> = {
         access_token: accessToken,
@@ -4916,23 +4914,23 @@ app.whenReady().then(async () => {
         expires_at: expiresAt,
         region
       }
-      // profileArn 仅在解析出有效值时附加，BuilderId 等不带（避免 kiro-cli 拿占位符 ARN 调 REST 触发 403）
+      // profileArn Appended only if a valid value is parsed out,BuilderId Wait without bringing (avoid kiro-cli take placeholder ARN tune REST trigger 403）
       if (resolvedProfileArn) {
         tokenData.profile_arn = resolvedProfileArn
       }
       if (scopes) tokenData.scopes = scopes
 
-      // 使用 sqlite3 命令行操作（跨平台兼容，无需原生模块编译）
+      // use sqlite3 Command line operation (cross-platform compatible, no native module compilation required)
       const { execFileSync } = await import('child_process')
       const sqlite3Bin = process.platform === 'win32' ? 'sqlite3.exe' : 'sqlite3'
 
-      // 构建 SQL 语句
+      // Build SQL statement
       const sqlStatements: string[] = [
         'CREATE TABLE IF NOT EXISTS auth_kv (key TEXT PRIMARY KEY, value TEXT);',
         `INSERT OR REPLACE INTO auth_kv (key, value) VALUES ('${preferredTokenKey}', '${JSON.stringify(tokenData).replace(/'/g, "''")}');`
       ]
 
-      // 写入 device-registration（仅 IdC 登录）
+      // write device-registration(only IdC Log in)
       if (clientId && clientSecret && !isSocial) {
         const regData = { client_id: clientId, client_secret: clientSecret, region }
         sqlStatements.push(
@@ -4940,7 +4938,7 @@ app.whenReady().then(async () => {
         )
       }
 
-      // 清除其他优先级的旧 key
+      // Clear old ones with other priorities key
       const cliTokenKeys = ['kirocli:social:token', 'kirocli:odic:token', 'codewhisperer:odic:token']
       for (const key of cliTokenKeys) {
         if (key !== preferredTokenKey) {
@@ -4955,7 +4953,7 @@ app.whenReady().then(async () => {
           encoding: 'utf-8'
         })
       } catch (sqlite3Error) {
-        // sqlite3 命令不存在，尝试用 Node.js 22+ 的内置 SQLite
+        // sqlite3 The command does not exist, try using Node.js 22+ of built-in SQLite
         console.log('[Switch CLI] sqlite3 command not available, trying Node.js built-in SQLite...')
         try {
           const { DatabaseSync } = await import('node:sqlite') as { DatabaseSync: new (path: string) => { exec: (sql: string) => void; close: () => void } }
@@ -4968,7 +4966,7 @@ app.whenReady().then(async () => {
             db.close()
           }
         } catch {
-          throw new Error(`SQLite 操作失败: sqlite3 命令不可用 (${(sqlite3Error as Error).message})，且 Node.js 内置 SQLite 不支持。请确保系统安装了 sqlite3 命令行工具。`)
+          throw new Error(`SQLite Operation failed: sqlite3 Command not available (${(sqlite3Error as Error).message}),and Node.js built-in SQLite Not supported. Please make sure the system is installed sqlite3 Command line tools.`)
         }
       }
 
@@ -4977,18 +4975,18 @@ app.whenReady().then(async () => {
       return { success: true, dbPath }
     } catch (error) {
       console.error('[Switch CLI] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : 'CLI 切换失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'CLI Switch failed' }
     }
   })
 
 
-  // IPC: 退出登录 - 清除本地 SSO 缓存
+  // IPC: Log out - clear local SSO cache
   ipcMain.handle('logout-account', async () => {
     const os = await import('os')
     const path = await import('path')
     const { readdir, unlink } = await import('fs/promises')
 
-    // 立刻清掉主动续期 timer 和"激活账号"记忆，避免 watcher / timer 误同步
+    // Clear the active renewal immediately timer and"Activate account"remember, avoid watcher / timer Mis-sync
     clearProactiveRenewal('logout-account')
     lastSwitchedAccountId = null
     lastWrittenTokenSignature = null
@@ -4997,10 +4995,10 @@ app.whenReady().then(async () => {
       const ssoCache = path.join(os.homedir(), '.aws', 'sso', 'cache')
       console.log('[Logout] Clearing SSO cache:', ssoCache)
       
-      // 读取目录下所有文件
+      // Read all files in the directory
       const files = await readdir(ssoCache).catch(() => [])
       
-      // 删除所有文件
+      // Delete all files
       for (const file of files) {
         const filePath = path.join(ssoCache, file)
         await unlink(filePath).catch((e) => {
@@ -5012,16 +5010,16 @@ app.whenReady().then(async () => {
       return { success: true, deletedCount: files.length }
     } catch (error) {
       console.error('[Logout] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '退出失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Exit failed' }
     }
   })
 
-  // ============ 手动登录相关 IPC ============
+  // ============ Manual login related IPC ============
 
-  // 存储当前登录状态
+  // Store current login status
   let currentLoginState: {
     type: 'builderid' | 'social' | 'iamsso'
-    // BuilderId / IAM SSO 相关
+    // BuilderId / IAM SSO Related
     clientId?: string
     clientSecret?: string
     deviceCode?: string
@@ -5029,17 +5027,17 @@ app.whenReady().then(async () => {
     verificationUri?: string
     interval?: number
     expiresAt?: number
-    startUrl?: string // IAM SSO 专用
+    startUrl?: string // IAM SSO dedicated
     redirectUri?: string // IAM SSO Authorization Code flow
     region?: string // IAM SSO region
-    // Social Auth 相关
+    // Social Auth Related
     codeVerifier?: string
     codeChallenge?: string
     oauthState?: string
     provider?: string
   } | null = null
 
-  // IPC: 启动 Builder ID 手动登录
+  // IPC: start up Builder ID Manual login
   ipcMain.handle('start-builder-id-login', async (_event, region: string = 'us-east-1') => {
     console.log('[Login] Starting Builder ID login...')
     
@@ -5054,7 +5052,7 @@ app.whenReady().then(async () => {
     ]
 
     try {
-      // Step 1: 注册 OIDC 客户端
+      // Step 1: register OIDC client
       console.log('[Login] Step 1: Registering OIDC client...')
       const regRes = await fetchWithAppProxy(`${oidcBase}/client/register`, {
         method: 'POST',
@@ -5070,7 +5068,7 @@ app.whenReady().then(async () => {
 
       if (!regRes.ok) {
         const errText = await regRes.text()
-        return { success: false, error: `注册客户端失败: ${errText}` }
+        return { success: false, error: `Failed to register client: ${errText}` }
       }
 
       const regData = await regRes.json()
@@ -5078,7 +5076,7 @@ app.whenReady().then(async () => {
       const clientSecret = regData.clientSecret
       console.log('[Login] Client registered:', clientId.substring(0, 30) + '...')
 
-      // Step 2: 发起设备授权
+      // Step 2: Initiate device authorization
       console.log('[Login] Step 2: Starting device authorization...')
       const authRes = await fetchWithAppProxy(`${oidcBase}/device_authorization`, {
         method: 'POST',
@@ -5088,14 +5086,14 @@ app.whenReady().then(async () => {
 
       if (!authRes.ok) {
         const errText = await authRes.text()
-        return { success: false, error: `设备授权失败: ${errText}` }
+        return { success: false, error: `Device authorization failed: ${errText}` }
       }
 
       const authData = await authRes.json()
       const { deviceCode, userCode, verificationUri, verificationUriComplete, interval = 5, expiresIn = 600 } = authData
       console.log('[Login] Device code obtained, user_code:', userCode)
 
-      // 保存登录状态
+      // Save login status
       currentLoginState = {
         type: 'builderid',
         clientId,
@@ -5116,21 +5114,21 @@ app.whenReady().then(async () => {
       }
     } catch (error) {
       console.error('[Login] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '登录失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' }
     }
   })
 
-  // IPC: 轮询 Builder ID 授权状态
+  // IPC: polling Builder ID Authorization status
   ipcMain.handle('poll-builder-id-auth', async (_event, region: string = 'us-east-1') => {
     console.log('[Login] Polling for authorization...')
 
     if (!currentLoginState || currentLoginState.type !== 'builderid') {
-      return { success: false, error: '没有进行中的登录' }
+      return { success: false, error: 'No login in progress' }
     }
 
     if (Date.now() > (currentLoginState.expiresAt || 0)) {
       currentLoginState = null
-      return { success: false, error: '授权已过期，请重新开始' }
+      return { success: false, error: 'Authorization has expired, please start again' }
     }
 
     const oidcBase = `https://oidc.${region}.amazonaws.com`
@@ -5178,31 +5176,31 @@ app.whenReady().then(async () => {
           return { success: true, completed: false, status: 'slow_down' }
         } else if (error === 'expired_token') {
           currentLoginState = null
-          return { success: false, error: '设备码已过期' }
+          return { success: false, error: 'Device code has expired' }
         } else if (error === 'access_denied') {
           currentLoginState = null
-          return { success: false, error: '用户拒绝授权' }
+          return { success: false, error: 'User refuses authorization' }
         } else {
           currentLoginState = null
-          return { success: false, error: `授权错误: ${error}` }
+          return { success: false, error: `Authorization error: ${error}` }
         }
       } else {
-        return { success: false, error: `未知响应: ${tokenRes.status}` }
+        return { success: false, error: `Unknown response: ${tokenRes.status}` }
       }
     } catch (error) {
       console.error('[Login] Poll error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '轮询失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Polling failed' }
     }
   })
 
-  // IPC: 取消 Builder ID 登录
+  // IPC: Cancel Builder ID Log in
   ipcMain.handle('cancel-builder-id-login', async () => {
     console.log('[Login] Cancelling Builder ID login...')
     currentLoginState = null
     return { success: true }
   })
 
-  // IAM SSO 本地服务器和状态
+  // IAM SSO Local server and status
   let iamSsoServer: ReturnType<typeof import('http').createServer> | null = null
   let iamSsoResult: {
     completed: boolean
@@ -5216,14 +5214,14 @@ app.whenReady().then(async () => {
     error?: string
   } | null = null
 
-  // IPC: 启动 IAM Identity Center SSO 登录 (使用 Authorization Code Grant with PKCE)
+  // IPC: start up IAM Identity Center SSO Log in (use Authorization Code Grant with PKCE)
   ipcMain.handle('start-iam-sso-login', async (_event, startUrl: string, region: string = 'us-east-1') => {
     console.log('[Login] Starting IAM Identity Center SSO login (Authorization Code flow)...')
     console.log('[Login] Start URL:', startUrl)
     
-    // 验证 startUrl 格式
+    // verify startUrl Format
     if (!startUrl || !startUrl.startsWith('https://')) {
-      return { success: false, error: 'SSO Start URL 必须以 https:// 开头' }
+      return { success: false, error: 'SSO Start URL Must be https:// beginning' }
     }
     
     const crypto = await import('crypto')
@@ -5239,7 +5237,7 @@ app.whenReady().then(async () => {
     ]
 
     try {
-      // Step 1: 注册 OIDC 客户端 (使用 authorization_code grant type)
+      // Step 1: register OIDC client (use authorization_code grant type)
       console.log('[Login] Step 1: Registering OIDC client...')
       const regRes = await fetchWithAppProxy(`${oidcBase}/client/register`, {
         method: 'POST',
@@ -5261,11 +5259,11 @@ app.whenReady().then(async () => {
         if (errText.includes('UnauthorizedException') || errText.includes('access denied')) {
           return { 
             success: false, 
-            error: '授权失败：您的组织可能未配置 Amazon Q Developer 访问权限。请联系组织管理员在 IAM Identity Center 中启用相关权限。' 
+            error: 'Authorization failed: Your organization may not be configured Amazon Q Developer access rights. Please contact your organization administrator at IAM Identity Center Enable relevant permissions.' 
           }
         }
         
-        return { success: false, error: `注册客户端失败: ${errText}` }
+        return { success: false, error: `Failed to register client: ${errText}` }
       }
 
       const regData = await regRes.json()
@@ -5273,21 +5271,21 @@ app.whenReady().then(async () => {
       const clientSecret = regData.clientSecret
       console.log('[Login] Client registered:', clientId.substring(0, 30) + '...')
 
-      // Step 2: 生成 PKCE 和 state
+      // Step 2: generate PKCE and state
       const codeVerifier = crypto.randomBytes(32).toString('base64url')
       const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
       const state = crypto.randomUUID()
 
-      // Step 3: 启动本地 HTTP 服务器接收回调
+      // Step 3: Start local HTTP Server receives callback
       console.log('[Login] Step 2: Starting local OAuth callback server...')
       
-      // 关闭之前的服务器
+      // Shut down the previous server
       if (iamSsoServer) {
         iamSsoServer.close()
         iamSsoServer = null
       }
 
-      // 找一个可用端口
+      // Find an available port
       const port = await new Promise<number>((resolve, reject) => {
         const server = http.createServer()
         server.listen(0, '127.0.0.1', () => {
@@ -5296,7 +5294,7 @@ app.whenReady().then(async () => {
             const p = addr.port
             server.close(() => resolve(p))
           } else {
-            reject(new Error('无法获取端口'))
+            reject(new Error('Unable to get port'))
           }
         })
       })
@@ -5304,10 +5302,10 @@ app.whenReady().then(async () => {
       const redirectUri = `http://127.0.0.1:${port}/oauth/callback`
       console.log('[Login] Redirect URI:', redirectUri)
 
-      // 重置结果
+      // Reset results
       iamSsoResult = null
 
-      // 创建回调服务器
+      // Create callback server
       iamSsoServer = http.createServer(async (req, res) => {
         const url = new URL(req.url || '', `http://127.0.0.1:${port}`)
         
@@ -5318,23 +5316,23 @@ app.whenReady().then(async () => {
           
           if (error) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-            res.end('<html><body><h1>授权失败</h1><p>您可以关闭此窗口。</p></body></html>')
-            iamSsoResult = { completed: true, success: false, error: `授权失败: ${error}` }
+            res.end('<html><body><h1>Authorization failed</h1><p>You can close this window.</p></body></html>')
+            iamSsoResult = { completed: true, success: false, error: `Authorization failed: ${error}` }
             return
           }
           
           if (returnedState !== state) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-            res.end('<html><body><h1>授权失败</h1><p>状态不匹配，请重试。</p></body></html>')
-            iamSsoResult = { completed: true, success: false, error: '状态不匹配' }
+            res.end('<html><body><h1>Authorization failed</h1><p>Status does not match, please try again.</p></body></html>')
+            iamSsoResult = { completed: true, success: false, error: 'status mismatch' }
             return
           }
           
           if (code) {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-            res.end('<html><body><h1>授权成功！</h1><p>正在获取令牌，请稍候...</p></body></html>')
+            res.end('<html><body><h1>Authorization successful!</h1><p>Retrieving token, please wait....</p></body></html>')
             
-            // 自动完成 token 交换
+            // autocomplete token exchange
             try {
               const tokenRes = await fetchWithAppProxy(`${oidcBase}/token`, {
                 method: 'POST',
@@ -5352,7 +5350,7 @@ app.whenReady().then(async () => {
               if (!tokenRes.ok) {
                 const errText = await tokenRes.text()
                 console.error('[Login] Token exchange failed:', tokenRes.status, errText)
-                iamSsoResult = { completed: true, success: false, error: `获取 Token 失败: ${errText}` }
+                iamSsoResult = { completed: true, success: false, error: `get Token fail: ${errText}` }
               } else {
                 const tokenData = await tokenRes.json()
                 console.log('[Login] IAM SSO Authorization successful!')
@@ -5372,13 +5370,13 @@ app.whenReady().then(async () => {
               iamSsoResult = { 
                 completed: true, 
                 success: false, 
-                error: tokenError instanceof Error ? tokenError.message : '获取 Token 失败' 
+                error: tokenError instanceof Error ? tokenError.message : 'get Token fail' 
               }
             }
           } else {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-            res.end('<html><body><h1>授权失败</h1><p>未收到授权码。</p></body></html>')
-            iamSsoResult = { completed: true, success: false, error: '未收到授权码' }
+            res.end('<html><body><h1>Authorization failed</h1><p>Authorization code not received.</p></body></html>')
+            iamSsoResult = { completed: true, success: false, error: 'Authorization code not received' }
           }
         } else {
           res.writeHead(404)
@@ -5390,7 +5388,7 @@ app.whenReady().then(async () => {
         console.log('[Login] OAuth callback server listening on port', port)
       })
 
-      // Step 4: 构建授权 URL 并打开浏览器
+      // Step 4: Build authorization URL and open the browser
       const authorizeParams = new URLSearchParams({
         response_type: 'code',
         client_id: clientId,
@@ -5403,7 +5401,7 @@ app.whenReady().then(async () => {
       const authorizeUrl = `${oidcBase}/authorize?${authorizeParams.toString()}`
       console.log('[Login] Opening browser for authorization...')
 
-      // 保存登录状态
+      // Save login status
       currentLoginState = {
         type: 'iamsso',
         clientId,
@@ -5415,7 +5413,7 @@ app.whenReady().then(async () => {
         expiresAt: Date.now() + 600000
       }
 
-      // 返回授权 URL，前端会打开浏览器
+      // return authorization URL, the front end will open the browser
       return {
         success: true,
         authorizeUrl,
@@ -5423,14 +5421,14 @@ app.whenReady().then(async () => {
       }
     } catch (error) {
       console.error('[Login] Error:', error)
-      return { success: false, error: error instanceof Error ? error.message : '登录失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Login failed' }
     }
   })
 
-  // IPC: 轮询 IAM SSO 授权状态 (检查本地服务器是否收到回调)
+  // IPC: polling IAM SSO Authorization status (Check if the local server received the callback)
   ipcMain.handle('poll-iam-sso-auth', async () => {
     if (!currentLoginState || currentLoginState.type !== 'iamsso') {
-      return { success: false, error: '没有进行中的 IAM SSO 登录' }
+      return { success: false, error: 'nothing in progress IAM SSO Log in' }
     }
 
     if (Date.now() > (currentLoginState.expiresAt || 0)) {
@@ -5440,14 +5438,14 @@ app.whenReady().then(async () => {
       }
       iamSsoResult = null
       currentLoginState = null
-      return { success: false, error: '授权已过期，请重新开始' }
+      return { success: false, error: 'Authorization has expired, please start again' }
     }
 
-    // 检查是否已收到回调并完成 token 交换
+    // Check if the callback has been received and completed token exchange
     if (iamSsoResult) {
       const result = { ...iamSsoResult }
       if (result.completed) {
-        // 清理状态
+        // Clean status
         if (iamSsoServer) {
           iamSsoServer.close()
           iamSsoServer = null
@@ -5458,11 +5456,11 @@ app.whenReady().then(async () => {
       return result
     }
 
-    // 还在等待回调
+    // Still waiting for callback
     return { success: true, completed: false, status: 'pending' }
   })
 
-  // IPC: 取消 IAM SSO 登录
+  // IPC: Cancel IAM SSO Log in
   ipcMain.handle('cancel-iam-sso-login', async () => {
     console.log('[Login] Cancelling IAM SSO login...')
     if (iamSsoServer) {
@@ -5474,18 +5472,18 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
-  // IPC: 启动 Social Auth 登录 (Google/GitHub)
+  // IPC: start up Social Auth Log in (Google/GitHub)
   ipcMain.handle('start-social-login', async (_event, provider: 'Google' | 'Github', usePrivateMode?: boolean) => {
     console.log(`[Login] Starting ${provider} Social Auth login... (privateMode: ${usePrivateMode})`)
     
     const crypto = await import('crypto')
 
-    // 生成 PKCE
+    // generate PKCE
     const codeVerifier = crypto.randomBytes(64).toString('base64url').substring(0, 128)
     const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url')
     const oauthState = crypto.randomBytes(32).toString('base64url')
 
-    // 构建登录 URL
+    // Build login URL
     const redirectUri = 'kiro://kiro.kiroAgent/authenticate-success'
     const loginUrl = new URL(`${KIRO_AUTH_ENDPOINT}/login`)
     loginUrl.searchParams.set('idp', provider)
@@ -5494,7 +5492,7 @@ app.whenReady().then(async () => {
     loginUrl.searchParams.set('code_challenge_method', 'S256')
     loginUrl.searchParams.set('state', oauthState)
 
-    // 保存登录状态
+    // Save login status
     currentLoginState = {
       type: 'social',
       codeVerifier,
@@ -5506,7 +5504,7 @@ app.whenReady().then(async () => {
     const urlStr = loginUrl.toString()
     console.log(`[Login] Opening browser for ${provider} login...`)
 
-    // 根据是否使用隐私模式选择打开方式
+    // Choose how to open based on whether to use privacy mode
     if (usePrivateMode) {
       openBrowserInPrivateMode(urlStr)
     } else {
@@ -5520,18 +5518,18 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 交换 Social Auth token
+  // IPC: exchange Social Auth token
   ipcMain.handle('exchange-social-token', async (_event, code: string, state: string) => {
     console.log('[Login] Exchanging Social Auth token...')
 
     if (!currentLoginState || currentLoginState.type !== 'social') {
-      return { success: false, error: '没有进行中的社交登录' }
+      return { success: false, error: 'No social login in progress' }
     }
 
-    // 验证 state
+    // verify state
     if (state !== currentLoginState.oauthState) {
       currentLoginState = null
-      return { success: false, error: '状态参数不匹配，可能存在安全风险' }
+      return { success: false, error: 'Status parameters do not match, there may be security risks' }
     }
 
     const { codeVerifier, provider } = currentLoginState
@@ -5551,7 +5549,7 @@ app.whenReady().then(async () => {
       if (!tokenRes.ok) {
         const errText = await tokenRes.text()
         currentLoginState = null
-        return { success: false, error: `Token 交换失败: ${errText}` }
+        return { success: false, error: `Token Exchange failed: ${errText}` }
       }
 
       const tokenData = await tokenRes.json()
@@ -5572,25 +5570,25 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error('[Login] Token exchange error:', error)
       currentLoginState = null
-      return { success: false, error: error instanceof Error ? error.message : 'Token 交换失败' }
+      return { success: false, error: error instanceof Error ? error.message : 'Token Exchange failed' }
     }
   })
 
-  // IPC: 取消 Social Auth 登录
+  // IPC: Cancel Social Auth Log in
   ipcMain.handle('cancel-social-login', async () => {
     console.log('[Login] Cancelling Social Auth login...')
     currentLoginState = null
     return { success: true }
   })
 
-  // IPC: 设置代理
+  // IPC: Set proxy
   ipcMain.handle('set-proxy', async (_event, enabled: boolean, url: string) => {
     const normalizedUrl = enabled && url ? normalizeProxyUrl(url) : url
-    console.log(`[IPC] set-proxy called: enabled=${enabled}, url=${normalizedUrl}${normalizedUrl !== url ? ` (原始: ${url})` : ''}`)
+    console.log(`[IPC] set-proxy called: enabled=${enabled}, url=${normalizedUrl}${normalizedUrl !== url ? ` (original: ${url})` : ''}`)
     try {
       applyProxySettings(enabled, url)
       
-      // 同时设置 Electron 的 session 代理
+      // Set simultaneously Electron of session acting
       if (mainWindow) {
         const session = mainWindow.webContents.session
         if (enabled && normalizedUrl) {
@@ -5607,9 +5605,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ Kiro 设置管理 IPC ============
+  // ============ Kiro Settings management IPC ============
 
-  // IPC: 获取 Kiro 设置
+  // IPC: get Kiro set up
   ipcMain.handle('get-kiro-settings', async () => {
     try {
       const os = await import('os')
@@ -5625,14 +5623,14 @@ app.whenReady().then(async () => {
       let mcpConfig = { mcpServers: {} }
       let steeringFiles: string[] = []
       
-      // 读取 Kiro settings.json (VS Code 风格 JSON，可能有尾随逗号)
+      // read Kiro settings.json (VS Code style JSON, may have a trailing comma)
       if (fs.existsSync(kiroSettingsPath)) {
         const content = fs.readFileSync(kiroSettingsPath, 'utf-8')
-        // 移除尾随逗号和注释以兼容标准 JSON
+        // Remove trailing commas and comments for standards compatibility JSON
         const cleanedContent = content
-          .replace(/\/\/.*$/gm, '') // 移除单行注释
-          .replace(/\/\*[\s\S]*?\*\//g, '') // 移除多行注释
-          .replace(/,(\s*[}\]])/g, '$1') // 移除尾随逗号
+          .replace(/\/\/.*$/gm, '') // Remove single line comments
+          .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+          .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
         const parsed = JSON.parse(cleanedContent)
         settings = {
           modelSelection: parsed['kiroAgent.modelSelection'],
@@ -5655,13 +5653,13 @@ app.whenReady().then(async () => {
         }
       }
       
-      // 读取 MCP 配置
+      // read MCP Configuration
       if (fs.existsSync(kiroMcpUserPath)) {
         const mcpContent = fs.readFileSync(kiroMcpUserPath, 'utf-8')
         mcpConfig = JSON.parse(mcpContent)
       }
       
-      // 读取 Steering 文件列表
+      // read Steering file list
       if (fs.existsSync(kiroSteeringPath)) {
         const files = fs.readdirSync(kiroSteeringPath)
         steeringFiles = files.filter(f => f.endsWith('.md'))
@@ -5678,14 +5676,14 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取 Kiro 可用模型列表（使用当前账号调用官方 API）
+  // IPC: get Kiro List of available models (use the current account to call the official API）
   ipcMain.handle('get-kiro-available-models', async () => {
     try {
       if (!store) return { models: [] }
       const accountData = store.get('accountData') as { accounts?: Record<string, any> } | undefined
       if (!accountData?.accounts) return { models: [] }
 
-      // 优先使用当前激活账号（isActive），其次使用第一个 active 且有 accessToken 的账号
+      // Priority will be given to the currently activated account (isActive), followed by using the first active And there is accessToken account
       const allAccounts = Object.values(accountData.accounts) as any[]
       const account = allAccounts.find((acc: any) => acc.isActive && acc.credentials?.accessToken)
         || allAccounts.find((acc: any) => acc.status === 'active' && acc.credentials?.accessToken)
@@ -5718,7 +5716,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 保存 Kiro 设置
+  // IPC: save Kiro set up
   ipcMain.handle('save-kiro-settings', async (_event, settings: Record<string, unknown>) => {
     try {
       const os = await import('os')
@@ -5731,15 +5729,15 @@ app.whenReady().then(async () => {
       let existingSettings = {}
       if (fs.existsSync(kiroSettingsPath)) {
         const content = fs.readFileSync(kiroSettingsPath, 'utf-8')
-        // 移除尾随逗号和注释以兼容标准 JSON
+        // Remove trailing commas and comments for standards compatibility JSON
         const cleanedContent = content
-          .replace(/\/\/.*$/gm, '') // 移除单行注释
-          .replace(/\/\*[\s\S]*?\*\//g, '') // 移除多行注释
-          .replace(/,(\s*[}\]])/g, '$1') // 移除尾随逗号
+          .replace(/\/\/.*$/gm, '') // Remove single line comments
+          .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
+          .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
         existingSettings = JSON.parse(cleanedContent)
       }
       
-      // 映射设置到 Kiro 的格式
+      // Mapping set to Kiro format
       const kiroSettings = {
         ...existingSettings,
         'kiroAgent.modelSelection': settings.modelSelection,
@@ -5761,7 +5759,7 @@ app.whenReady().then(async () => {
         'kiroAgent.notifications.billing': settings.notificationsBilling
       }
       
-      // 确保目录存在
+      // Make sure the directory exists
       const dir = path.dirname(kiroSettingsPath)
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
@@ -5775,7 +5773,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 打开 Kiro MCP 配置文件
+  // IPC: Open Kiro MCP Configuration file
   ipcMain.handle('open-kiro-mcp-config', async (_event, type: 'user' | 'workspace') => {
     try {
       const os = await import('os')
@@ -5786,11 +5784,11 @@ app.whenReady().then(async () => {
       if (type === 'user') {
         configPath = path.join(homeDir, '.kiro', 'settings', 'mcp.json')
       } else {
-        // 工作区配置，打开当前工作区的 .kiro/settings/mcp.json
+        // Workspace configuration, open the current workspace .kiro/settings/mcp.json
         configPath = path.join(process.cwd(), '.kiro', 'settings', 'mcp.json')
       }
       
-      // 如果文件不存在，创建空配置
+      // If the file does not exist, create an empty configuration
       const fs = await import('fs')
       if (!fs.existsSync(configPath)) {
         const dir = path.dirname(configPath)
@@ -5808,7 +5806,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 打开 Kiro Steering 目录
+  // IPC: Open Kiro Steering Table of contents
   ipcMain.handle('open-kiro-steering-folder', async () => {
     try {
       const os = await import('os')
@@ -5817,7 +5815,7 @@ app.whenReady().then(async () => {
       const homeDir = os.homedir()
       const steeringPath = path.join(homeDir, '.kiro', 'steering')
       
-      // 如果目录不存在，创建它
+      // If the directory does not exist, create it
       if (!fs.existsSync(steeringPath)) {
         fs.mkdirSync(steeringPath, { recursive: true })
       }
@@ -5830,7 +5828,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 打开 Kiro settings.json 文件
+  // IPC: Open Kiro settings.json document
   ipcMain.handle('open-kiro-settings-file', async () => {
     try {
       const os = await import('os')
@@ -5839,7 +5837,7 @@ app.whenReady().then(async () => {
       const homeDir = os.homedir()
       const settingsPath = path.join(homeDir, 'AppData', 'Roaming', 'Kiro', 'User', 'settings.json')
       
-      // 如果文件不存在，创建默认配置
+      // If the file does not exist, create a default configuration
       if (!fs.existsSync(settingsPath)) {
         const dir = path.dirname(settingsPath)
         if (!fs.existsSync(dir)) {
@@ -5860,7 +5858,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 打开指定的 Steering 文件
+  // IPC: Open the specified Steering document
   ipcMain.handle('open-kiro-steering-file', async (_event, filename: string) => {
     try {
       const os = await import('os')
@@ -5876,7 +5874,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 创建默认的 rules.md 文件
+  // IPC: create default rules.md document
   ipcMain.handle('create-kiro-default-rules', async () => {
     try {
       const os = await import('os')
@@ -5886,70 +5884,70 @@ app.whenReady().then(async () => {
       const steeringPath = path.join(homeDir, '.kiro', 'steering')
       const rulesPath = path.join(steeringPath, 'rules.md')
       
-      // 确保目录存在
+      // Make sure the directory exists
       if (!fs.existsSync(steeringPath)) {
         fs.mkdirSync(steeringPath, { recursive: true })
       }
       
-      // 默认规则内容
-      const defaultContent = `# Role: 高级软件开发助手
-一、系统为Windows10
-二、调式文件、测试脚本、test相关文件都放在test文件夹里面，md文件放在docs文件夹里面
-# 核心原则
+      // Default rule content
+      const defaultContent = `# Role: Advanced Software Development Assistant
+1. The system isWindows10
+2. Debug files, test scripts,testRelevant documents are placed intestInside the folder,mdThe file is placed indocsInside the folder
+# core principles
 
 
-## 1. 沟通与协作
-- **诚实优先**：在任何情况下都严禁猜测或伪装。当需求不明确、存在技术风险或遇到知识盲区时，必须停止工作，并立即向用户澄清。
-- **技术攻坚**：面对技术难题时，首要目标是寻找并提出高质量的解决方案。只有在所有可行方案均被评估后，才能与用户探讨降级或替换方案。
-- **批判性思维**：在执行任务时，如果发现当前需求存在技术限制、潜在风险或有更优的实现路径，必须主动向用户提出你的见解和改进建议。
-- **语言要求**：思考和回答时总是使用中文进行回复。
+## 1. Communication and collaboration
+- **Honesty first**: Speculation or pretense is strictly prohibited under any circumstances.当需求不明确、存在技术风险或遇到知识盲区时，必须停止工作，并立即向用户澄清。
+- **Technical difficulties**: When faced with a technical problem, the primary goal is to find and propose a high-quality solution. Only after all feasible options have been evaluated should downgrade or replacement options be discussed with the user.
+- **critical thinking**: When performing tasks, if you find that there are technical limitations, potential risks, or better implementation paths for current requirements, you must proactively provide your insights and improvement suggestions to users.
+- **Language requirements**: Always use Chinese when thinking and answering.
 
 
-## 2. 架构设计
-- **模块化设计**：所有设计都必须遵循功能解耦、职责单一的原则。严格遵守SOLID和DRY原则。
-- **前瞻性思维**：在设计时必须考虑未来的可扩展性和可维护性，确保解决方案能够融入项目的整体架构。
-- **技术债务优先**：在进行重构或优化时，优先处理对系统稳定性和可维护性影响最大的技术债务和基础架构问题。
+## 2. Architecture design
+- **Modular design**: All designs must follow the principles of functional decoupling and single responsibility. strictly adhere toSOLIDandDRYin principle.
+- **forward thinking**: Future scalability and maintainability must be considered when designing to ensure that the solution can be integrated into the overall architecture of the project.
+- **Technical debt first**: When refactoring or optimizing, prioritize technical debt and infrastructure issues that have the greatest impact on system stability and maintainability.
 
 
-## 3. 代码与交付物质量标准
-### 编写规范
-- **架构视角**：始终从整体项目架构出发编写代码，确保代码片段能够无缝集成，而不是孤立的功能。
-- **零技术债务**：严禁创建任何形式的技术债务，包括但不限于：临时文件、硬编码值、职责不清的模块或函数。
-- **问题暴露**：禁止添加任何用于掩盖或绕过错误的fallback机制。代码应设计为快速失败（Fail-Fast），确保问题在第一时间被发现。
+## 3. Code and deliverable quality standards
+### writing specifications
+- **architectural perspective**: Always write code with the overall project architecture in mind, ensuring that code snippets are seamlessly integrated rather than isolated functions.
+- **Zero technical debt**: It is strictly prohibited to create any form of technical debt, including but not limited to: temporary files, hard-coded values, modules or functions with unclear responsibilities.
+- **Problem exposed**: It is forbidden to add any code to cover up or bypass the error.fallbackmechanism. Code should be designed to fail fast (Fail-Fast) to ensure that problems are discovered as soon as possible.
 
 
-### 质量要求
-- **可读性**：使用清晰、有意义的变量名和函数名。代码逻辑必须清晰易懂，并辅以必要的注释。
-- **规范遵循**：严格遵循目标编程语言的社区最佳实践和官方编码规范。
-- **健壮性**：必须包含充分的错误处理逻辑和边界条件检查。
-- **性能意识**：在保证代码质量和可读性的前提下，对性能敏感部分进行合理优化，避免不必要的计算复杂度和资源消耗。
+### Quality requirements
+- **readability**: Use clear and meaningful variable and function names. The code logic must be clear and easy to understand and supported by necessary comments.
+- **Standard compliance**: Strictly follow the community best practices and official coding standards of the target programming language.
+- **Robustness**: Must contain adequate error handling logic and boundary condition checks.
+- **performance awareness**: Under the premise of ensuring code quality and readability, perform reasonable optimization of performance-sensitive parts to avoid unnecessary computational complexity and resource consumption.
 
 
-### 交付物规范
-- **无文档**：除非用户明确要求，否则不要创建任何Markdown文档或其他形式的说明文档。
-- **无测试**：除非用户明确要求，否则不要编写单元测试或集成测试代码。
-- **无编译/运行**：禁止编译或执行任何代码。你的任务是生成高质量的代码和设计方案。
+### Deliverable specifications
+- **No documentation**: Do not create any unless explicitly requested by the userMarkdownDocumentation or other form of documentation.
+- **No testing**: Don’t write unit or integration test code unless explicitly asked to do so by the user.
+- **No compilation/run**: Disables compilation or execution of any code. Your mission is to produce high-quality code and design solutions.
 
 
-# 注意事项
-- 除非特别说明否则不要创建新的文档、不要测试、不要编译、不要运行、不需要总结，除非用户主动要求
+# Things to note
+- Unless otherwise specified, do not create new documentation, do not test, do not compile, do not run, do not summarize, unless the user actively requests it
 
 
-- 需求不明确时使向用户询问澄清，提供预定义选项
-- 在有多个方案的时候，需要向用户询问，而不是自作主张
-- 在有方案/策略需要更新时，需要向用户询问，而不是自作主张
+- Ask users for clarification when requirements are unclear and provide predefined options
+- When there are multiple solutions, you need to ask the user instead of making your own decision.
+- There is a plan/When policies need to be updated, you need to ask users instead of making your own decisions.
 
 
-- ACE为augmentContextEngine工具的缩写
-- 如果要求查看文档请使用 Context7 MCP
-- 如果需要进行WEB前端页面测试请使用 Playwright MCP
-- 如果用户回复'继续' 则请按照最佳实践继续完成任务
+- ACEforaugmentContextEngineabbreviation for tool
+- If asked to view documentation please use Context7 MCP
+- If necessaryWEBPlease use this for front-end page testing Playwright MCP
+- If the user replies'continue' then please continue completing the task following best practices
 `
       
       fs.writeFileSync(rulesPath, defaultContent, 'utf-8')
       console.log('[KiroSettings] Created default rules.md at:', rulesPath)
       
-      // 打开文件
+      // open file
       shell.openPath(rulesPath)
       
       return { success: true }
@@ -5959,7 +5957,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 读取 Steering 文件内容
+  // IPC: read Steering File content
   ipcMain.handle('read-kiro-steering-file', async (_event, filename: string) => {
     try {
       const os = await import('os')
@@ -5969,7 +5967,7 @@ app.whenReady().then(async () => {
       const filePath = path.join(homeDir, '.kiro', 'steering', filename)
       
       if (!fs.existsSync(filePath)) {
-        return { success: false, error: '文件不存在' }
+        return { success: false, error: 'File does not exist' }
       }
       
       const content = fs.readFileSync(filePath, 'utf-8')
@@ -5980,7 +5978,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 保存 Steering 文件内容
+  // IPC: save Steering File content
   ipcMain.handle('save-kiro-steering-file', async (_event, filename: string, content: string) => {
     try {
       const os = await import('os')
@@ -5990,7 +5988,7 @@ app.whenReady().then(async () => {
       const steeringPath = path.join(homeDir, '.kiro', 'steering')
       const filePath = path.join(steeringPath, filename)
       
-      // 确保目录存在
+      // Make sure the directory exists
       if (!fs.existsSync(steeringPath)) {
         fs.mkdirSync(steeringPath, { recursive: true })
       }
@@ -6004,9 +6002,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ Kiro API 反代服务器 IPC ============
+  // ============ Kiro API Anti-generation server IPC ============
 
-  // IPC: 启动反代服务器
+  // IPC: Start the anti-generation server
   ipcMain.handle('proxy-start', async (_event, config?: Partial<ProxyConfig>) => {
     try {
       const server = initProxyServer()
@@ -6014,7 +6012,7 @@ app.whenReady().then(async () => {
         server.updateConfig(config)
       }
       await server.start()
-      // 更新托盘菜单状态
+      // Update tray menu status
       updateTrayMenu()
       return { success: true, port: server.getConfig().port }
     } catch (error) {
@@ -6023,13 +6021,13 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 停止反代服务器
+  // IPC: Stop anti-generation server
   ipcMain.handle('proxy-stop', async () => {
     try {
       if (proxyServer) {
         await proxyServer.stop()
       }
-      // 更新托盘菜单状态
+      // Update tray menu status
       updateTrayMenu()
       return { success: true }
     } catch (error) {
@@ -6038,10 +6036,10 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取反代服务器状态
+  // IPC: Get anti-generation server status
   ipcMain.handle('proxy-get-status', () => {
     if (!proxyServer) {
-      // 未初始化时从 store 读取保存的配置
+      // When not initialized from store Read saved configuration
       const savedConfig = store?.get('proxyConfig') as ProxyConfig | undefined
       return { running: false, config: savedConfig || null, stats: null, sessionStats: null }
     }
@@ -6053,7 +6051,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 重置累计 credits
+  // IPC: reset total credits
   ipcMain.handle('proxy-reset-credits', () => {
     if (proxyServer) {
       proxyServer.resetTotalCredits()
@@ -6064,7 +6062,7 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
-  // IPC: 重置累计 tokens
+  // IPC: reset total tokens
   ipcMain.handle('proxy-reset-tokens', () => {
     if (proxyServer) {
       proxyServer.resetTotalTokens()
@@ -6076,7 +6074,7 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
-  // IPC: 重置请求统计
+  // IPC: Reset request statistics
   ipcMain.handle('proxy-reset-request-stats', () => {
     if (proxyServer) {
       proxyServer.resetRequestStats()
@@ -6089,7 +6087,7 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
-  // IPC: 获取反代日志
+  // IPC: Get anti-generation log
   ipcMain.handle('proxy-get-logs', (_event, count?: number) => {
     if (count) {
       return proxyLogStore.getLast(count)
@@ -6097,77 +6095,77 @@ app.whenReady().then(async () => {
     return proxyLogStore.getAll()
   })
 
-  // IPC: 清除反代日志
+  // IPC: Clear reverse generation logs
   ipcMain.handle('proxy-clear-logs', () => {
     proxyLogStore.clear()
     return { success: true }
   })
 
-  // IPC: 获取反代日志数量
+  // IPC: Get the number of reverse generation logs
   ipcMain.handle('proxy-get-logs-count', () => {
     return proxyLogStore.count()
   })
 
-  // IPC: 获取 Usage API 类型
+  // IPC: get Usage API type
   ipcMain.handle('get-usage-api-type', () => {
     return currentUsageApiType
   })
 
-  // IPC: 设置 Usage API 类型
+  // IPC: set up Usage API type
   ipcMain.handle('set-usage-api-type', (_event, type: 'rest' | 'cbor') => {
     setUsageApiType(type)
-    // 保存到 store
+    // save to store
     if (store) {
       store.set('usageApiType', type)
     }
     return { success: true, type }
   })
 
-  // IPC: 获取是否使用 K-Proxy 代理
+  // IPC: Get whether to use K-Proxy acting
   ipcMain.handle('get-use-kproxy-for-api', () => {
     return getUseKProxyForApi()
   })
 
-  // IPC: 设置是否使用 K-Proxy 代理
+  // IPC: Set whether to use K-Proxy acting
   ipcMain.handle('set-use-kproxy-for-api', (_event, enabled: boolean) => {
     setUseKProxyForApi(enabled)
-    // 保存到 store
+    // save to store
     if (store) {
       store.set('useKProxyForApi', enabled)
     }
     return { success: true, enabled }
   })
 
-  // IPC: 更新反代服务器配置
+  // IPC: Update anti-generation server configuration
   ipcMain.handle('proxy-update-config', async (_event, config: Partial<ProxyConfig>) => {
     try {
       const server = initProxyServer()
       server.updateConfig(config)
       const newConfig = server.getConfig()
-      // 同步流式日志开关
+      // Synchronous streaming log switch
       if (config.logStreamEvents !== undefined) {
         setLogStreamEvents(config.logStreamEvents)
       }
-      // 同步 payload 大小限制
+      // synchronous payload size limit
       if (config.payloadSizeLimitKB !== undefined) {
         setPayloadSizeLimitKB(config.payloadSizeLimitKB)
       }
-      // 同步 Token buffer reserve（开关 + 数值）
+      // synchronous Token buffer reserve(switch + numerical value)
       if (config.enableTokenBufferReserve !== undefined) {
         setEnableTokenBufferReserve(config.enableTokenBufferReserve)
       }
       if (config.tokenBufferReserve !== undefined) {
         setTokenBufferReserve(config.tokenBufferReserve)
       }
-      // 同步 Agent 模式
+      // synchronous Agent model
       if (config.agentMode) {
         setAgentMode(config.agentMode)
       }
-      // 工作区路径变化时重新加载 steering
+      // Reload when workspace path changes steering
       if (config.workspacePath !== undefined) {
         server.loadSteering()
       }
-      // 保存配置到 store（用于自启动）
+      // Save configuration to store(for self-starting)
       if (store) {
         store.set('proxyConfig', newConfig)
       }
@@ -6178,9 +6176,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ 反代安全 / 可观测 IPC（v1.8 新增） ============
+  // ============ Anti-generational security / observable IPC（v1.8 Newly added) ============
 
-  // 获取自签证书信息（PEM、指纹、有效期、SAN）
+  // Obtain self-signed certificate information (PEM, fingerprint, validity period,SAN）
   ipcMain.handle('proxy-self-signed-cert-info', () => {
     try {
       if (!proxyServer) return { success: false, error: 'Proxy server not initialized' }
@@ -6192,7 +6190,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 重新生成自签证书（用户主动触发）
+  // Regenerate self-signed certificate (triggered by user)
   ipcMain.handle('proxy-self-signed-cert-regenerate', () => {
     try {
       if (!proxyServer) return { success: false, error: 'Proxy server not initialized' }
@@ -6204,7 +6202,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 检查反代配置是否需要重启
+  // Check whether the anti-generation configuration needs to be restarted
   ipcMain.handle('proxy-needs-restart', () => {
     try {
       if (!proxyServer) return { needsRestart: false }
@@ -6214,7 +6212,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 重启反代（用户在 UI 点"立即重启"时调用）
+  // Restart the reverse generation (the user is UI point"Restart now"called when)
   ipcMain.handle('proxy-restart', async () => {
     try {
       if (!proxyServer) return { success: false, error: 'Proxy server not initialized' }
@@ -6225,7 +6223,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 获取反代审计日志
+  // Get anti-generation audit logs
   ipcMain.handle('proxy-audit-log', () => {
     try {
       if (!proxyServer) return { entries: [] }
@@ -6235,9 +6233,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ API Key 管理 IPC ============
+  // ============ API Key manage IPC ============
 
-  // IPC: 获取所有 API Keys
+  // IPC: Get all API Keys
   ipcMain.handle('proxy-get-api-keys', () => {
     try {
       const server = initProxyServer()
@@ -6248,7 +6246,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 添加 API Key
+  // IPC: Add to API Key
   ipcMain.handle('proxy-add-api-key', async (_event, apiKey: { name: string; key?: string; format?: 'sk' | 'simple' | 'token'; creditsLimit?: number }) => {
     try {
       const crypto = await import('crypto')
@@ -6256,7 +6254,7 @@ app.whenReady().then(async () => {
       const config = server.getConfig()
       const apiKeys = config.apiKeys || []
       
-      // 根据格式生成随机 Key
+      // Generate random according to format Key
       const format = apiKey.format || 'sk'
       let newKey = apiKey.key
       if (!newKey) {
@@ -6306,7 +6304,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 更新 API Key
+  // IPC: renew API Key
   ipcMain.handle('proxy-update-api-key', (_event, id: string, updates: Partial<import('./proxy/types').ApiKey>) => {
     try {
       const server = initProxyServer()
@@ -6318,7 +6316,7 @@ app.whenReady().then(async () => {
         return { success: false, error: 'API key not found' }
       }
       
-      // 更新字段（不允许更新 id、createdAt、usage）
+      // Update fields (updates not allowed id、createdAt、usage）
       const { id: _, createdAt: __, usage: ___, ...allowedUpdates } = updates
       apiKeys[index] = { ...apiKeys[index], ...allowedUpdates }
       
@@ -6334,7 +6332,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 删除 API Key
+  // IPC: delete API Key
   ipcMain.handle('proxy-delete-api-key', (_event, id: string) => {
     try {
       const server = initProxyServer()
@@ -6359,7 +6357,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 重置 API Key 用量统计
+  // IPC: reset API Key Usage statistics
   ipcMain.handle('proxy-reset-api-key-usage', (_event, id: string) => {
     try {
       const server = initProxyServer()
@@ -6391,7 +6389,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 添加账号到反代池
+  // IPC: Add account to anti-generation pool
   ipcMain.handle('proxy-add-account', (_event, account: ProxyAccount) => {
     try {
       const server = initProxyServer()
@@ -6403,7 +6401,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 从反代池移除账号
+  // IPC: Remove account from anti-generation pool
   ipcMain.handle('proxy-remove-account', (_event, accountId: string) => {
     try {
       const server = initProxyServer()
@@ -6415,7 +6413,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 同步账号到反代池（批量更新）
+  // IPC: Synchronize accounts to the anti-generation pool (batch update)
   ipcMain.handle('proxy-sync-accounts', (_event, accounts: ProxyAccount[]) => {
     try {
       const server = initProxyServer()
@@ -6431,7 +6429,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取反代池账号列表
+  // IPC: Get the anti-generation pool account list
   ipcMain.handle('proxy-get-accounts', () => {
     if (!proxyServer) {
       return { accounts: [], availableCount: 0 }
@@ -6443,7 +6441,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 刷新模型缓存
+  // IPC: Refresh model cache
   ipcMain.handle('proxy-refresh-models', () => {
     if (!proxyServer) {
       return { success: false, error: 'Proxy server not initialized' }
@@ -6452,7 +6450,7 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
-  // IPC: 获取可用模型列表
+  // IPC: Get a list of available models
   ipcMain.handle('proxy-get-models', async () => {
     if (!proxyServer) {
       return { success: false, error: 'Proxy server not initialized', models: [] }
@@ -6476,7 +6474,7 @@ app.whenReady().then(async () => {
           proxyOrigin: '',
           openaiBaseUrl: '',
           results: [],
-          error: '请先在反代配置中设置或启用 API Key'
+          error: 'Please set or enable it in the anti-generation configuration first API Key'
         }
       }
       return await configureProxyClients({
@@ -6500,7 +6498,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取账户可用模型列表
+  // IPC: Get the list of models available for the account
   ipcMain.handle('account-get-models', async (_event, accessToken: string, region?: string, profileArn?: string, machineId?: string, provider?: string, authMethod?: string, accountId?: string) => {
     try {
       const models = await fetchKiroModels({
@@ -6530,7 +6528,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取可用订阅列表
+  // IPC: Get a list of available subscriptions
   ipcMain.handle('account-get-subscriptions', async (_event, accessToken: string, region?: string, profileArn?: string, machineId?: string, provider?: string, authMethod?: string, accountId?: string) => {
     try {
       const result = await fetchAvailableSubscriptions({ id: accountId || 'subscription-request', accessToken, region: region || 'us-east-1', profileArn, machineId, provider, authMethod } as ProxyAccount)
@@ -6547,7 +6545,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取订阅管理/支付链接
+  // IPC: Get subscription management/Payment link
   ipcMain.handle('account-get-subscription-url', async (_event, accessToken: string, subscriptionType?: string, region?: string, profileArn?: string, machineId?: string, provider?: string, authMethod?: string, accountId?: string) => {
     try {
       const result = await fetchSubscriptionToken({ id: accountId || 'subscription-request', accessToken, region: region || 'us-east-1', profileArn, machineId, provider, authMethod } as ProxyAccount, subscriptionType)
@@ -6560,7 +6558,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 设置用户偏好（超额开启/关闭）
+  // IPC: Set user preferences (oversubscription enabled/closure)
   ipcMain.handle('account-set-overage', async (_event, accessToken: string, overageStatus: 'ENABLED' | 'DISABLED', region?: string, profileArn?: string, machineId?: string, provider?: string, authMethod?: string, accountId?: string) => {
     try {
       const result = await setUserPreference(
@@ -6573,7 +6571,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 在系统默认浏览器无痕模式中打开订阅链接
+  // IPC: Open the subscription link in your system's default browser in incognito mode
   ipcMain.handle('open-subscription-window', async (_event, url: string) => {
     try {
       openBrowserInPrivateMode(url)
@@ -6583,15 +6581,15 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 代理日志持久化（请求日志，与详细日志分开存储）
+  // Agent log persistence (request logs, stored separately from detailed logs)
   const getProxyLogsPath = (): string => join(app.getPath('userData'), 'proxy-request-logs.json')
   const MAX_LOGS = 100
 
-  // IPC: 保存代理日志
+  // IPC: Save agent logs
   ipcMain.handle('proxy-save-logs', async (_event, logs: Array<{ time: string; path: string; status: number; tokens?: number }>) => {
     try {
       const logsPath = getProxyLogsPath()
-      // 只保留最近 100 条
+      // Keep only the most recent 100 strip
       const trimmedLogs = logs.slice(0, MAX_LOGS)
       await writeFile(logsPath, JSON.stringify(trimmedLogs, null, 2), 'utf-8')
       return { success: true }
@@ -6601,7 +6599,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 加载代理日志
+  // IPC: Load agent logs
   ipcMain.handle('proxy-load-logs', async () => {
     try {
       const logsPath = getProxyLogsPath()
@@ -6609,12 +6607,12 @@ app.whenReady().then(async () => {
       const logs = JSON.parse(content)
       return { success: true, logs }
     } catch (error) {
-      // 文件不存在是正常的
+      // It is normal for the file not to exist
       return { success: true, logs: [] }
     }
   })
 
-  // IPC: 重置反代池状态
+  // IPC: Reset generation pool status
   ipcMain.handle('proxy-reset-pool', () => {
     try {
       if (proxyServer) {
@@ -6627,15 +6625,15 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 手动解除账号封禁标记（用户确认账号已恢复后调用）
-  // 1) 清除反代池中的 suspended 状态
-  // 2) 同步清除 store.accountData[id].lastError，状态回到 active
+  // IPC: Manually lift the account ban mark (called after the user confirms that the account has been restored)
+  // 1) Clear the generation pool suspended state
+  // 2) Sync clear store.accountData[id].lastError, the status returns to active
   ipcMain.handle('proxy-clear-account-suspended', (_event, accountId: string) => {
     try {
       if (proxyServer) {
         proxyServer.getAccountPool().clearSuspended(accountId)
       }
-      // 持久化清除 lastError
+      // Persistent cleanup lastError
       if (store) {
         const accountData = store.get('accountData') as { accounts?: Record<string, Record<string, unknown>> } | undefined
         if (accountData?.accounts?.[accountId]) {
@@ -6658,9 +6656,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ K-Proxy MITM 代理 IPC ============
+  // ============ K-Proxy MITM acting IPC ============
 
-  // IPC: 初始化 K-Proxy 服务
+  // IPC: initialization K-Proxy Serve
   ipcMain.handle('kproxy-init', async () => {
     try {
       const savedConfig = store?.get('kproxyConfig') as Partial<KProxyConfig> | undefined
@@ -6698,7 +6696,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 启动 K-Proxy
+  // IPC: start up K-Proxy
   ipcMain.handle('kproxy-start', async (_event, config?: Partial<KProxyConfig>) => {
     try {
       const service = getKProxyService()
@@ -6709,7 +6707,7 @@ app.whenReady().then(async () => {
         service.updateConfig(config)
       }
       await service.start()
-      // 保存配置
+      // Save configuration
       if (store) {
         store.set('kproxyConfig', service.getConfig())
       }
@@ -6720,7 +6718,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 停止 K-Proxy
+  // IPC: stop K-Proxy
   ipcMain.handle('kproxy-stop', async () => {
     try {
       const service = getKProxyService()
@@ -6734,7 +6732,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取 K-Proxy 状态
+  // IPC: get K-Proxy state
   ipcMain.handle('kproxy-get-status', () => {
     const service = getKProxyService()
     if (!service) {
@@ -6749,7 +6747,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 更新 K-Proxy 配置
+  // IPC: renew K-Proxy Configuration
   ipcMain.handle('kproxy-update-config', async (_event, config: Partial<KProxyConfig>) => {
     try {
       const service = getKProxyService()
@@ -6768,7 +6766,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 设置当前设备 ID
+  // IPC: Set current device ID
   ipcMain.handle('kproxy-set-device-id', (_event, deviceId: string) => {
     try {
       if (!isValidDeviceId(deviceId)) {
@@ -6785,12 +6783,12 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 生成新的设备 ID
+  // IPC: Generate new device ID
   ipcMain.handle('kproxy-generate-device-id', () => {
     return { success: true, deviceId: generateDeviceId() }
   })
 
-  // IPC: 添加设备 ID 映射
+  // IPC: Add device ID mapping
   ipcMain.handle('kproxy-add-device-mapping', (_event, mapping: DeviceIdMapping) => {
     try {
       const service = getKProxyService()
@@ -6798,7 +6796,7 @@ app.whenReady().then(async () => {
         return { success: false, error: 'K-Proxy not initialized' }
       }
       service.addDeviceIdMapping(mapping)
-      // 保存映射
+      // Save mapping
       const mappings = service.getAllDeviceIdMappings()
       if (store) {
         store.set('kproxyDeviceMappings', mappings)
@@ -6809,7 +6807,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取所有设备 ID 映射
+  // IPC: Get all devices ID mapping
   ipcMain.handle('kproxy-get-device-mappings', () => {
     const service = getKProxyService()
     if (!service) {
@@ -6819,7 +6817,7 @@ app.whenReady().then(async () => {
     return { success: true, mappings: service.getAllDeviceIdMappings() }
   })
 
-  // IPC: 切换到账号设备 ID
+  // IPC: Switch to account device ID
   ipcMain.handle('kproxy-switch-to-account', (_event, accountId: string) => {
     try {
       const service = getKProxyService()
@@ -6833,7 +6831,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 获取 CA 证书 PEM（用于导出/安装）
+  // IPC: get CA Certificate PEM(for exporting/Install)
   ipcMain.handle('kproxy-get-ca-cert', () => {
     const service = getKProxyService()
     if (!service) {
@@ -6852,7 +6850,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 导出 CA 证书到指定路径
+  // IPC: Export CA Certificate to specified path
   ipcMain.handle('kproxy-export-ca-cert', async (_event, exportPath?: string) => {
     try {
       const service = getKProxyService()
@@ -6884,7 +6882,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 重置 K-Proxy 统计
+  // IPC: reset K-Proxy statistics
   ipcMain.handle('kproxy-reset-stats', () => {
     const service = getKProxyService()
     if (service) {
@@ -6893,7 +6891,7 @@ app.whenReady().then(async () => {
     return { success: true }
   })
 
-  // IPC: 检查 CA 证书是否已安装到系统信任存储
+  // IPC: examine CA Whether the certificate is installed to the system trust store
   ipcMain.handle('kproxy-check-ca-cert-installed', async () => {
     try {
       const service = getKProxyService()
@@ -6905,7 +6903,7 @@ app.whenReady().then(async () => {
       const platform = process.platform
 
       if (platform === 'win32') {
-        // Windows: 使用 certutil 检查证书
+        // Windows: use certutil Check certificate
         try {
           const output = execSync('certutil -store -user Root "K-Proxy CA"', { encoding: 'utf-8' })
           return { success: true, installed: output.includes('K-Proxy CA') }
@@ -6913,7 +6911,7 @@ app.whenReady().then(async () => {
           return { success: true, installed: false }
         }
       } else if (platform === 'darwin') {
-        // macOS: 使用 security 命令检查
+        // macOS: use security command check
         try {
           execSync('security find-certificate -c "K-Proxy CA" ~/Library/Keychains/login.keychain-db', { encoding: 'utf-8' })
           return { success: true, installed: true }
@@ -6921,7 +6919,7 @@ app.whenReady().then(async () => {
           return { success: true, installed: false }
         }
       } else {
-        // Linux: 检查文件是否存在
+        // Linux: Check if the file exists
         const fs = await import('fs')
         const targetPath = '/usr/local/share/ca-certificates/kproxy-ca.crt'
         return { success: true, installed: fs.existsSync(targetPath) }
@@ -6932,7 +6930,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 安装 CA 证书到系统信任存储
+  // IPC: Install CA Certificate to system trust store
   ipcMain.handle('kproxy-install-ca-cert', async () => {
     try {
       const service = getKProxyService()
@@ -6948,23 +6946,23 @@ app.whenReady().then(async () => {
       const platform = process.platform
 
       if (platform === 'win32') {
-        // Windows: 使用 certutil 安装到根证书存储
+        // Windows: use certutil Install into the root certificate store
         try {
           execSync(`certutil -addstore -user Root "${caInfo.certPath}"`, { encoding: 'utf-8' })
           return { success: true, message: 'CA certificate installed to Windows certificate store' }
         } catch (error) {
           const errMsg = error instanceof Error ? error.message : String(error)
-          if (errMsg.includes('already in store') || errMsg.includes('已在存储中')) {
+          if (errMsg.includes('already in store') || errMsg.includes('Already in storage')) {
             return { success: true, message: 'CA certificate already installed' }
           }
           throw error
         }
       } else if (platform === 'darwin') {
-        // macOS: 使用 security 命令安装到钥匙串
+        // macOS: use security Command to install to keychain
         execSync(`security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db "${caInfo.certPath}"`)
         return { success: true, message: 'CA certificate installed to macOS Keychain' }
       } else {
-        // Linux: 复制到系统 CA 目录
+        // Linux: Copy to system CA Table of contents
         const fs = await import('fs')
         const targetPath = '/usr/local/share/ca-certificates/kproxy-ca.crt'
         fs.copyFileSync(caInfo.certPath, targetPath)
@@ -6977,30 +6975,30 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 卸载 CA 证书从系统信任存储
+  // IPC: uninstall CA Certificate from system trust store
   ipcMain.handle('kproxy-uninstall-ca-cert', async () => {
     try {
       const { execSync } = await import('child_process')
       const platform = process.platform
 
       if (platform === 'win32') {
-        // Windows: 使用 certutil 删除证书
+        // Windows: use certutil Delete certificate
         try {
           execSync('certutil -delstore -user Root "K-Proxy CA"', { encoding: 'utf-8' })
           return { success: true, message: 'CA certificate removed from Windows certificate store' }
         } catch (error) {
           const errMsg = error instanceof Error ? error.message : String(error)
-          if (errMsg.includes('not found') || errMsg.includes('找不到')) {
+          if (errMsg.includes('not found') || errMsg.includes('not found')) {
             return { success: true, message: 'CA certificate not found in store' }
           }
           throw error
         }
       } else if (platform === 'darwin') {
-        // macOS: 使用 security 命令删除
+        // macOS: use security command delete
         execSync('security delete-certificate -c "K-Proxy CA" ~/Library/Keychains/login.keychain-db')
         return { success: true, message: 'CA certificate removed from macOS Keychain' }
       } else {
-        // Linux: 删除证书并更新
+        // Linux: Delete certificate and update
         const fs = await import('fs')
         const targetPath = '/usr/local/share/ca-certificates/kproxy-ca.crt'
         if (fs.existsSync(targetPath)) {
@@ -7015,9 +7013,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ MCP 服务器管理 IPC ============
+  // ============ MCP Server management IPC ============
 
-  // IPC: 保存 MCP 服务器配置
+  // IPC: save MCP Server configuration
   ipcMain.handle('save-mcp-server', async (_event, name: string, config: { command: string; args?: string[]; env?: Record<string, string> }, oldName?: string) => {
     try {
       const os = await import('os')
@@ -7026,22 +7024,22 @@ app.whenReady().then(async () => {
       const homeDir = os.homedir()
       const mcpPath = path.join(homeDir, '.kiro', 'settings', 'mcp.json')
       
-      // 读取现有配置
+      // Read existing configuration
       let mcpConfig: { mcpServers: Record<string, unknown> } = { mcpServers: {} }
       if (fs.existsSync(mcpPath)) {
         const content = fs.readFileSync(mcpPath, 'utf-8')
         mcpConfig = JSON.parse(content)
       }
       
-      // 如果是重命名，先删除旧的
+      // If it is renamed, delete the old one first
       if (oldName && oldName !== name) {
         delete mcpConfig.mcpServers[oldName]
       }
       
-      // 添加/更新服务器
+      // Add to/update server
       mcpConfig.mcpServers[name] = config
       
-      // 确保目录存在
+      // Make sure the directory exists
       const dir = path.dirname(mcpPath)
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
@@ -7056,7 +7054,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 删除 MCP 服务器
+  // IPC: delete MCP server
   ipcMain.handle('delete-mcp-server', async (_event, name: string) => {
     try {
       const os = await import('os')
@@ -7066,14 +7064,14 @@ app.whenReady().then(async () => {
       const mcpPath = path.join(homeDir, '.kiro', 'settings', 'mcp.json')
       
       if (!fs.existsSync(mcpPath)) {
-        return { success: false, error: '配置文件不存在' }
+        return { success: false, error: 'Configuration file does not exist' }
       }
       
       const content = fs.readFileSync(mcpPath, 'utf-8')
       const mcpConfig = JSON.parse(content)
       
       if (!mcpConfig.mcpServers || !mcpConfig.mcpServers[name]) {
-        return { success: false, error: '服务器不存在' }
+        return { success: false, error: 'Server does not exist' }
       }
       
       delete mcpConfig.mcpServers[name]
@@ -7086,7 +7084,7 @@ app.whenReady().then(async () => {
     }
   })
 
-  // IPC: 删除 Steering 文件
+  // IPC: delete Steering document
   ipcMain.handle('delete-kiro-steering-file', async (_event, filename: string) => {
     try {
       const os = await import('os')
@@ -7096,7 +7094,7 @@ app.whenReady().then(async () => {
       const filePath = path.join(homeDir, '.kiro', 'steering', filename)
       
       if (!fs.existsSync(filePath)) {
-        return { success: false, error: '文件不存在' }
+        return { success: false, error: 'File does not exist' }
       }
       
       fs.unlinkSync(filePath)
@@ -7108,26 +7106,26 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ============ 机器码管理 IPC ============
+  // ============ Machine code management IPC ============
   
-  // IPC: 获取操作系统类型
+  // IPC: Get operating system type
   ipcMain.handle('machine-id:get-os-type', () => {
     return machineIdModule.getOSType()
   })
 
-  // IPC: 获取当前机器码
+  // IPC: Get the current machine code
   ipcMain.handle('machine-id:get-current', async () => {
     console.log('[MachineId] Getting current machine ID...')
     return await machineIdModule.getCurrentMachineId()
   })
 
-  // IPC: 设置新机器码
+  // IPC: Set new machine code
   ipcMain.handle('machine-id:set', async (_event, newMachineId: string) => {
     console.log('[MachineId] Setting new machine ID:', newMachineId.substring(0, 8) + '...')
     const result = await machineIdModule.setMachineId(newMachineId)
     
     if (!result.success && result.requiresAdmin) {
-      // 弹窗询问用户是否以管理员权限重启
+      // A pop-up window asks the user whether to restart with administrator privileges
       const shouldRestart = await machineIdModule.showAdminRequiredDialog()
       if (shouldRestart) {
         await machineIdModule.requestAdminRestart()
@@ -7137,17 +7135,17 @@ app.whenReady().then(async () => {
     return result
   })
 
-  // IPC: 生成随机机器码
+  // IPC: Generate random machine code
   ipcMain.handle('machine-id:generate-random', () => {
     return machineIdModule.generateRandomMachineId()
   })
 
-  // IPC: 检查管理员权限
+  // IPC: Check admin rights
   ipcMain.handle('machine-id:check-admin', async () => {
     return await machineIdModule.checkAdminPrivilege()
   })
 
-  // IPC: 请求管理员权限重启
+  // IPC: Request administrator permission to restart
   ipcMain.handle('machine-id:request-admin-restart', async () => {
     const shouldRestart = await machineIdModule.showAdminRequiredDialog()
     if (shouldRestart) {
@@ -7156,10 +7154,10 @@ app.whenReady().then(async () => {
     return false
   })
 
-  // IPC: 备份机器码到文件
+  // IPC: Backup machine code to file
   ipcMain.handle('machine-id:backup-to-file', async (_event, machineId: string) => {
     const result = await dialog.showSaveDialog(mainWindow!, {
-      title: '备份机器码',
+      title: 'Backup machine code',
       defaultPath: 'machine-id-backup.json',
       filters: [{ name: 'JSON', extensions: ['json'] }]
     })
@@ -7171,31 +7169,31 @@ app.whenReady().then(async () => {
     return await machineIdModule.backupMachineIdToFile(machineId, result.filePath)
   })
 
-  // IPC: 从文件恢复机器码
+  // IPC: Recover machine code from file
   ipcMain.handle('machine-id:restore-from-file', async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
-      title: '恢复机器码',
+      title: 'Restore machine code',
       filters: [{ name: 'JSON', extensions: ['json'] }],
       properties: ['openFile']
     })
     
     if (result.canceled || !result.filePaths[0]) {
-      return { success: false, error: '用户取消' }
+      return { success: false, error: 'User cancels' }
     }
     
     return await machineIdModule.restoreMachineIdFromFile(result.filePaths[0])
   })
 
-  // 更新协议处理函数以支持 Social Auth 回调
+  // Updated protocol handler functions to support Social Auth callback
   const originalHandleProtocolUrl = handleProtocolUrl
-  // @ts-ignore - 重新定义协议处理
+  // @ts-ignore - Redefining protocol handling
   handleProtocolUrl = (url: string): void => {
     if (!url.startsWith(`${PROTOCOL_PREFIX}://`)) return
 
     try {
       const urlObj = new URL(url)
       
-      // 处理 Social Auth 回调 (kiro://kiro.kiroAgent/authenticate-success)
+      // deal with Social Auth callback (kiro://kiro.kiroAgent/authenticate-success)
       if (url.includes('authenticate-success') || url.includes('auth')) {
         const code = urlObj.searchParams.get('code')
         const state = urlObj.searchParams.get('state')
@@ -7218,7 +7216,7 @@ app.whenReady().then(async () => {
         return
       }
 
-      // 调用原始处理函数处理其他协议
+      // Call the original processing function to handle other protocols
       originalHandleProtocolUrl(url)
     } catch (error) {
       console.error('Failed to parse protocol URL:', error)
@@ -7233,7 +7231,7 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     } else if (mainWindow) {
-      // macOS: 点击 Dock 图标时显示主窗口
+      // macOS: Click Dock Show the main window when the icon is displayed
       if (process.platform === 'darwin' && app.dock) {
         app.dock.show()
       }
@@ -7243,25 +7241,25 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 加载并注册全局快捷键
+  // Load and register global shortcut keys
   await loadShortcutSettings()
   registerShowWindowShortcut()
 })
 
-// Windows/Linux: 处理第二个实例和协议 URL
+// Windows/Linux: Handle the second instance and protocol URL
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, commandLine) => {
-    // Windows: 协议 URL 会作为命令行参数传入
+    // Windows: protocol URL Will be passed in as command line parameters
     const url = commandLine.find((arg) => arg.startsWith(`${PROTOCOL_PREFIX}://`))
     if (url) {
       handleProtocolUrl(url)
     }
 
-    // 聚焦主窗口
+    // Focus on main window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.focus()
@@ -7269,7 +7267,7 @@ if (!gotTheLock) {
   })
 }
 
-// macOS: 处理协议 URL
+// macOS: Processing Agreement URL
 app.on('open-url', (_event, url) => {
   handleProtocolUrl(url)
 })
@@ -7283,20 +7281,20 @@ app.on('window-all-closed', () => {
   }
 })
 
-// 应用退出前注销 URI 协议处理器并保存数据
+// Log out before app exit URI Protocol handler and saves data
 app.on('will-quit', async (event) => {
-  // 防止重复处理
+  // Prevent duplication of processing
   if (isQuitting) return
   
-  // 停止主进程池 token 刷新调度器
+  // Stop the main process pool token Refresh scheduler
   stopMainPoolTokenRefresh()
 
-  // 防止应用立即退出，先保存数据
+  // To prevent the app from exiting immediately, save the data first
   if (lastSavedData && store) {
     event.preventDefault()
     isQuitting = true
     
-    // 设置超时，确保 3 秒后强制退出（防止关机阻塞）
+    // Set a timeout to ensure 3 Force exit after seconds (to prevent shutdown blocking)
     const forceQuitTimer = setTimeout(() => {
       console.log('[Exit] Force quit due to timeout')
       unregisterProtocol()
@@ -7305,20 +7303,20 @@ app.on('will-quit', async (event) => {
     
     try {
       console.log('[Exit] Saving data before quit...')
-      // 刷新待写入的防抖数据
+      // Refresh the anti-shake data to be written
       flushStoreWrites()
       store.set('accountData', lastSavedData)
-      // 退出场景跳过节流，确保备份立即落盘
+      // Exit the scene to skip throttling and ensure that the backup is immediately placed on the disk.
       await createBackup(lastSavedData)
       await flushBackupNow()
-      // 强制落盘代理日志（异步节流中的尾巴数据）
+      // Forced placement agent log (tail data in asynchronous throttling)
       try {
         const { proxyLogStore } = await import('./proxy/logger')
         await proxyLogStore.flushSaveNow()
       } catch (err) {
         console.error('[Exit] Failed to flush proxy logs:', err)
       }
-      // 释放共享的 TLS ModuleClient（worker pool + DLL）
+      // release shared TLS ModuleClient（worker pool + DLL）
       try {
         const { shutdownTlsClientPool } = await import('./registration/tlsClientPool')
         await shutdownTlsClientPool()

@@ -61,9 +61,9 @@ export function generateState(): string {
 }
 
 /**
- * 拆分卡密/凭证行。分隔符优先级：---- > Tab > 连续空格。
- * refreshToken/clientSecret 为 base64url(JWT)，可能以 '-' 结尾，与 '----' 相邻会形成 5+ 个连续 '-'。
- * 用 /-{4,}/ 整体匹配分隔符，并把多出的 (N-4) 个 '-' 归还前一字段，避免 JWT 被截断、末字段(provider) 多出前导 '-'。
+ * Split card secret/Voucher line. Delimiter priority:---- > Tab > Consecutive spaces.
+ * refreshToken/clientSecret for base64url(JWT), possibly with '-' end, with '----' Adjacent will form 5+ consecutive '-'。
+ * use /-{4,}/ Match the delimiter as a whole and replace the extra (N-4) indivual '-' Return the previous field to avoid JWT Truncated, last field(provider) More leading '-'。
  */
 export function splitCredentialLine(line: string): string[] {
   if (line.includes('----')) {

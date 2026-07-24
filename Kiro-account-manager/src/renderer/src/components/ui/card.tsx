@@ -5,15 +5,15 @@ export type CardVariant = 'glass' | 'glass-strong' | 'glass-subtle' | 'solid' | 
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   /**
-   * 卡片变体
-   * - glass        : 默认玻璃态（半透明 + blur）
-   * - glass-strong : 更不透明的玻璃（适合需要更高可读性的内容）
-   * - glass-subtle : 轻玻璃（适合二级容器、工具栏）
-   * - solid        : 不透明实色 Card（向后兼容老代码）
-   * - elevated     : 实色 Card + 更强阴影
+   * card variations
+   * - glass        : Default glassy state (translucent + blur）
+   * - glass-strong : More opaque glass (ideal for content that requires greater readability)
+   * - glass-subtle : Light glass (suitable for secondary containers, toolbars)
+   * - solid        : opaque solid color Card(Backwards compatible with old code)
+   * - elevated     : solid color Card + stronger shadow
    */
   variant?: CardVariant
-  /** 是否启用 hover 浮起动画 */
+  /** Whether to enable hover Float animation */
   interactive?: boolean
 }
 
@@ -30,7 +30,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       <div
         ref={ref}
         className={cn(
-          'rounded-2xl', // 24px 圆角
+          'rounded-2xl', // 24px rounded corners
           variantClass[variant],
           interactive && 'hover-lift cursor-pointer',
           className

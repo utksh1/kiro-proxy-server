@@ -21,8 +21,8 @@ const KIND_ICONS: Record<TaskKind, React.ElementType> = {
 }
 
 /**
- * 任务中心入口：TitleBar 上的小徽章按钮
- * 点击展开任务列表抽屉
+ * Mission Center Entrance:TitleBar small badge button on
+ * Click to expand the task list drawer
  */
 export function TaskCenterButton(): React.ReactNode {
   const { t } = useTranslation()
@@ -58,7 +58,7 @@ export function TaskCenterButton(): React.ReactNode {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        title={isEn ? 'Task Center' : '任务中心'}
+        title={isEn ? 'Task Center' : 'mission center'}
         className={cn(
           'flex items-center gap-1.5 px-2 h-6 rounded-md text-xs transition-colors',
           'hover:bg-foreground/10',
@@ -99,13 +99,13 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
   const removeTask = useTaskStore((s) => s.removeTask)
   const clearFinished = useTaskStore((s) => s.clearFinished)
 
-  // 取消所有正在进行的任务
+  // Cancel all ongoing tasks
   const cancelAllActive = (): void => {
     const active = Array.from(tasks.values()).filter(
       (t) => t.status === 'running' || t.status === 'paused'
     )
     if (active.length === 0) return
-    if (!confirm(isEn ? `Cancel ${active.length} running task(s)?` : `取消正在进行的 ${active.length} 个任务？`)) return
+    if (!confirm(isEn ? `Cancel ${active.length} running task(s)?` : `Cancel ongoing ${active.length} A task?`)) return
     for (const t of active) cancelTask(t.id)
   }
   const activeCount = Array.from(tasks.values()).filter(
@@ -114,7 +114,7 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
 
   const sortedTasks = useMemo(() => {
     return Array.from(tasks.values()).sort((a, b) => {
-      // 活动的排前面
+      // Front of the line at the event
       const aActive = a.status === 'running' || a.status === 'paused'
       const bActive = b.status === 'running' || b.status === 'paused'
       if (aActive !== bActive) return aActive ? -1 : 1
@@ -122,14 +122,14 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
     })
   }, [tasks])
 
-  // 通过 Portal 渲染到 document.body：避免被 TitleBar 的 -webkit-app-region: drag
-  // 拖拽区吞掉点击，也避免受 titlebar 堆叠上下文 / overflow 影响导致按钮点不动
+  // pass Portal render to document.body: avoid being TitleBar of -webkit-app-region: drag
+  // The drag area swallows clicks and avoids being affected by titlebar stacking context / overflow The impact causes the button to not move
   return createPortal(
     <AnimatePresence>
       {open && (
-        // no-drag 确保抽屉内所有按钮在 Windows 下可点击
+        // no-drag Make sure all buttons in the drawer are Windows Clickable
         <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          {/* 遮罩 */}
+          {/* mask */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -138,7 +138,7 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
             className="fixed inset-0 z-[9998] bg-black/30 backdrop-blur-sm"
             onClick={onClose}
           />
-          {/* 抽屉 */}
+          {/* drawer */}
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -146,11 +146,11 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className="fixed right-0 top-0 bottom-0 z-[9999] w-[420px] bg-background border-l shadow-2xl flex flex-col"
           >
-            {/* 头部 */}
+            {/* head */}
             <div className="flex items-center justify-between px-4 py-3 border-b">
               <div className="flex items-center gap-2">
                 <Activity className="h-4 w-4 text-primary" />
-                <h2 className="text-sm font-semibold">{isEn ? 'Task Center' : '任务中心'}</h2>
+                <h2 className="text-sm font-semibold">{isEn ? 'Task Center' : 'mission center'}</h2>
                 <Badge variant="secondary" className="h-5 text-[10px] tabular-nums">
                   {sortedTasks.length}
                 </Badge>
@@ -162,15 +162,15 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
                     size="sm"
                     onClick={cancelAllActive}
                     className="text-destructive hover:text-destructive"
-                    title={isEn ? `Cancel all ${activeCount} running tasks` : `取消所有 ${activeCount} 个正在进行的任务`}
+                    title={isEn ? `Cancel all ${activeCount} running tasks` : `Cancel all ${activeCount} ongoing tasks`}
                   >
                     <XCircle className="h-3.5 w-3.5 mr-1" />
-                    {isEn ? 'Cancel all' : '全部取消'}
+                    {isEn ? 'Cancel all' : 'Cancel all'}
                   </Button>
                 )}
                 <Button variant="ghost" size="sm" onClick={clearFinished}>
                   <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  {isEn ? 'Clear finished' : '清理已完成'}
+                  {isEn ? 'Clear finished' : 'Cleanup completed'}
                 </Button>
                 <button
                   onClick={onClose}
@@ -181,12 +181,12 @@ function TaskCenterDrawer({ open, onClose }: TaskCenterDrawerProps): React.React
               </div>
             </div>
 
-            {/* 列表 */}
+            {/* list */}
             <div className="flex-1 overflow-y-auto">
               {sortedTasks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-12">
                   <ListChecks className="h-10 w-10 opacity-30 mb-3" />
-                  <p className="text-sm">{isEn ? 'No tasks' : '暂无任务'}</p>
+                  <p className="text-sm">{isEn ? 'No tasks' : 'No tasks yet'}</p>
                 </div>
               ) : (
                 <div className="divide-y">
@@ -224,11 +224,11 @@ function TaskRow({ task, onCancel, onRemove }: TaskRowProps): React.ReactNode {
 
   const statusBadge = (() => {
     switch (task.status) {
-      case 'running': return <Badge className="bg-primary text-primary-foreground">{isEn ? 'Running' : '运行中'}</Badge>
-      case 'paused': return <Badge variant="outline" className="text-amber-600 border-amber-200">{isEn ? 'Paused' : '已暂停'}</Badge>
-      case 'success': return <Badge variant="outline" className="text-green-600 border-green-200">{isEn ? 'Done' : '已完成'}</Badge>
-      case 'failed': return <Badge variant="outline" className="text-red-600 border-red-200">{isEn ? 'Failed' : '失败'}</Badge>
-      case 'cancelled': return <Badge variant="outline" className="text-muted-foreground">{isEn ? 'Cancelled' : '已取消'}</Badge>
+      case 'running': return <Badge className="bg-primary text-primary-foreground">{isEn ? 'Running' : 'Running'}</Badge>
+      case 'paused': return <Badge variant="outline" className="text-amber-600 border-amber-200">{isEn ? 'Paused' : 'Suspended'}</Badge>
+      case 'success': return <Badge variant="outline" className="text-green-600 border-green-200">{isEn ? 'Done' : 'Completed'}</Badge>
+      case 'failed': return <Badge variant="outline" className="text-red-600 border-red-200">{isEn ? 'Failed' : 'fail'}</Badge>
+      case 'cancelled': return <Badge variant="outline" className="text-muted-foreground">{isEn ? 'Cancelled' : 'Canceled'}</Badge>
     }
   })()
 
@@ -261,7 +261,7 @@ function TaskRow({ task, onCancel, onRemove }: TaskRowProps): React.ReactNode {
             </p>
           )}
 
-          {/* 进度条 */}
+          {/* progress bar */}
           {(task.total > 0 || isActive) && (
             <div className="mt-2 space-y-1">
               <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -291,7 +291,7 @@ function TaskRow({ task, onCancel, onRemove }: TaskRowProps): React.ReactNode {
             </div>
           )}
 
-          {/* 错误信息 */}
+          {/* error message */}
           {task.error && (
             <div className="mt-2 flex items-start gap-1.5 text-[10px] text-red-500">
               <AlertTriangle className="h-3 w-3 flex-shrink-0 mt-0.5" />
@@ -299,23 +299,23 @@ function TaskRow({ task, onCancel, onRemove }: TaskRowProps): React.ReactNode {
             </div>
           )}
 
-          {/* 最后日志 */}
+          {/* last log */}
           {task.lastMessage && !task.error && (
             <p className="text-[10px] text-muted-foreground mt-1 truncate" title={task.lastMessage}>
               {task.lastMessage}
             </p>
           )}
 
-          {/* 操作 */}
+          {/* operate */}
           <div className="mt-2 flex items-center gap-1">
             {task.status === 'running' && task.onPause && (
               <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={task.onPause}>
-                <Pause className="h-3 w-3 mr-1" /> {isEn ? 'Pause' : '暂停'}
+                <Pause className="h-3 w-3 mr-1" /> {isEn ? 'Pause' : 'pause'}
               </Button>
             )}
             {task.status === 'paused' && task.onResume && (
               <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={task.onResume}>
-                <Play className="h-3 w-3 mr-1" /> {isEn ? 'Resume' : '恢复'}
+                <Play className="h-3 w-3 mr-1" /> {isEn ? 'Resume' : 'recover'}
               </Button>
             )}
             {isActive && (
@@ -325,12 +325,12 @@ function TaskRow({ task, onCancel, onRemove }: TaskRowProps): React.ReactNode {
                 className="h-6 text-[10px] text-destructive hover:text-destructive"
                 onClick={onCancel}
               >
-                <XCircle className="h-3 w-3 mr-1" /> {isEn ? 'Cancel' : '取消'}
+                <XCircle className="h-3 w-3 mr-1" /> {isEn ? 'Cancel' : 'Cancel'}
               </Button>
             )}
             {!isActive && (
               <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={onRemove}>
-                <Trash2 className="h-3 w-3 mr-1" /> {isEn ? 'Remove' : '移除'}
+                <Trash2 className="h-3 w-3 mr-1" /> {isEn ? 'Remove' : 'Remove'}
               </Button>
             )}
           </div>

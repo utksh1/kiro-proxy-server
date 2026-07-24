@@ -9,12 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Input, Label, Switch,
 import { cn } from '@/lib/utils'
 
 const KIND_OPTIONS: { value: WebhookKind; label: string; labelEn: string; placeholder: string }[] = [
-  { value: 'dingtalk', label: '钉钉', labelEn: 'DingTalk', placeholder: 'https://oapi.dingtalk.com/robot/send?access_token=xxx' },
-  { value: 'wechat-work', label: '企业微信', labelEn: 'WeCom', placeholder: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx' },
-  { value: 'feishu', label: '飞书', labelEn: 'Feishu', placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx' },
+  { value: 'dingtalk', label: 'DingTalk', labelEn: 'DingTalk', placeholder: 'https://oapi.dingtalk.com/robot/send?access_token=xxx' },
+  { value: 'wechat-work', label: 'Enterprise WeChat', labelEn: 'WeCom', placeholder: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx' },
+  { value: 'feishu', label: 'Feishu', labelEn: 'Feishu', placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/xxx' },
   { value: 'telegram', label: 'Telegram', labelEn: 'Telegram', placeholder: 'https://api.telegram.org/bot<token>' },
   { value: 'discord', label: 'Discord', labelEn: 'Discord', placeholder: 'https://discord.com/api/webhooks/xxx' },
-  { value: 'custom', label: '自定义', labelEn: 'Custom', placeholder: 'https://your-server.com/webhook' }
+  { value: 'custom', label: 'Customize', labelEn: 'Custom', placeholder: 'https://your-server.com/webhook' }
 ]
 
 export function WebhooksPage(): React.ReactNode {
@@ -66,35 +66,35 @@ export function WebhooksPage(): React.ReactNode {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-pink-600 dark:text-pink-400">
-              {isEn ? 'Webhook Notifications' : 'Webhook 通知'}
+              {isEn ? 'Webhook Notifications' : 'Webhook notify'}
             </h1>
             <p className="text-muted-foreground">
               {isEn
                 ? 'Push critical events (batch completed, risk warning, account banned, etc.) to DingTalk / WeCom / Feishu / Telegram / Discord / custom endpoints.'
-                : '把关键事件（批量完成、风控警告、账号封禁等）推送到钉钉/企微/飞书/Telegram/Discord/自定义服务'
+                : 'Push key events (batch completion, risk control warning, account ban, etc.) to DingTalk/Qiwei/Feishu/Telegram/Discord/Custom service'
               }
             </p>
           </div>
         </div>
       </div>
 
-      {/* Webhook 列表 */}
+      {/* Webhook list */}
       <Card>
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <MessageSquare className="h-4 w-4 text-primary" />
-            {isEn ? `Webhooks (${webhookList.length})` : `Webhook 列表 (${webhookList.length})`}
+            {isEn ? `Webhooks (${webhookList.length})` : `Webhook list (${webhookList.length})`}
           </CardTitle>
           <Button size="sm" onClick={() => setEditing({ kind: 'dingtalk', enabled: true, events: ['batch-completed', 'risk-warning', 'account-banned'] })}>
             <Plus className="h-4 w-4 mr-1" />
-            {isEn ? 'Add Webhook' : '添加 Webhook'}
+            {isEn ? 'Add Webhook' : 'Add to Webhook'}
           </Button>
         </CardHeader>
         <CardContent>
           {webhookList.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <Bell className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">{isEn ? 'No webhooks configured.' : '尚未配置 Webhook'}</p>
+              <p className="text-sm">{isEn ? 'No webhooks configured.' : 'Not configured yet Webhook'}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -113,7 +113,7 @@ export function WebhooksPage(): React.ReactNode {
                     <button
                       onClick={() => toggleWebhook(w.id)}
                       className="mt-0.5"
-                      title={w.enabled ? '点击停用' : '点击启用'}
+                      title={w.enabled ? 'Click to deactivate' : 'Click to enable'}
                     >
                       {w.enabled
                         ? <Power className="h-4 w-4 text-green-500" />
@@ -135,8 +135,8 @@ export function WebhooksPage(): React.ReactNode {
                             )}
                           >
                             {result.success
-                              ? <><CheckCircle2 className="h-2.5 w-2.5 mr-0.5 inline" /> {isEn ? 'Test OK' : '测试成功'}</>
-                              : <><XCircle className="h-2.5 w-2.5 mr-0.5 inline" /> {isEn ? 'Test failed' : '测试失败'}</>
+                              ? <><CheckCircle2 className="h-2.5 w-2.5 mr-0.5 inline" /> {isEn ? 'Test OK' : 'Test successful'}</>
+                              : <><XCircle className="h-2.5 w-2.5 mr-0.5 inline" /> {isEn ? 'Test failed' : 'test failed'}</>
                             }
                           </Badge>
                         )}
@@ -174,7 +174,7 @@ export function WebhooksPage(): React.ReactNode {
                         variant="ghost"
                         className="text-destructive"
                         onClick={() => {
-                          if (confirm(isEn ? `Delete webhook "${w.label || kindLabel}"?` : `删除 Webhook "${w.label || kindLabel}"？`)) {
+                          if (confirm(isEn ? `Delete webhook "${w.label || kindLabel}"?` : `delete Webhook "${w.label || kindLabel}"？`)) {
                             removeWebhook(w.id)
                           }
                         }}
@@ -190,17 +190,17 @@ export function WebhooksPage(): React.ReactNode {
         </CardContent>
       </Card>
 
-      {/* 编辑对话框 */}
+      {/* Edit dialog */}
       {editing && (
         <Card className="border-primary/40 shadow-lg">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
-              {editing.id ? (isEn ? 'Edit Webhook' : '编辑 Webhook') : (isEn ? 'New Webhook' : '新建 Webhook')}
+              {editing.id ? (isEn ? 'Edit Webhook' : 'edit Webhook') : (isEn ? 'New Webhook' : 'New Webhook')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1">
-              <Label className="text-xs">{isEn ? 'Type' : '类型'}</Label>
+              <Label className="text-xs">{isEn ? 'Type' : 'type'}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {KIND_OPTIONS.map(opt => (
                   <button
@@ -220,11 +220,11 @@ export function WebhooksPage(): React.ReactNode {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">{isEn ? 'Label (optional)' : '备注名（可选）'}</Label>
+              <Label className="text-xs">{isEn ? 'Label (optional)' : 'Remark name (optional)'}</Label>
               <Input
                 value={editing.label || ''}
                 onChange={(e) => setEditing({ ...editing, label: e.target.value })}
-                placeholder={isEn ? 'e.g. Dev group' : '例如：开发群'}
+                placeholder={isEn ? 'e.g. Dev group' : 'For example: development group'}
                 className="h-8"
               />
             </div>
@@ -245,7 +245,7 @@ export function WebhooksPage(): React.ReactNode {
                 <Input
                   value={editing.telegramChatId || ''}
                   onChange={(e) => setEditing({ ...editing, telegramChatId: e.target.value })}
-                  placeholder={isEn ? '123456789 or @channel_name' : '123456789 或 @channel_name'}
+                  placeholder={isEn ? '123456789 or @channel_name' : '123456789 or @channel_name'}
                   className="h-8 font-mono text-xs"
                 />
               </div>
@@ -253,7 +253,7 @@ export function WebhooksPage(): React.ReactNode {
 
             {editing.kind === 'custom' && (
               <div className="space-y-1">
-                <Label className="text-xs">{isEn ? 'Custom JSON template (placeholders: ' : '自定义 JSON 模板（占位符：'}{`{{title}} {{message}} {{level}} {{icon}}`}{isEn ? ')' : '）'}</Label>
+                <Label className="text-xs">{isEn ? 'Custom JSON template (placeholders: ' : 'Customize JSON Template (placeholder:'}{`{{title}} {{message}} {{level}} {{icon}}`}{isEn ? ')' : '）'}</Label>
                 <textarea
                   value={editing.customTemplate || ''}
                   onChange={(e) => setEditing({ ...editing, customTemplate: e.target.value })}
@@ -265,7 +265,7 @@ export function WebhooksPage(): React.ReactNode {
             )}
 
             <div className="space-y-1">
-              <Label className="text-xs">{isEn ? 'Subscribed events' : '订阅事件'}</Label>
+              <Label className="text-xs">{isEn ? 'Subscribed events' : 'Subscribe to events'}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {ALL_WEBHOOK_EVENTS.map(ev => {
                   const checked = editing.events?.includes(ev.value) ?? false
@@ -298,13 +298,13 @@ export function WebhooksPage(): React.ReactNode {
                 checked={editing.enabled ?? true}
                 onCheckedChange={(v) => setEditing({ ...editing, enabled: v })}
               />
-              <Label className="text-sm cursor-pointer">{isEn ? 'Enabled' : '启用'}</Label>
+              <Label className="text-sm cursor-pointer">{isEn ? 'Enabled' : 'enable'}</Label>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>{isEn ? 'Cancel' : '取消'}</Button>
+              <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>{isEn ? 'Cancel' : 'Cancel'}</Button>
               <Button size="sm" onClick={handleSave} disabled={!editing.kind || !editing.url}>
-                {isEn ? 'Save' : '保存'}
+                {isEn ? 'Save' : 'save'}
               </Button>
             </div>
           </CardContent>

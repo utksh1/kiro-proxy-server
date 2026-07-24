@@ -44,7 +44,7 @@ export function AccountSelectDialog({
   const getUsagePercent = (acc: Account): number => {
     const usage = acc.usage
     if (!usage) return 0
-    // 直接通过 current/limit 计算百分比，确保准确性
+    // pass directly current/limit Calculate percentages to ensure accuracy
     if (usage.limit > 0) {
       return Math.min(100, (usage.current / usage.limit) * 100)
     }
@@ -60,17 +60,17 @@ export function AccountSelectDialog({
   const getSubscriptionColor = (title?: string): string => {
     if (!title) return 'bg-gray-500 text-white'
     const t = title.toUpperCase()
-    // KIRO PRO+ / PRO_PLUS - 紫色
+    // KIRO PRO+ / PRO_PLUS - Purple
     if (t.includes('PRO+') || t.includes('PRO_PLUS') || t.includes('PROPLUS')) return 'bg-purple-500 text-white'
-    // KIRO POWER - 金色
+    // KIRO POWER - gold
     if (t.includes('POWER')) return 'bg-amber-500 text-white'
-    // KIRO PRO - 蓝色
+    // KIRO PRO - blue
     if (t.includes('PRO')) return 'bg-blue-500 text-white'
-    // KIRO FREE - 灰色
+    // KIRO FREE - grey
     return 'bg-gray-500 text-white'
   }
 
-  // 检测是否为封禁账号（通过 lastError 判断）
+  // Detect whether the account is banned (via lastError judge)
   const isBannedAccount = (acc: Account): boolean => {
     const lowerError = acc.lastError?.toLowerCase()
     if (!lowerError) return false
@@ -80,16 +80,16 @@ export function AccountSelectDialog({
       lowerError.includes('temporarily_suspended') ||
       lowerError.includes('temporarily suspended') ||
       (lowerError.includes('user id is') && lowerError.includes('suspended')) ||
-      lowerError.includes('账户已封禁') ||
-      lowerError.includes('已封禁') ||
+      lowerError.includes('Account has been banned') ||
+      lowerError.includes('Banned') ||
       /\b423\b/.test(lowerError)
     if (hasSuspendedSignal) return true
     if (
       lowerError.includes('fetch failed') ||
       lowerError.includes('network') ||
       lowerError.includes('token expired') ||
-      lowerError.includes('token 过期') ||
-      lowerError.includes('刷新失败') ||
+      lowerError.includes('token Expired') ||
+      lowerError.includes('Refresh failed') ||
       lowerError.includes('unauthorizedexception')
     ) {
       return false
@@ -98,11 +98,11 @@ export function AccountSelectDialog({
   }
 
   const getStatusInfo = (acc: Account): { icon: React.ReactNode; text: string; color: string } | null => {
-    // 优先检测封禁状态
+    // Prioritize detection of ban status
     if (isBannedAccount(acc)) {
       return {
         icon: <Ban className="h-3.5 w-3.5" />,
-        text: isEn ? 'Banned' : '已封禁',
+        text: isEn ? 'Banned' : 'Banned',
         color: 'bg-destructive/10 text-destructive'
       }
     }
@@ -111,23 +111,23 @@ export function AccountSelectDialog({
       case 'error':
         return {
           icon: <AlertCircle className="h-3.5 w-3.5" />,
-          text: isEn ? 'Error' : '错误',
+          text: isEn ? 'Error' : 'mistake',
           color: 'bg-destructive/10 text-destructive'
         }
       case 'expired':
         return {
           icon: <Ban className="h-3.5 w-3.5" />,
-          text: isEn ? 'Expired' : '已过期',
+          text: isEn ? 'Expired' : 'Expired',
           color: 'bg-warning/10 text-warning'
         }
       case 'refreshing':
         return {
           icon: <Zap className="h-3.5 w-3.5" />,
-          text: isEn ? 'Refreshing' : '刷新中',
+          text: isEn ? 'Refreshing' : 'Refreshing',
           color: 'bg-warning/10 text-warning'
         }
       case 'active':
-        return null // 正常状态不显示标签
+        return null // Normal state does not display labels
       default:
         return null
     }
@@ -141,7 +141,7 @@ export function AccountSelectDialog({
       <Card className="relative w-[600px] max-h-[80vh] shadow-2xl border-0 overflow-hidden animate-in fade-in zoom-in-95 duration-200 glass-card-strong">
         <CardHeader className="pb-3 border-b sticky top-0 z-10">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">{isEn ? 'Select Account' : '选择账号'}</CardTitle>
+            <CardTitle className="text-lg">{isEn ? 'Select Account' : 'Select account'}</CardTitle>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-red-500 hover:text-white transition-colors" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
             </Button>
@@ -149,7 +149,7 @@ export function AccountSelectDialog({
           <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={isEn ? 'Search by email, ID or subscription...' : '搜索邮箱、ID 或订阅类型...'}
+              placeholder={isEn ? 'Search by email, ID or subscription...' : 'Search mailbox,ID or subscription type...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -157,7 +157,7 @@ export function AccountSelectDialog({
           </div>
         </CardHeader>
         <CardContent className="p-0 overflow-y-auto max-h-[60vh]">
-          {/* 默认选项：第一个可用账号 */}
+          {/* Default option: first available account */}
           <div
             className={`p-4 border-b cursor-pointer transition-colors hover:bg-accent/50 ${
               !selectedAccountId ? 'bg-primary/5 border-l-2 border-l-primary' : ''
@@ -170,9 +170,9 @@ export function AccountSelectDialog({
                   <Zap className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div>
-                  <div className="font-medium">{isEn ? 'First Available' : '第一个可用账号'}</div>
+                  <div className="font-medium">{isEn ? 'First Available' : 'First available account'}</div>
                   <div className="text-sm text-muted-foreground">
-                    {isEn ? 'Automatically use the first available account' : '自动使用第一个可用的账号'}
+                    {isEn ? 'Automatically use the first available account' : 'Automatically use the first available account'}
                   </div>
                 </div>
               </div>
@@ -182,10 +182,10 @@ export function AccountSelectDialog({
             </div>
           </div>
 
-          {/* 账号列表 */}
+          {/* Account list */}
           {filteredAccounts.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
-              {searchQuery ? (isEn ? 'No accounts found' : '未找到匹配的账号') : (isEn ? 'No accounts available' : '暂无可用账号')}
+              {searchQuery ? (isEn ? 'No accounts found' : 'No matching account found') : (isEn ? 'No accounts available' : 'No account available yet')}
             </div>
           ) : (
             filteredAccounts.map(acc => {
@@ -216,13 +216,13 @@ export function AccountSelectDialog({
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        {/* 邮箱 */}
+                        {/* Mail */}
                         <div className="flex items-center gap-2">
                           <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                           <span className="font-medium truncate">
                             {acc.email || acc.id.substring(0, 12) + '...'}
                           </span>
-                          {/* 状态标签 */}
+                          {/* status label */}
                           {statusInfo && (
                             <Badge className={`text-xs ${statusInfo.color}`}>
                               {statusInfo.icon}
@@ -231,25 +231,25 @@ export function AccountSelectDialog({
                           )}
                         </div>
                         
-                        {/* 错误信息 */}
+                        {/* error message */}
                         {acc.lastError && (
                           <div className="text-xs text-destructive mt-1 truncate">
                             {acc.lastError}
                           </div>
                         )}
                         
-                        {/* 订阅类型和使用量 */}
+                        {/* Subscription type and usage */}
                         <div className="flex items-center gap-3 mt-2">
                           <Badge className={`text-xs ${getSubscriptionColor(acc.subscription?.title)}`}>
                             <CreditCard className="h-3 w-3 mr-1" />
                             {acc.subscription?.title || 'Unknown'}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
-                            {isEn ? 'Usage' : '使用量'}: {usageText}
+                            {isEn ? 'Usage' : 'Usage'}: {usageText}
                           </span>
                         </div>
                         
-                        {/* 使用量进度条 */}
+                        {/* Usage progress bar */}
                         <div className="mt-2 w-full bg-muted rounded-full h-1.5 overflow-hidden">
                           <div 
                             className={`h-full transition-all ${

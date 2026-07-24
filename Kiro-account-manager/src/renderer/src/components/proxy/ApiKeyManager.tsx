@@ -105,7 +105,7 @@ export function ApiKeyManager() {
   }
 
   const handleDeleteKey = async (id: string) => {
-    if (!confirm(isEn ? 'Delete this API key?' : '确定删除此 API Key？')) return
+    if (!confirm(isEn ? 'Delete this API key?' : 'Confirm to delete this API Key？')) return
     
     try {
       const result = await window.api.proxyDeleteApiKey(id)
@@ -130,7 +130,7 @@ export function ApiKeyManager() {
   }
 
   const handleResetUsage = async (id: string) => {
-    if (!confirm(isEn ? 'Reset usage statistics?' : '确定重置用量统计？')) return
+    if (!confirm(isEn ? 'Reset usage statistics?' : 'Are you sure you want to reset usage statistics?')) return
     
     try {
       const result = await window.api.proxyResetApiKeyUsage(id)
@@ -186,21 +186,21 @@ export function ApiKeyManager() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
-              <CardTitle className="text-lg">{isEn ? 'API Keys' : 'API 密钥'}</CardTitle>
+              <CardTitle className="text-lg">{isEn ? 'API Keys' : 'API key'}</CardTitle>
             </div>
             <span className="text-sm text-muted-foreground">
-              {apiKeys.length} {isEn ? 'keys' : '个'}
+              {apiKeys.length} {isEn ? 'keys' : 'indivual'}
             </span>
           </div>
           <CardDescription>
-            {isEn ? 'Manage API keys for authentication' : '管理用于身份验证的 API 密钥'}
+            {isEn ? 'Manage API keys for authentication' : 'Manage used for authentication API key'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <div className="flex gap-2">
               <Input
-                placeholder={isEn ? 'Key name...' : '密钥名称...'}
+                placeholder={isEn ? 'Key name...' : 'Key name...'}
                 value={newKeyName}
                 onChange={e => setNewKeyName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAddKey()}
@@ -218,26 +218,26 @@ export function ApiKeyManager() {
               />
               <Button onClick={handleAddKey} disabled={!newKeyName.trim()}>
                 <Plus className="h-4 w-4 mr-1" />
-                {isEn ? 'Add' : '添加'}
+                {isEn ? 'Add' : 'Add to'}
               </Button>
             </div>
             <div className="flex gap-2 items-center">
               <Input
                 type="number"
-                placeholder={isEn ? 'Credits limit (optional)' : 'Credits 额度限制（可选）'}
+                placeholder={isEn ? 'Credits limit (optional)' : 'Credits Quota limit (optional)'}
                 value={newKeyCreditsLimit}
                 onChange={e => setNewKeyCreditsLimit(e.target.value)}
                 className="flex-1"
               />
               <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {isEn ? '0 = unlimited' : '0 = 无限制'}
+                {isEn ? '0 = unlimited' : '0 = Unlimited'}
               </span>
             </div>
           </div>
 
           {apiKeys.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {isEn ? 'No API keys yet' : '暂无 API 密钥'}
+              {isEn ? 'No API keys yet' : 'None API key'}
             </div>
           ) : (
             <div className="space-y-2">
@@ -280,7 +280,7 @@ export function ApiKeyManager() {
                   </div>
 
                   <div className="text-right text-xs text-muted-foreground">
-                    <div>{apiKey.usage.totalRequests} {isEn ? 'requests' : '请求'}</div>
+                    <div>{apiKey.usage.totalRequests} {isEn ? 'requests' : 'ask'}</div>
                     <div className={cn(
                       apiKey.creditsLimit && apiKey.usage.totalCredits >= apiKey.creditsLimit && "text-destructive font-medium"
                     )}>
@@ -310,17 +310,17 @@ export function ApiKeyManager() {
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-5 w-5 text-primary" />
                 <CardTitle className="text-lg">
-                  {isEn ? 'Usage Details' : '用量详情'}: {selectedKeyData.name}
+                  {isEn ? 'Usage Details' : 'Dosage details'}: {selectedKeyData.name}
                 </CardTitle>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowUsageDialog(true)}>
                   <ExternalLink className="h-3 w-3 mr-1" />
-                  {isEn ? 'View Details' : '查看详情'}
+                  {isEn ? 'View Details' : 'check the details'}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => handleResetUsage(selectedKeyData.id)}>
                   <RefreshCw className="h-3 w-3 mr-1" />
-                  {isEn ? 'Reset Usage' : '重置用量'}
+                  {isEn ? 'Reset Usage' : 'Reset usage'}
                 </Button>
               </div>
             </div>
@@ -330,7 +330,7 @@ export function ApiKeyManager() {
               <div className="bg-muted/50 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <MessageSquare className="h-4 w-4" />
-                  <span className="text-xs">{isEn ? 'Total Requests' : '总请求数'}</span>
+                  <span className="text-xs">{isEn ? 'Total Requests' : 'Total requests'}</span>
                 </div>
                 <div className="text-2xl font-bold">{selectedKeyData.usage.totalRequests}</div>
               </div>
@@ -338,21 +338,21 @@ export function ApiKeyManager() {
               <div className="bg-muted/50 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <Zap className="h-4 w-4" />
-                  <span className="text-xs">{isEn ? 'Total Credits' : '总 Credits'}</span>
+                  <span className="text-xs">{isEn ? 'Total Credits' : 'total Credits'}</span>
                 </div>
                 <div className="text-2xl font-bold">{selectedKeyData.usage.totalCredits.toFixed(2)}</div>
               </div>
               
               <div className="bg-muted/50 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  <span className="text-xs">{isEn ? 'Input Tokens' : '输入 Tokens'}</span>
+                  <span className="text-xs">{isEn ? 'Input Tokens' : 'enter Tokens'}</span>
                 </div>
                 <div className="text-2xl font-bold">{selectedKeyData.usage.totalInputTokens.toLocaleString()}</div>
               </div>
               
               <div className="bg-muted/50 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  <span className="text-xs">{isEn ? 'Output Tokens' : '输出 Tokens'}</span>
+                  <span className="text-xs">{isEn ? 'Output Tokens' : 'output Tokens'}</span>
                 </div>
                 <div className="text-2xl font-bold">{selectedKeyData.usage.totalOutputTokens.toLocaleString()}</div>
               </div>
@@ -360,10 +360,10 @@ export function ApiKeyManager() {
 
             <div className="mt-4 space-y-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">{isEn ? 'Credits Limit:' : 'Credits 额度限制:'}</span>
+                <span className="text-sm text-muted-foreground">{isEn ? 'Credits Limit:' : 'Credits Quota limit:'}</span>
                 <Input
                   type="number"
-                  placeholder={isEn ? 'Unlimited' : '无限制'}
+                  placeholder={isEn ? 'Unlimited' : 'Unlimited'}
                   value={selectedKeyData.creditsLimit || ''}
                   onChange={async (e) => {
                     const limit = e.target.value ? parseFloat(e.target.value) : null
@@ -376,17 +376,17 @@ export function ApiKeyManager() {
                   }}
                   className="w-32 h-8"
                 />
-                <span className="text-xs text-muted-foreground">{isEn ? '(0 = unlimited)' : '(0 = 无限制)'}</span>
+                <span className="text-xs text-muted-foreground">{isEn ? '(0 = unlimited)' : '(0 = Unlimited)'}</span>
               </div>
               <div className="text-xs text-muted-foreground space-y-1">
                 <div className="flex items-center gap-2">
                   <Clock className="h-3 w-3" />
-                  <span>{isEn ? 'Created:' : '创建时间:'} {formatDate(selectedKeyData.createdAt)}</span>
+                  <span>{isEn ? 'Created:' : 'creation time:'} {formatDate(selectedKeyData.createdAt)}</span>
                 </div>
                 {selectedKeyData.lastUsedAt && (
                   <div className="flex items-center gap-2">
                     <Clock className="h-3 w-3" />
-                    <span>{isEn ? 'Last used:' : '最后使用:'} {formatDate(selectedKeyData.lastUsedAt)}</span>
+                    <span>{isEn ? 'Last used:' : 'last used:'} {formatDate(selectedKeyData.lastUsedAt)}</span>
                   </div>
                 )}
               </div>
@@ -395,7 +395,7 @@ export function ApiKeyManager() {
         </Card>
       )}
 
-      {/* 用量详情对话框 */}
+      {/* Usage details dialog box */}
       <ApiKeyUsageDialog
         open={showUsageDialog}
         onOpenChange={setShowUsageDialog}

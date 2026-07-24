@@ -61,37 +61,37 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
     {
       id: 'claudeCode',
       name: 'Claude Code',
-      description: isEn ? 'Writes ANTHROPIC_BASE_URL, API key and default model' : '写入 ANTHROPIC_BASE_URL、API Key 和默认模型',
+      description: isEn ? 'Writes ANTHROPIC_BASE_URL, API key and default model' : 'write ANTHROPIC_BASE_URL、API Key and default model',
       icon: Bot
     },
     {
       id: 'opencode',
       name: 'OpenCode',
-      description: isEn ? 'Adds Kiro provider and model metadata to opencode.json' : '向 opencode.json 添加 Kiro provider 和模型元数据',
+      description: isEn ? 'Adds Kiro provider and model metadata to opencode.json' : 'Towards opencode.json Add to Kiro provider and model metadata',
       icon: Code2
     },
     {
       id: 'codex',
       name: 'Codex CLI',
-      description: isEn ? 'Adds Kiro OpenAI Responses provider' : '添加 Kiro OpenAI Responses provider',
+      description: isEn ? 'Adds Kiro OpenAI Responses provider' : 'Add to Kiro OpenAI Responses provider',
       icon: Terminal
     },
     {
       id: 'gemini',
       name: 'Gemini CLI',
-      description: isEn ? 'Writes .env and settings.json for Gemini v1beta' : '写入 .env 和 settings.json 配置 Gemini v1beta',
+      description: isEn ? 'Writes .env and settings.json for Gemini v1beta' : 'write .env and settings.json Configuration Gemini v1beta',
       icon: Sparkles
     },
     {
       id: 'hermes',
       name: 'Hermes',
-      description: isEn ? 'Adds Kiro provider to config.yaml' : '向 config.yaml 添加 Kiro provider',
+      description: isEn ? 'Adds Kiro provider to config.yaml' : 'Towards config.yaml Add to Kiro provider',
       icon: Workflow
     },
     {
       id: 'openclaw',
       name: 'OpenClaw',
-      description: isEn ? 'Adds Kiro provider to openclaw.json' : '向 openclaw.json 添加 Kiro provider',
+      description: isEn ? 'Adds Kiro provider to openclaw.json' : 'Towards openclaw.json Add to Kiro provider',
       icon: Settings2
     }
   ], [isEn])
@@ -103,7 +103,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
     setError(null)
     setResults([])
     try {
-      // 优先从代理服务获取模型（与"查看模型"一致）
+      // Get the model from the proxy service first (with"View model"consistent)
       const proxyModels = await window.api.proxyGetModels()
       if (proxyModels.success && proxyModels.models.length > 0) {
         setModels(proxyModels.models)
@@ -111,7 +111,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
         return
       }
 
-      // 代理未启动或无模型时，回退到账号直连
+      // When the agent is not started or there is no model, it will fall back to account direct connection.
       const activeAccount = activeAccountId ? accounts.get(activeAccountId) : undefined
       const account = activeAccount?.status === 'active' && activeAccount.credentials?.accessToken
         ? activeAccount
@@ -135,11 +135,11 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
 
       setModels([])
       setSelectedModelId('')
-      setError(isEn ? 'No models were loaded. Please check whether the account is active and try reloading.' : '未加载到模型，请确认账号已激活后重新加载。')
+      setError(isEn ? 'No models were loaded. Please check whether the account is active and try reloading.' : 'Not loaded into the model, please confirm that the account has been activated and then reload.')
     } catch (err) {
       setModels([])
       setSelectedModelId('')
-      setError(err instanceof Error ? err.message : (isEn ? 'Failed to load models' : '加载模型失败'))
+      setError(err instanceof Error ? err.message : (isEn ? 'Failed to load models' : 'Failed to load model'))
     } finally {
       setLoadingModels(false)
     }
@@ -160,11 +160,11 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
 
   const applyConfig = async () => {
     if (!selectedModelId) {
-      setError(isEn ? 'Please select a model' : '请选择模型')
+      setError(isEn ? 'Please select a model' : 'Please select a model')
       return
     }
     if (selectedClients.length === 0) {
-      setError(isEn ? 'Please select at least one client' : '请至少选择一个客户端')
+      setError(isEn ? 'Please select at least one client' : 'Please select at least one client')
       return
     }
 
@@ -187,10 +187,10 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
       setProxyBase(result.openaiBaseUrl || result.proxyOrigin)
       setResults(result.results)
       if (!result.success) {
-        setError(result.error || (isEn ? 'Some clients failed to configure' : '部分客户端配置失败'))
+        setError(result.error || (isEn ? 'Some clients failed to configure' : 'Some client configuration failed'))
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : (isEn ? 'Failed to configure clients' : '配置客户端失败'))
+      setError(err instanceof Error ? err.message : (isEn ? 'Failed to configure clients' : 'Failed to configure client'))
     } finally {
       setApplying(false)
     }
@@ -207,10 +207,10 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
                 <Settings2 className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <span className="font-bold">{isEn ? 'One-Click Client Configuration' : '一键配置客户端'}</span>
+                <span className="font-bold">{isEn ? 'One-Click Client Configuration' : 'One-click client configuration'}</span>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge className="bg-primary/10 text-primary border-primary/20 font-semibold">
-                    {selectedClients.length} {isEn ? 'selected' : '个已选择'}
+                    {selectedClients.length} {isEn ? 'selected' : 'selected'}
                   </Badge>
                   {proxyBase && (
                     <Badge variant="secondary" className="text-xs border-0">
@@ -231,17 +231,17 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Cpu className="h-4 w-4 text-primary" />
-                  <span className="font-medium">{isEn ? 'Model' : '模型'}</span>
+                  <span className="font-medium">{isEn ? 'Model' : 'Model'}</span>
                 </div>
                 <Button variant="outline" size="sm" onClick={loadModels} disabled={loadingModels}>
                   {loadingModels ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileCog className="h-4 w-4" />}
-                  {isEn ? 'Reload' : '重新加载'}
+                  {isEn ? 'Reload' : 'reload'}
                 </Button>
               </div>
               {loadingModels ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  {isEn ? 'Loading models...' : '加载模型中...'}
+                  {isEn ? 'Loading models...' : 'Loading model...'}
                 </div>
               ) : models.length > 0 ? (
                 <div className="space-y-2">
@@ -256,7 +256,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
                       setSelectedModelId(value)
                       setResults([])
                     }}
-                    placeholder={isEn ? 'Select model' : '选择模型'}
+                    placeholder={isEn ? 'Select model' : 'Select model'}
                   />
                   {selectedModel && (
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -268,7 +268,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-muted-foreground py-2">{isEn ? 'No models loaded' : '暂无模型'}</div>
+                <div className="text-sm text-muted-foreground py-2">{isEn ? 'No models loaded' : 'No model yet'}</div>
               )}
             </div>
 
@@ -303,7 +303,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
 
             <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 flex items-start gap-2 text-sm text-warning">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <div>{isEn ? 'Existing client files are merged and backed up before writing.' : '写入时会合并原配置并先创建备份。'}</div>
+              <div>{isEn ? 'Existing client files are merged and backed up before writing.' : 'When writing, the original configuration will be merged and a backup will be created first.'}</div>
             </div>
 
             {error && (
@@ -320,7 +320,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="font-semibold">{clientLabels[result.client]}</span>
                       <Badge className={result.success ? 'bg-success/15 text-success border-success/20' : 'bg-destructive/15 text-destructive border-destructive/20'}>
-                        {result.success ? (isEn ? 'Configured' : '已配置') : (isEn ? 'Failed' : '失败')}
+                        {result.success ? (isEn ? 'Configured' : 'configured') : (isEn ? 'Failed' : 'fail')}
                       </Badge>
                     </div>
                     {result.error ? (
@@ -328,7 +328,7 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
                     ) : (
                       <div className="space-y-1 text-xs text-muted-foreground">
                         {result.paths.map(path => <div key={path} className="font-mono break-all">{path}</div>)}
-                        {result.backupPaths.length > 0 && <div>{isEn ? 'Backups created' : '已创建备份'}: {result.backupPaths.length}</div>}
+                        {result.backupPaths.length > 0 && <div>{isEn ? 'Backups created' : 'Backup created'}: {result.backupPaths.length}</div>}
                       </div>
                     )}
                   </div>
@@ -337,10 +337,10 @@ export function ClientConfigDialog({ open, onOpenChange, isEn }: ClientConfigDia
             )}
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>{isEn ? 'Close' : '关闭'}</Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>{isEn ? 'Close' : 'closure'}</Button>
               <Button onClick={applyConfig} disabled={loadingModels || applying || !selectedModelId || selectedClients.length === 0}>
                 {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                {applying ? (isEn ? 'Configuring...' : '配置中...') : (isEn ? 'Apply Configuration' : '应用配置')}
+                {applying ? (isEn ? 'Configuring...' : 'Configuring...') : (isEn ? 'Apply Configuration' : 'Application configuration')}
               </Button>
             </div>
           </div>

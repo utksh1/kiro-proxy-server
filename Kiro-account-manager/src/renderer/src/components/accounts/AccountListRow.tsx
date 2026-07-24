@@ -42,8 +42,8 @@ interface AccountListRowProps {
   onShowDetail: () => void
 }
 
-// 紧凑列表行 — 视觉对齐 AccountCard
-// 高度 ~72px，圆角 + 流光边框 + 标签光晕 + 封禁红色背景
+// Compact list row — visual alignment AccountCard
+// high ~72px, rounded corners + Streamer border + label halo + Banned red background
 function AccountListRowComponent({
   account,
   tags,
@@ -67,7 +67,7 @@ function AccountListRowComponent({
     unbindAccountFromProxy
   } = useAccountsStore()
 
-  // 该账号绑定的代理（如有）
+  // The agent bound to the account (if any)
   const boundProxy = useMemo(() => {
     const proxyId = accountProxyBindings[account.id]
     if (!proxyId) return null
@@ -81,23 +81,23 @@ function AccountListRowComponent({
   const [isClearingSuspended, setIsClearingSuspended] = useState(false)
   const [emailCopied, setEmailCopied] = useState(false)
 
-  // 封禁判定
+  // Ban decision
   const isUnauthorized = isBannedError(account.lastError)
 
-  // 标签
+  // Label
   const accountTags = useMemo(
     () => (account.tags || []).map(id => tags.get(id)).filter((t): t is AccountTag => !!t),
     [account.tags, tags]
   )
   const tagColors = useMemo(() => accountTags.map(t => t.color), [accountTags])
 
-  // 分组
+  // Group
   const accountGroup = useMemo(() => {
     if (!account.groupId) return null
     return groups.get(account.groupId) || null
   }, [account.groupId, groups])
 
-  // 显示名（昵称优先 + 隐私模式 mask）
+  // Display name (nickname takes precedence) + privacy mode mask）
   const displayName = useMemo(() => {
     if (account.nickname) return maskNickname(account.nickname)
     return maskEmail(account.email)
@@ -116,17 +116,17 @@ function AccountListRowComponent({
   const isHighUsage = percentUsed > 80
   const isCritical = percentUsed > 100
 
-  // 到期
+  // maturity
   const daysRemaining = account.subscription.daysRemaining
   const isExpiringSoon = daysRemaining !== undefined && daysRemaining <= 7
   const isTokenExpiringSoon =
     account.credentials.expiresAt !== undefined &&
     account.credentials.expiresAt - Date.now() < 5 * 60 * 1000
 
-  // === 行外层样式合成 ===
-  // 优先级：active 流光 > 封禁红色 > 标签光晕
+  // === Row outer style synthesis ===
+  // Priority:active streamer > ban red > label halo
   const rowStyle = useMemo(() => {
-    if (account.isActive) return {} // active-glow-border class 处理
+    if (account.isActive) return {} // active-glow-border class deal with
     if (isUnauthorized) return unauthorizedRowStyle
     if (tagColors.length > 0) return generateRowGlowStyle(tagColors)
     return {}
@@ -139,11 +139,11 @@ function AccountListRowComponent({
     const { switchTarget } = useAccountsStore.getState()
 
     if (!credentials.refreshToken) {
-      alert(isEn ? 'Incomplete credentials, cannot switch' : '账号凭证不完整，无法切换')
+      alert(isEn ? 'Incomplete credentials, cannot switch' : 'The account credentials are incomplete and cannot be switched.')
       return
     }
     if (credentials.authMethod !== 'social' && (!credentials.clientId || !credentials.clientSecret)) {
-      alert(isEn ? 'Incomplete credentials, cannot switch' : '账号凭证不完整，无法切换')
+      alert(isEn ? 'Incomplete credentials, cannot switch' : 'The account credentials are incomplete and cannot be switched.')
       return
     }
 
@@ -178,7 +178,7 @@ function AccountListRowComponent({
         success = false
         errorMsg = result.error || ''
       } else if (result.refreshedCredentials) {
-        // 同步 main 进程 refresh 后的最新 credentials 到 store，避免反代 store 留下已作废的 refreshToken
+        // synchronous main process refresh Latest after credentials arrive store, to avoid counter-generation store Leave the voided refreshToken
         const rc = result.refreshedCredentials
         useAccountsStore.setState((state) => {
           const accounts = new Map(state.accounts)
@@ -207,7 +207,7 @@ function AccountListRowComponent({
     if (success) {
       setActiveAccount(account.id)
     } else {
-      alert(isEn ? `Switch failed: ${errorMsg}` : `切换失败：${errorMsg}`)
+      alert(isEn ? `Switch failed: ${errorMsg}` : `Switch failed:${errorMsg}`)
     }
   }, [account, isEn, setActiveAccount])
 
@@ -225,18 +225,18 @@ function AccountListRowComponent({
 
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm(isEn ? `Delete account "${account.email}"?` : `确定删除账号 "${account.email}"？`)) return
+    if (!confirm(isEn ? `Delete account "${account.email}"?` : `Confirm to delete account "${account.email}"？`)) return
     removeAccount(account.id)
   }, [account.id, account.email, isEn, removeAccount])
 
   const handleLogout = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm(isEn ? 'Clear local SSO cache and logout from Kiro?' : '清除本地 SSO 缓存并退出 Kiro 登录？')) return
+    if (!confirm(isEn ? 'Clear local SSO cache and logout from Kiro?' : 'clear local SSO Cache and exit Kiro Log in?')) return
     const result = await window.api.logoutAccount()
     if (result.success) {
       setActiveAccount(null)
     } else {
-      alert(isEn ? `Logout failed: ${result.error}` : `退出失败：${result.error}`)
+      alert(isEn ? `Logout failed: ${result.error}` : `Exit failed:${result.error}`)
     }
   }, [isEn, setActiveAccount])
 
@@ -264,7 +264,7 @@ function AccountListRowComponent({
     }
   }, [account.email, account.userId])
 
-  // ============ 渲染 ============
+  // ============ rendering ============
 
   return (
     <div
@@ -277,7 +277,7 @@ function AccountListRowComponent({
       style={rowStyle}
       onClick={() => toggleSelection(account.id)}
     >
-      {/* 选中态独立覆盖层 — 避免被多标签 rowStyle 的 backgroundImage 覆盖 */}
+      {/* Selected independent overlay — Avoid being multi-tagged rowStyle of backgroundImage cover */}
       {isSelected && !account.isActive && !isUnauthorized && (
         <div className="absolute inset-0 pointer-events-none rounded-[inherit] ring-2 ring-inset ring-primary/60 bg-primary/[0.08] z-10" />
       )}
@@ -295,19 +295,19 @@ function AccountListRowComponent({
         {isSelected && <Check className="h-3 w-3" />}
       </div>
 
-      {/* === 邮箱列（固定 280px） === */}
+      {/* === Email column (fixed 280px） === */}
       <div className="w-[280px] flex-shrink-0 flex flex-col gap-1 min-w-0">
-        {/* 上行：邮箱/昵称 + 副邮箱 */}
+        {/* Uplink: Email/Nick name + Deputy mailbox */}
         <div className="flex items-center gap-2 min-w-0">
           <h3
             className={cn(
               'font-semibold text-sm truncate cursor-pointer transition-colors min-w-0',
               emailCopied ? 'text-success' : 'text-foreground/90 hover:text-primary'
             )}
-            title={`${displayName} (${isEn ? 'Click to copy' : '点击复制'})`}
+            title={`${displayName} (${isEn ? 'Click to copy' : 'Click to copy'})`}
             onClick={handleCopyEmail}
           >
-            {emailCopied ? (isEn ? 'Copied!' : '已复制!') : displayName}
+            {emailCopied ? (isEn ? 'Copied!' : 'Copied!') : displayName}
           </h3>
           {account.nickname && (
             <span className="text-xs text-muted-foreground truncate min-w-0" title={account.email}>
@@ -316,7 +316,7 @@ function AccountListRowComponent({
           )}
         </div>
 
-        {/* 下行：分组 + 标签 + 错误 + 复制 */}
+        {/* Downstream: grouping + Label + mistake + copy */}
         <div className="flex items-center gap-1.5 min-w-0 text-[10px] overflow-hidden">
           {accountGroup && (
             <span
@@ -349,20 +349,20 @@ function AccountListRowComponent({
             </span>
           )}
 
-          {/* 错误信息（非封禁，因为封禁已用红色徽章显示） */}
+          {/* Error message (not a ban since the ban is shown with a red badge) */}
           {account.lastError && !isUnauthorized && (
             <span className="text-destructive truncate flex-1 min-w-0 italic" title={account.lastError}>
               {account.lastError}
             </span>
           )}
 
-          {/* 复制邮箱小图标 */}
+          {/* Copy mailbox icon */}
           {!account.nickname && (
             <button
               type="button"
               onClick={handleCopyEmail}
               className="ml-auto text-muted-foreground/60 hover:text-primary transition-colors flex-shrink-0"
-              title={isEn ? 'Copy email' : '复制邮箱'}
+              title={isEn ? 'Copy email' : 'Copy mailbox'}
             >
               <Copy className="h-3 w-3" />
             </button>
@@ -370,9 +370,9 @@ function AccountListRowComponent({
         </div>
       </div>
 
-      {/* === 徽章固定列（紧贴邮箱列，每个徽章等宽确保跨行对齐） === */}
+      {/* === Fixed column for badges (fitted closely to the mailbox column, each badge is equal width to ensure alignment across rows) === */}
       <div className="flex-shrink-0 flex items-center gap-1.5">
-        {/* 状态徽章（min-w 保持等宽） */}
+        {/* status badge (min-w Keep the same width) */}
         <div
           className={cn(
             'text-[10px] font-medium h-5 px-2 rounded-full flex items-center justify-center gap-1 min-w-[52px]',
@@ -386,14 +386,14 @@ function AccountListRowComponent({
               className="cursor-pointer hover:underline"
               onClick={(e) => { e.stopPropagation(); onShowDetail() }}
             >
-              {isEn ? 'Banned' : '已封禁'}
+              {isEn ? 'Banned' : 'Banned'}
             </span>
           ) : (
             (isEn ? StatusLabelsEn : StatusLabelsZh)[account.status] || account.status
           )}
         </div>
 
-        {/* 订阅徽章（min-w 保持等宽，PRO+/FREE 视觉对齐） */}
+        {/* Subscribe Badge (min-w Keep the same width,PRO+/FREE visual alignment) */}
         <Badge
           className={cn(
             'text-white text-[10px] h-5 px-2 border-0 min-w-[90px] flex items-center justify-center',
@@ -403,7 +403,7 @@ function AccountListRowComponent({
           {account.subscription.title || account.subscription.type}
         </Badge>
 
-        {/* IDP（固定宽度，所有账号视觉对齐） */}
+        {/* IDP(Fixed width, all accounts are visually aligned) */}
         <Badge
           variant="outline"
           className="text-[10px] h-5 px-1.5 text-muted-foreground font-normal border-muted-foreground/30 bg-muted/30 min-w-[72px] flex items-center justify-center"
@@ -411,7 +411,7 @@ function AccountListRowComponent({
           {account.idp}
         </Badge>
 
-        {/* 代理绑定徽章：可点击解绑（仅有绑定时显示） */}
+        {/* Agent binding badge: click to unbind (only displayed when bound) */}
         {boundProxy && (
           <Badge
             variant="outline"
@@ -421,12 +421,12 @@ function AccountListRowComponent({
                 ? 'border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20'
                 : 'border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10'
             )}
-            title={`${isEn ? 'Bound proxy:' : '绑定代理：'} ${boundProxy.host}:${boundProxy.port}${boundProxy.label ? ` (${boundProxy.label})` : ''}\n${isEn ? 'Click to unbind' : '点击解绑'}`}
+            title={`${isEn ? 'Bound proxy:' : 'Bind proxy:'} ${boundProxy.host}:${boundProxy.port}${boundProxy.label ? ` (${boundProxy.label})` : ''}\n${isEn ? 'Click to unbind' : 'Click to unbind'}`}
             onClick={(e) => {
               e.stopPropagation()
               if (confirm(isEn
                 ? `Unbind ${account.email} from ${boundProxy.host}:${boundProxy.port}?`
-                : `解绑 ${account.email} 与 ${boundProxy.host}:${boundProxy.port}？`
+                : `unbundle ${account.email} and ${boundProxy.host}:${boundProxy.port}？`
               )) {
                 unbindAccountFromProxy(account.id)
               }
@@ -440,24 +440,24 @@ function AccountListRowComponent({
           </Badge>
         )}
 
-        {/* Active 容器（始终保留宽度，确保后续元素位置固定） */}
+        {/* Active Container (always retains width, ensuring subsequent elements are positioned at a fixed location) */}
         <div className="w-[60px] flex items-center">
           {account.isActive && (
             <Badge className="h-5 px-2 bg-success text-white border-0 hover:bg-success/90 text-[10px] flex items-center justify-center w-full">
               <Power className="h-2.5 w-2.5 mr-0.5" />
-              {isEn ? 'Active' : '当前'}
+              {isEn ? 'Active' : 'current'}
             </Badge>
           )}
         </div>
       </div>
 
-      {/* === 弹性间隔（吃剩余空间） === */}
+      {/* === Flexible interval (eating remaining space) === */}
       <div className="flex-1 min-w-0" />
 
-      {/* === Credits 区（中右） === */}
+      {/* === Credits District (middle right) === */}
       <div className="flex-shrink-0 w-40 flex flex-col gap-0.5 px-2">
         <div className="flex items-center justify-between text-[10px]">
-          <span className="text-muted-foreground">{isEn ? 'Usage' : '使用量'}</span>
+          <span className="text-muted-foreground">{isEn ? 'Usage' : 'Usage'}</span>
           <span className={cn(
             'font-mono font-medium tabular-nums',
             isCritical ? 'text-destructive' : isHighUsage ? 'text-warning' : 'text-foreground'
@@ -498,19 +498,19 @@ function AccountListRowComponent({
         </div>
       </div>
 
-      {/* === 时间信息区 === */}
+      {/* === Time information area === */}
       <div className="flex-shrink-0 hidden lg:flex flex-col leading-tight gap-0.5 text-[10px] text-muted-foreground w-28">
-        <div className="flex items-center gap-1" title={isEn ? 'Subscription days left' : '订阅剩余天数'}>
+        <div className="flex items-center gap-1" title={isEn ? 'Subscription days left' : 'Number of days remaining in subscription'}>
           <Clock className="h-3 w-3" />
           <span className={isExpiringSoon ? 'text-warning font-medium' : ''}>
-            {daysRemaining !== undefined ? (isEn ? `${daysRemaining}d` : `${daysRemaining}天`) : '-'}
+            {daysRemaining !== undefined ? (isEn ? `${daysRemaining}d` : `${daysRemaining}sky`) : '-'}
           </span>
         </div>
         <div
           className="flex items-center gap-1"
           title={account.credentials.expiresAt
             ? new Date(account.credentials.expiresAt).toLocaleString(isEn ? 'en-US' : 'zh-CN')
-            : (isEn ? 'Unknown' : '未知')
+            : (isEn ? 'Unknown' : 'unknown')
           }
         >
           <KeyRound className="h-3 w-3" />
@@ -520,7 +520,7 @@ function AccountListRowComponent({
         </div>
       </div>
 
-      {/* === 操作区（hover 显示） === */}
+      {/* === operating area (hover show) === */}
       <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 border-l border-border/40 pl-2 ml-1">
         {isUnauthorized && (
           <>
@@ -530,7 +530,7 @@ function AccountListRowComponent({
               className="h-7 w-7 text-warning hover:bg-warning/10"
               onClick={handleClearSuspended}
               disabled={isClearingSuspended}
-              title={isEn ? 'Reset Suspended' : '重置封禁状态'}
+              title={isEn ? 'Reset Suspended' : 'Reset ban status'}
             >
               {isClearingSuspended ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
             </Button>
@@ -540,7 +540,7 @@ function AccountListRowComponent({
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center h-7 w-7 rounded-md text-primary hover:bg-primary/10"
               onClick={(e) => e.stopPropagation()}
-              title={isEn ? 'Contact Support' : '联系支持'}
+              title={isEn ? 'Contact Support' : 'Contact support'}
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -553,7 +553,7 @@ function AccountListRowComponent({
             variant="ghost"
             className="h-7 w-7 hover:bg-primary/10 hover:text-primary"
             onClick={handleSwitch}
-            title={isEn ? 'Switch to this account' : '切换到该账号'}
+            title={isEn ? 'Switch to this account' : 'Switch to this account'}
           >
             <Power className="h-3.5 w-3.5" />
           </Button>
@@ -565,7 +565,7 @@ function AccountListRowComponent({
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={handleRefresh}
           disabled={isRefreshing || account.status === 'refreshing'}
-          title={isEn ? 'Check account info' : '检查账户信息'}
+          title={isEn ? 'Check account info' : 'Check account information'}
         >
           <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
         </Button>
@@ -575,7 +575,7 @@ function AccountListRowComponent({
           variant="ghost"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={(e) => { e.stopPropagation(); onShowDetail() }}
-          title={isEn ? 'Details' : '详情'}
+          title={isEn ? 'Details' : 'Details'}
         >
           <Info className="h-3.5 w-3.5" />
         </Button>
@@ -585,7 +585,7 @@ function AccountListRowComponent({
           variant="ghost"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={(e) => { e.stopPropagation(); onEdit() }}
-          title={isEn ? 'Edit' : '编辑'}
+          title={isEn ? 'Edit' : 'edit'}
         >
           <Edit className="h-3.5 w-3.5" />
         </Button>
@@ -596,7 +596,7 @@ function AccountListRowComponent({
             variant="ghost"
             className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
             onClick={handleLogout}
-            title={isEn ? 'Logout (clear SSO cache)' : '退出登录（清除 SSO 缓存）'}
+            title={isEn ? 'Logout (clear SSO cache)' : 'Log out (clear SSO cache)'}
           >
             <LogOut className="h-3.5 w-3.5" />
           </Button>
@@ -606,16 +606,16 @@ function AccountListRowComponent({
             variant="ghost"
             className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive"
             onClick={handleDelete}
-            title={isEn ? 'Delete' : '删除'}
+            title={isEn ? 'Delete' : 'delete'}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>
 
-      {/* 封禁角标（与卡片同款） */}
+      {/* Banned corner mark (same style as the card) */}
       {account.isActive && isUnauthorized && (
-        <div className="banned-badge" title={isEn ? 'Banned' : '已封禁'} />
+        <div className="banned-badge" title={isEn ? 'Banned' : 'Banned'} />
       )}
     </div>
   )

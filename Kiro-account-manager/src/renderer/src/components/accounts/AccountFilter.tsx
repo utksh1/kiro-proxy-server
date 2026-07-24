@@ -13,10 +13,10 @@ const SubscriptionOptions: { value: SubscriptionType; label: string; color: stri
 ]
 
 const StatusOptionsZh: { value: AccountStatus; label: string }[] = [
-  { value: 'active', label: '正常' },
-  { value: 'expired', label: '已过期' },
-  { value: 'error', label: '错误' },
-  { value: 'unknown', label: '未知' }
+  { value: 'active', label: 'normal' },
+  { value: 'expired', label: 'Expired' },
+  { value: 'error', label: 'mistake' },
+  { value: 'unknown', label: 'unknown' }
 ]
 
 const StatusOptionsEn: { value: AccountStatus; label: string }[] = [
@@ -34,9 +34,9 @@ const IdpOptions: { value: IdpType; label: string }[] = [
   { value: 'AWSIdC', label: 'AWSIdC' }
 ]
 
-// 解析 ARGB 颜色转换为 CSS rgba
+// parse ARGB Color converted to CSS rgba
 function toRgba(argbColor: string): string {
-  // 支持格式: #AARRGGBB 或 #RRGGBB
+  // Supported formats: #AARRGGBB or #RRGGBB
   let alpha = 255
   let rgb = argbColor
   if (argbColor.length === 9 && argbColor.startsWith('#')) {
@@ -50,7 +50,7 @@ function toRgba(argbColor: string): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha / 255})`
 }
 
-// 域名筛选默认展示的最大数量，超出部分折叠
+// The maximum number of default displays for domain name filtering, and the excess will be folded
 const DOMAIN_DISPLAY_LIMIT = 16
 
 export function AccountFilterPanel(): React.ReactNode {
@@ -62,7 +62,7 @@ export function AccountFilterPanel(): React.ReactNode {
 
   const stats = getStats()
 
-  // 从现有账号中提取邮箱域名后缀及数量，按数量降序
+  // Extract the email domain name suffix and quantity from existing accounts, in descending order of quantity
   const domainCounts = useMemo(() => {
     const counts = new Map<string, number>()
     for (const account of accounts.values()) {
@@ -75,7 +75,7 @@ export function AccountFilterPanel(): React.ReactNode {
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   }, [accounts])
 
-  // 折叠时也要保证已选中的域名可见
+  // Make sure the selected domain name is visible when folding
   const visibleDomains = useMemo(() => {
     if (showAllDomains || domainCounts.length <= DOMAIN_DISPLAY_LIMIT) return domainCounts
     const top = domainCounts.slice(0, DOMAIN_DISPLAY_LIMIT)
@@ -130,7 +130,7 @@ export function AccountFilterPanel(): React.ReactNode {
 
   return (
     <div className="p-3 space-y-2">
-      {/* 清除筛选按钮 */}
+      {/* Clear filter button */}
       {hasActiveFilters && (
         <div className="flex justify-end">
           <Button
@@ -139,15 +139,15 @@ export function AccountFilterPanel(): React.ReactNode {
             className="h-6 text-xs px-2"
             onClick={() => clearFilter()}
           >
-            {isEn ? 'Clear' : '清除筛选'}
+            {isEn ? 'Clear' : 'Clear filters'}
           </Button>
         </div>
       )}
-      {/* 第一行：订阅类型 + 状态 + 身份提供商 */}
+      {/* First line: Subscription type + state + identity provider */}
           <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
-            {/* 订阅类型 */}
+            {/* Subscription type */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground shrink-0">{isEn ? 'Plan:' : '订阅:'}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{isEn ? 'Plan:' : 'subscription:'}</span>
               <div className="flex flex-wrap gap-1">
                 {SubscriptionOptions.map((option) => {
                   const isActive = filter.subscriptionTypes?.includes(option.value)
@@ -168,9 +168,9 @@ export function AccountFilterPanel(): React.ReactNode {
               </div>
             </div>
 
-            {/* 状态 */}
+            {/* state */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground shrink-0">{isEn ? 'Status:' : '状态:'}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{isEn ? 'Status:' : 'state:'}</span>
               <div className="flex flex-wrap gap-1">
                 {StatusOptions.map((option) => {
                   const isActive = filter.statuses?.includes(option.value)
@@ -190,7 +190,7 @@ export function AccountFilterPanel(): React.ReactNode {
                     </button>
                   )
                 })}
-                {/* 封禁筛选 */}
+                {/* ban filter */}
                 <button
                   className={cn(
                     'px-2 py-0.5 text-xs rounded border transition-colors',
@@ -200,12 +200,12 @@ export function AccountFilterPanel(): React.ReactNode {
                   )}
                   onClick={() => setFilter({ ...filter, bannedOnly: !filter.bannedOnly })}
                 >
-                  {isEn ? 'Banned' : '已封禁'}({stats.bannedCount})
+                  {isEn ? 'Banned' : 'Banned'}({stats.bannedCount})
                 </button>
               </div>
             </div>
 
-            {/* 身份提供商 */}
+            {/* identity provider */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground shrink-0">IDP:</span>
               <div className="flex flex-wrap gap-1">
@@ -231,12 +231,12 @@ export function AccountFilterPanel(): React.ReactNode {
             </div>
           </div>
 
-          {/* 第二行：标签 + 范围筛选（分组改用顶部 Tab 互斥切换，不再多选筛选） */}
+          {/* Second line: label + Range filtering (grouping uses top instead) Tab Mutually exclusive switching, no more multi-select filtering) */}
           <div className="flex flex-wrap items-start gap-x-6 gap-y-2 mt-2">
-            {/* 标签 */}
+            {/* Label */}
             {tags.size > 0 && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground shrink-0">{isEn ? 'Tags:' : '标签:'}</span>
+                <span className="text-xs text-muted-foreground shrink-0">{isEn ? 'Tags:' : 'Label:'}</span>
                 <div className="flex flex-wrap gap-1">
                   {Array.from(tags.values()).map((tag) => {
                     const isActive = filter.tagIds?.includes(tag.id)
@@ -258,9 +258,9 @@ export function AccountFilterPanel(): React.ReactNode {
               </div>
             )}
 
-            {/* 使用量范围 */}
+            {/* Usage range */}
             <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">{isEn ? 'Usage:' : '使用量:'}</span>
+              <span className="text-xs text-muted-foreground">{isEn ? 'Usage:' : 'Usage:'}</span>
               <input
                 type="number"
                 min="0"
@@ -297,9 +297,9 @@ export function AccountFilterPanel(): React.ReactNode {
               <span className="text-xs text-muted-foreground">%</span>
             </div>
 
-            {/* 剩余天数范围 */}
+            {/* Remaining days range */}
             <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">{isEn ? 'Days:' : '剩余:'}</span>
+              <span className="text-xs text-muted-foreground">{isEn ? 'Days:' : 'Remaining:'}</span>
               <input
                 type="number"
                 min="0"
@@ -331,14 +331,14 @@ export function AccountFilterPanel(): React.ReactNode {
                   )
                 }
               />
-              <span className="text-xs text-muted-foreground">{isEn ? 'd' : '天'}</span>
+              <span className="text-xs text-muted-foreground">{isEn ? 'd' : 'sky'}</span>
             </div>
           </div>
 
-          {/* 第三行：邮箱域名后缀 */}
+          {/* The third line: Email domain name suffix */}
           {domainCounts.length > 0 && (
             <div className="flex items-start gap-2 mt-2">
-              <span className="text-xs text-muted-foreground shrink-0 mt-0.5">{isEn ? 'Domain:' : '域名:'}</span>
+              <span className="text-xs text-muted-foreground shrink-0 mt-0.5">{isEn ? 'Domain:' : 'domain name:'}</span>
               <div className="flex flex-wrap gap-1">
                 {visibleDomains.map(([domain, count]) => {
                   const isActive = filter.emailDomains?.includes(domain)
@@ -363,7 +363,7 @@ export function AccountFilterPanel(): React.ReactNode {
                     onClick={() => setShowAllDomains(!showAllDomains)}
                   >
                     {showAllDomains
-                      ? (isEn ? 'Less' : '收起')
+                      ? (isEn ? 'Less' : 'close')
                       : `+${domainCounts.length - DOMAIN_DISPLAY_LIMIT}`}
                   </button>
                 )}

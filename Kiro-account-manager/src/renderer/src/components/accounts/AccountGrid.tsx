@@ -12,13 +12,13 @@ interface AccountGridProps {
   onEditAccount: (account: Account) => void
 }
 
-// 卡片高度（包含间距）- 需要足够容纳有多个奖励的 PRO 账号
+// Card height (including spacing)- Needs to be large enough to accommodate multiple rewards PRO account
 const CARD_HEIGHT = 340
-// 卡片最小宽度（小于该宽度自动减少列数）
+// The minimum width of the card (less than this width, the number of columns will be automatically reduced)
 const MIN_CARD_WIDTH = 300
-// 卡片间距
+// card spacing
 const GAP = 16
-// 内部 px-1 (4px*2 = 8px) 给 box-shadow 留 buffer
+// internal px-1 (4px*2 = 8px) Give box-shadow Keep buffer
 const PADDING_X = 8
 
 export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): React.ReactNode {
@@ -28,16 +28,16 @@ export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): 
   const [columns, setColumns] = useState(3)
   const [cardWidth, setCardWidth] = useState(MIN_CARD_WIDTH)
 
-  // 根据容器宽度动态计算列数与卡片宽度（卡片自适应撑满容器）
+  // Dynamically calculate the number of columns and card width based on the width of the container (the card adaptively fills the container)
   useEffect(() => {
     const container = parentRef.current
     if (!container) return
 
     const updateLayout = () => {
       const usableWidth = container.clientWidth - PADDING_X
-      // 列数：尽可能多，前提是每列不小于 MIN_CARD_WIDTH
+      // Number of columns: as many as possible, provided that each column is no less than MIN_CARD_WIDTH
       const cols = Math.max(1, Math.floor((usableWidth + GAP) / (MIN_CARD_WIDTH + GAP)))
-      // 实际卡片宽度 = 均分容器宽度（减去各 gap）
+      // actual card width = Divide the container width equally (minus each gap）
       const newCardWidth = (usableWidth - (cols - 1) * GAP) / cols
       setColumns(cols)
       setCardWidth(newCardWidth)
@@ -71,7 +71,7 @@ export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): 
     setIsRefreshing(true)
     try {
       await checkAccountStatus(detailAccount.id)
-      // 刷新后重新获取账号数据
+      // Re-obtain account data after refreshing
       const accounts = getFilteredAccounts()
       const updated = accounts.find(a => a.id === detailAccount.id)
       if (updated) setDetailAccount(updated)
@@ -82,7 +82,7 @@ export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): 
 
   const accounts = getFilteredAccounts()
 
-  // 将账号按行分组（包含添加按钮作为虚拟项）
+  // Group accounts by rows (include add button as virtual item)
   const rows = useMemo(() => {
     const result: (Account | 'add')[][] = []
     const allItems: (Account | 'add')[] = [...accounts, 'add']
@@ -126,7 +126,7 @@ export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): 
                 left: 0,
                 width: '100%',
                 height: `${virtualRow.size}px`,
-                transform: `translateY(${virtualRow.start + 8}px)` // +8px 为标签光环留空间
+                transform: `translateY(${virtualRow.start + 8}px)` // +8px Leave space for label halo
               }}
             >
               <div className="flex gap-4 items-start px-1">
@@ -140,7 +140,7 @@ export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): 
                     >
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Plus className="h-8 w-8" />
-                        <span className="text-sm">{isEn ? 'Add Account' : '添加账号'}</span>
+                        <span className="text-sm">{isEn ? 'Add Account' : 'Add account'}</span>
                       </div>
                     </div>
                   ) : (
@@ -163,23 +163,23 @@ export function AccountGrid({ onAddAccount, onEditAccount }: AccountGridProps): 
         })}
       </div>
 
-      {/* 空状态 */}
+      {/* Empty state */}
       {accounts.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <p className="text-muted-foreground mb-4">{isEn ? 'No accounts yet' : '暂无账号'}</p>
+            <p className="text-muted-foreground mb-4">{isEn ? 'No accounts yet' : 'No account yet'}</p>
             <button
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={onAddAccount}
             >
               <Plus className="h-4 w-4" />
-              {isEn ? 'Add First Account' : '添加第一个账号'}
+              {isEn ? 'Add First Account' : 'Add first account'}
             </button>
           </div>
         </div>
       )}
 
-      {/* 账号详情对话框 */}
+      {/* Account details dialog box */}
       <AccountDetailDialog
         open={!!detailAccount}
         onOpenChange={(open) => !open && setDetailAccount(null)}

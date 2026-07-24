@@ -1,28 +1,28 @@
 /**
- * Steering 文件加载器：读取工作区 .kiro/steering/*.md 并解析为可注入的规则文本。
+ * Steering File loader: reading workspace .kiro/steering/*.md and parsed into injectable rule text.
  *
- * Steering 文件支持三种包含模式（通过 YAML frontmatter 指定）：
- *   - always（默认）— 每次请求都注入
- *   - fileMatch — 当请求涉及匹配 fileMatchPattern 的文件时注入
- *   - manual — 仅用户显式引用时注入（反代默认跳过）
+ * Steering Files support three inclusion modes (via YAML frontmatter specified):
+ *   - always(default)- Injected on every request
+ *   - fileMatch — When a request involves matching fileMatchPattern injected into the file
+ *   - manual — Only injected when explicitly referenced by the user (anti-generation is skipped by default)
  */
 import * as fs from 'fs'
 import * as path from 'path'
 
 export interface SteeringDocument {
-  /** 文件名（不含路径） */
+  /** File name (without path) */
   name: string
-  /** frontmatter 指定的包含模式 */
+  /** frontmatter Specified include pattern */
   inclusion: 'always' | 'fileMatch' | 'manual'
-  /** fileMatch 模式下的匹配 glob */
+  /** fileMatch match in pattern glob */
   fileMatchPattern?: string
-  /** 正文内容（去除 frontmatter 后） */
+  /** Text content (remove frontmatter back) */
   content: string
 }
 
 /**
- * 从工作区路径加载所有 steering 文件。
- * 返回按 inclusion 分类的文档列表（always 优先）。
+ * Load all from workspace path steering document.
+ * return press inclusion Classified document list (always priority).
  */
 export function loadSteeringDocuments(workspacePath: string): SteeringDocument[] {
   const steeringDir = path.join(workspacePath, '.kiro', 'steering')
@@ -48,7 +48,7 @@ export function loadSteeringDocuments(workspacePath: string): SteeringDocument[]
     }
   }
 
-  // always 排前面
+  // always front of the line
   docs.sort((a, b) => {
     if (a.inclusion === 'always' && b.inclusion !== 'always') return -1
     if (a.inclusion !== 'always' && b.inclusion === 'always') return 1
@@ -59,8 +59,8 @@ export function loadSteeringDocuments(workspacePath: string): SteeringDocument[]
 }
 
 /**
- * 将 steering 文档列表格式化为可注入到 system prompt 的文本。
- * 仅包含 inclusion=always 的文档（反代没有 file context 信息，无法判断 fileMatch）。
+ * Will steering The document list is formatted to be injected into system prompt text.
+ * Contains only inclusion=always Documentation (reverse generation does not have file context Information, unable to judge fileMatch）。
  */
 export function formatSteeringForPrompt(docs: SteeringDocument[]): string {
   const alwaysDocs = docs.filter(d => d.inclusion === 'always')
@@ -71,7 +71,7 @@ export function formatSteeringForPrompt(docs: SteeringDocument[]): string {
 }
 
 /**
- * 解析简单 YAML frontmatter（--- 分隔的 key: value 块）。
+ * Simple analysis YAML frontmatter（--- separated key: value piece).
  */
 function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; content: string } {
   const frontmatter: Record<string, string> = {}

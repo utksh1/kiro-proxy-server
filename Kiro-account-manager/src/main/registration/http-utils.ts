@@ -5,7 +5,7 @@ export const DEFAULT_UA =
 export const DEFAULT_SEC_UA =
   '"Chromium";v="146", "Not/A)Brand";v="24", "Google Chrome";v="146"'
 
-/** 生成 4 位随机十六进制 */
+/** generate 4 bit random hex */
 function hex4(): string {
   const chars = '0123456789abcdef'
   let s = ''
@@ -13,12 +13,12 @@ function hex4(): string {
   return s
 }
 
-/** 生成随机 visitor ID (UUID v4-like) */
+/** Generate random visitor ID (UUID v4-like) */
 export function visitorId(): string {
   return `${hex4()}${hex4()}-${hex4()}-7${hex4().slice(1)}-${hex4()}-${hex4()}${hex4()}${hex4()}`
 }
 
-/** 生成 awsccc cookie 值 */
+/** generate awsccc cookie value */
 export function awsccc(): string {
   const d = {
     e: 1,
@@ -31,14 +31,14 @@ export function awsccc(): string {
   return Buffer.from(JSON.stringify(d)).toString('base64')
 }
 
-/** 生成 ubid cookie 值 */
+/** generate ubid cookie value */
 export function ubidGen(): string {
   const d7 = Array.from({ length: 7 }, () => Math.floor(Math.random() * 10)).join('')
   const d6 = Array.from({ length: 6 }, () => Math.floor(Math.random() * 10)).join('')
   return `186-${d7}-${d6}`
 }
 
-/** 生成 Kiro visitor ID */
+/** generate Kiro visitor ID */
 export function kiroVisitorId(): string {
   const chars = '0123456789abcdefghijklmnopqrstuvwxyz'
   let s = ''
@@ -46,7 +46,7 @@ export function kiroVisitorId(): string {
   return `${Date.now()}-${s}`
 }
 
-/** 生成 PKCE code_verifier 和 code_challenge */
+/** generate PKCE code_verifier and code_challenge */
 export function pkce(): { verifier: string; challenge: string } {
   const raw = crypto.randomBytes(32)
   const verifier = raw.toString('base64url')
@@ -55,7 +55,7 @@ export function pkce(): { verifier: string; challenge: string } {
   return { verifier, challenge }
 }
 
-/** 生成 UUID */
+/** generate UUID */
 export function newUUID(): string {
   const b = crypto.randomBytes(16)
   return [
@@ -67,12 +67,12 @@ export function newUUID(): string {
   ].join('-')
 }
 
-/** 生成 GMT 日期字符串 */
+/** generate GMT date string */
 export function gmtDate(): string {
   return new Date().toUTCString()
 }
 
-/** 从 URL 中提取查询参数 */
+/** from URL Extract query parameters from */
 export function extractParam(rawURL: string, key: string): string {
   try {
     const u = new URL(rawURL)
@@ -82,7 +82,7 @@ export function extractParam(rawURL: string, key: string): string {
   }
 }
 
-/** 从字符串中提取分隔符后的内容 */
+/** Extract the content after the delimiter from the string */
 export function splitAfter(s: string, sep: string): string {
   const idx = s.indexOf(sep)
   if (idx < 0) return ''
@@ -91,7 +91,7 @@ export function splitAfter(s: string, sep: string): string {
   return ampIdx >= 0 ? rest.slice(0, ampIdx) : rest
 }
 
-/** 获取嵌套 map 值 */
+/** Get nested map value */
 export function getNestedMap(
   data: Record<string, unknown>,
   ...keys: string[]
@@ -106,7 +106,7 @@ export function getNestedMap(
     : null
 }
 
-/** 获取嵌套的 string map */
+/** Get nested string map */
 export function getNestedStringMap(
   data: Record<string, unknown>,
   key: string
@@ -121,7 +121,7 @@ export function getNestedStringMap(
   return Object.keys(result).length > 0 ? result : null
 }
 
-/** 从 Set-Cookie 头中提取并保存 cookies */
+/** from Set-Cookie Extract and save the header cookies */
 export function saveCookies(
   cookies: Map<string, string>,
   headers: Record<string, string | string[] | undefined>

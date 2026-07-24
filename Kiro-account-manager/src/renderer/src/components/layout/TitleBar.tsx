@@ -5,12 +5,12 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { TaskCenterButton } from './TaskCenter'
 
 /**
- * 跨平台自定义 titlebar
- * - macOS: 居中标题 + 左侧 traffic lights 留位（系统渲染）
- * - Windows/Linux: 左侧应用图标+标题 + 右侧自绘按钮
+ * Cross-platform customization titlebar
+ * - macOS: center title + left side traffic lights Reserved (system rendering)
+ * - Windows/Linux: Application icons on the left+title + Self-drawn button on the right
  *
- * 拖动：整条 titlebar 用 -webkit-app-region: drag
- * 按钮区：使用 no-drag 让点击生效
+ * Drag: whole strip titlebar use -webkit-app-region: drag
+ * Button area: use no-drag Make clicks effective
  */
 export function TitleBar(): React.ReactNode {
   const { t } = useTranslation()
@@ -32,13 +32,13 @@ export function TitleBar(): React.ReactNode {
         console.warn('[TitleBar] init failed', err)
       }
 
-      // 监听最大化状态变化
+      // Monitor maximum status changes
       cleanup = window.api.window.onMaximizeChange((m) => setIsMaximized(m))
     }
 
     init()
 
-    // 获取应用版本号
+    // Get application version number
     window.api.getAppVersion().then(setAppVersion).catch(() => {})
 
     return () => cleanup?.()
@@ -54,14 +54,14 @@ export function TitleBar(): React.ReactNode {
         'border-b border-foreground/5'
       )}
       style={{
-        // 整条 titlebar 可拖动
+        // whole strip titlebar Draggable
         WebkitAppRegion: 'drag',
-        // mac 留 80px 给 traffic lights
+        // mac Keep 80px Give traffic lights
         paddingLeft: isMac ? 80 : 12,
         paddingRight: isMac ? 12 : 0
       } as React.CSSProperties}
     >
-      {/* 应用图标 + 标题 */}
+      {/* application icon + title */}
       <div
         className={cn(
           'flex items-center gap-2 text-xs',
@@ -72,32 +72,32 @@ export function TitleBar(): React.ReactNode {
           <img src="./icon.png" alt="" className="h-4 w-4 opacity-90" onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')} />
         )}
         <span className="font-medium tracking-wide text-foreground/70">
-          Kiro 账号管理器{appVersion && ` v${appVersion}`}
+          Kiro Account manager{appVersion && ` v${appVersion}`}
         </span>
       </div>
 
-      {/* 任务中心入口（仅当有任务时显示） */}
+      {/* Mission center entrance (only displayed when there are missions) */}
       <div className="flex items-center gap-1 px-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <TaskCenterButton />
       </div>
 
-      {/* Windows/Linux 按钮组 */}
+      {/* Windows/Linux button group */}
       {!isMac && (
         <div
           className="flex items-stretch h-full"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          <TitleBarButton onClick={() => window.api.window.minimize()} title={isEn ? 'Minimize' : '最小化'}>
+          <TitleBarButton onClick={() => window.api.window.minimize()} title={isEn ? 'Minimize' : 'minimize'}>
             <Minus className="h-3.5 w-3.5" strokeWidth={2} />
           </TitleBarButton>
-          <TitleBarButton onClick={() => window.api.window.maximizeToggle()} title={isMaximized ? (isEn ? 'Restore' : '还原') : (isEn ? 'Maximize' : '最大化')}>
+          <TitleBarButton onClick={() => window.api.window.maximizeToggle()} title={isMaximized ? (isEn ? 'Restore' : 'reduction') : (isEn ? 'Maximize' : 'maximize')}>
             {isMaximized ? (
               <RestoreIcon className="h-3 w-3" strokeWidth={2} />
             ) : (
               <Square className="h-3 w-3" strokeWidth={2} />
             )}
           </TitleBarButton>
-          <TitleBarButton onClick={() => window.api.window.close()} title={isEn ? 'Close' : '关闭'} variant="close">
+          <TitleBarButton onClick={() => window.api.window.close()} title={isEn ? 'Close' : 'closure'} variant="close">
             <X className="h-3.5 w-3.5" strokeWidth={2} />
           </TitleBarButton>
         </div>

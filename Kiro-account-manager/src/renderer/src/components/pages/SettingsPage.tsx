@@ -5,78 +5,78 @@ import { useState, useEffect } from 'react'
 import { ExportDialog } from '../accounts/ExportDialog'
 import { useTranslation } from '@/hooks/useTranslation'
 
-// 主题配置 - 按色系分组
+// Theme configuration - Group by color
 const themeGroupsZh = [
   {
-    name: '蓝色系',
+    name: 'blue color',
     themes: [
-      { id: 'default', name: '天空蓝', color: '#3b82f6' },
-      { id: 'indigo', name: '靖蓝', color: '#6366f1' },
-      { id: 'cyan', name: '清新青', color: '#06b6d4' },
-      { id: 'sky', name: '晴空蓝', color: '#0ea5e9' },
-      { id: 'teal', name: '水鸭蓝', color: '#14b8a6' },
+      { id: 'default', name: 'sky blue', color: '#3b82f6' },
+      { id: 'indigo', name: 'Jinglan', color: '#6366f1' },
+      { id: 'cyan', name: 'fresh green', color: '#06b6d4' },
+      { id: 'sky', name: 'clear sky blue', color: '#0ea5e9' },
+      { id: 'teal', name: 'teal blue', color: '#14b8a6' },
     ]
   },
   {
-    name: '紫红系',
+    name: 'Purple red series',
     themes: [
-      { id: 'purple', name: '优雅紫', color: '#a855f7' },
-      { id: 'violet', name: '紫罗兰', color: '#8b5cf6' },
-      { id: 'fuchsia', name: '洋红', color: '#d946ef' },
-      { id: 'pink', name: '粉红', color: '#ec4899' },
-      { id: 'rose', name: '玑瑰红', color: '#f43f5e' },
+      { id: 'purple', name: 'elegant purple', color: '#a855f7' },
+      { id: 'violet', name: 'violet', color: '#8b5cf6' },
+      { id: 'fuchsia', name: 'magenta', color: '#d946ef' },
+      { id: 'pink', name: 'pink', color: '#ec4899' },
+      { id: 'rose', name: 'guilloché red', color: '#f43f5e' },
     ]
   },
   {
-    name: '暖色系',
+    name: 'Warm colors',
     themes: [
-      { id: 'red', name: '热情红', color: '#ef4444' },
-      { id: 'orange', name: '活力橙', color: '#f97316' },
-      { id: 'amber', name: '琥珀金', color: '#f59e0b' },
-      { id: 'yellow', name: '明黄', color: '#eab308' },
+      { id: 'red', name: 'passion red', color: '#ef4444' },
+      { id: 'orange', name: 'Vibrant orange', color: '#f97316' },
+      { id: 'amber', name: 'amber gold', color: '#f59e0b' },
+      { id: 'yellow', name: 'bright yellow', color: '#eab308' },
     ]
   },
   {
-    name: '绿色系',
+    name: 'green system',
     themes: [
-      { id: 'emerald', name: '翠绿', color: '#10b981' },
-      { id: 'green', name: '草绿', color: '#22c55e' },
-      { id: 'lime', name: '青柠', color: '#84cc16' },
+      { id: 'emerald', name: 'verdant', color: '#10b981' },
+      { id: 'green', name: 'green grass', color: '#22c55e' },
+      { id: 'lime', name: 'lime', color: '#84cc16' },
     ]
   },
   {
-    name: '中性色',
+    name: 'neutral colors',
     themes: [
-      { id: 'slate', name: '石板灰', color: '#64748b' },
-      { id: 'zinc', name: '锌灰', color: '#71717a' },
-      { id: 'stone', name: '暖灰', color: '#78716c' },
-      { id: 'neutral', name: '中性灰', color: '#737373' },
+      { id: 'slate', name: 'slate gray', color: '#64748b' },
+      { id: 'zinc', name: 'Zinc gray', color: '#71717a' },
+      { id: 'stone', name: 'warm gray', color: '#78716c' },
+      { id: 'neutral', name: 'neutral gray', color: '#737373' },
     ]
   },
   {
-    name: '奢华配色',
+    name: 'Luxurious colors',
     themes: [
-      { id: 'gold', name: '奢华金', color: '#C9A227' },
-      { id: 'navy', name: '海军蓝', color: '#1E40AF' },
-      { id: 'wine', name: '酒红', color: '#9F1239' },
-      { id: 'champagne', name: '香槟', color: '#B89968' },
+      { id: 'gold', name: 'luxury gold', color: '#C9A227' },
+      { id: 'navy', name: 'navy blue', color: '#1E40AF' },
+      { id: 'wine', name: 'wine red', color: '#9F1239' },
+      { id: 'champagne', name: 'champagne', color: '#B89968' },
     ]
   },
   {
-    name: '莫兰迪',
+    name: 'Morandi',
     themes: [
-      { id: 'dustyblue', name: '烟雾蓝', color: '#64748B' },
-      { id: 'terracotta', name: '陶土橙', color: '#B45434' },
-      { id: 'sage', name: '鼠尾草', color: '#6B8E5A' },
-      { id: 'mauve', name: '烟紫', color: '#8E7CC3' },
+      { id: 'dustyblue', name: 'smoke blue', color: '#64748B' },
+      { id: 'terracotta', name: 'Terracotta Orange', color: '#B45434' },
+      { id: 'sage', name: 'sage', color: '#6B8E5A' },
+      { id: 'mauve', name: 'smoke purple', color: '#8E7CC3' },
     ]
   },
   {
-    name: '自然深色',
+    name: 'Natural dark color',
     themes: [
-      { id: 'coral', name: '珊瑚粉', color: '#F87171' },
-      { id: 'forest', name: '森林绿', color: '#166534' },
-      { id: 'ocean', name: '深海青', color: '#155E75' },
+      { id: 'coral', name: 'coral pink', color: '#F87171' },
+      { id: 'forest', name: 'forest green', color: '#166534' },
+      { id: 'ocean', name: 'deep sea green', color: '#155E75' },
     ]
   }
 ]
@@ -204,7 +204,7 @@ export function SettingsPage() {
   const [themeExpanded, setThemeExpanded] = useState(false)
   const [isManualRefreshing, setIsManualRefreshing] = useState(false)
   
-  // 托盘设置状态
+  // Tray setup status
   const [traySettings, setTraySettings] = useState({
     enabled: true,
     closeAction: 'ask' as 'ask' | 'minimize' | 'quit',
@@ -213,13 +213,13 @@ export function SettingsPage() {
   })
   const [trayLoading, setTrayLoading] = useState(true)
 
-  // 快捷键设置状态
+  // Shortcut key setting status
   const [showWindowShortcut, setShowWindowShortcut] = useState('')
   const [shortcutLoading, setShortcutLoading] = useState(true)
   const [shortcutError, setShortcutError] = useState('')
   const [isRecordingShortcut, setIsRecordingShortcut] = useState(false)
 
-  // 加载快捷键设置
+  // Load shortcut key settings
   useEffect(() => {
     const loadShortcut = async () => {
       try {
@@ -234,7 +234,7 @@ export function SettingsPage() {
     loadShortcut()
   }, [])
 
-  // 保存快捷键设置
+  // Save shortcut key settings
   const handleShortcutChange = async (shortcut: string) => {
     setShowWindowShortcut(shortcut)
     setShortcutError('')
@@ -248,7 +248,7 @@ export function SettingsPage() {
     }
   }
 
-  // 按键录制处理
+  // Key recording processing
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isRecordingShortcut) return
     e.preventDefault()
@@ -259,10 +259,10 @@ export function SettingsPage() {
     if (e.altKey) parts.push('Alt')
     if (e.shiftKey) parts.push('Shift')
     
-    // 忽略单独的修饰键
+    // Ignore individual modifier keys
     const key = e.key
     if (!['Control', 'Meta', 'Alt', 'Shift'].includes(key)) {
-      // 转换特殊键名
+      // Convert special key names
       const keyName = key.length === 1 ? key.toUpperCase() : key
       parts.push(keyName)
       
@@ -272,11 +272,11 @@ export function SettingsPage() {
     }
   }
 
-  // Usage API 类型状态
+  // Usage API type status
   const [usageApiType, setUsageApiType] = useState<'rest' | 'cbor'>('rest')
   const [usageApiLoading, setUsageApiLoading] = useState(true)
 
-  // 加载 Usage API 类型设置
+  // load Usage API Type settings
   useEffect(() => {
     const loadUsageApiType = async () => {
       try {
@@ -291,7 +291,7 @@ export function SettingsPage() {
     loadUsageApiType()
   }, [])
 
-  // 保存 Usage API 类型
+  // save Usage API type
   const handleUsageApiTypeChange = async (type: 'rest' | 'cbor') => {
     setUsageApiType(type)
     try {
@@ -301,11 +301,11 @@ export function SettingsPage() {
     }
   }
 
-  // K-Proxy 代理设置状态
+  // K-Proxy proxy settings status
   const [useKProxyForApi, setUseKProxyForApi] = useState(false)
   const [kproxyLoading, setKproxyLoading] = useState(true)
 
-  // 加载 K-Proxy 代理设置
+  // load K-Proxy proxy settings
   useEffect(() => {
     const loadKProxySettings = async () => {
       try {
@@ -320,7 +320,7 @@ export function SettingsPage() {
     loadKProxySettings()
   }, [])
 
-  // 保存 K-Proxy 代理设置
+  // save K-Proxy proxy settings
   const handleKProxyChange = async (enabled: boolean) => {
     setUseKProxyForApi(enabled)
     try {
@@ -330,7 +330,7 @@ export function SettingsPage() {
     }
   }
 
-  // 加载托盘设置
+  // Load tray settings
   useEffect(() => {
     const loadTraySettings = async () => {
       try {
@@ -345,7 +345,7 @@ export function SettingsPage() {
     loadTraySettings()
   }, [])
 
-  // 保存托盘设置
+  // Save tray settings
   const handleTraySettingChange = async (key: keyof typeof traySettings, value: boolean | string) => {
     const newSettings = { ...traySettings, [key]: value }
     setTraySettings(newSettings)
@@ -377,32 +377,32 @@ export function SettingsPage() {
       if (fileData && fileData.format === 'json') {
         const data = JSON.parse(fileData.content)
         const importResult = importFromExportData(data)
-        alert(`导入完成：成功 ${importResult.success} 个，失败 ${importResult.failed} 个`)
+        alert(`Import completed: successful ${importResult.success} one, failed ${importResult.failed} indivual`)
       } else if (fileData) {
-        alert('设置页面仅支持 JSON 格式导入，请使用账号管理页面导入 CSV/TXT')
+        alert('The settings page only supports JSON Format import, please use the account management page to import. CSV/TXT')
       }
     } catch (e) {
-      alert(`导入失败: ${e instanceof Error ? e.message : '未知错误'}`)
+      alert(`Import failed: ${e instanceof Error ? e.message : 'unknown error'}`)
     } finally {
       setIsImporting(false)
     }
   }
 
   const handleClearData = () => {
-    if (confirm('确定要清除所有账号数据吗？此操作不可恢复！')) {
-      if (confirm('再次确认：这将删除所有账号、分组和标签数据！')) {
-        // 清除所有数据
+    if (confirm('Are you sure you want to clear all account data? This operation is irreversible!')) {
+      if (confirm('Confirm again: this will delete all account, group and tag data!')) {
+        // Clear all data
         Array.from(accounts.keys()).forEach(id => {
           useAccountsStore.getState().removeAccount(id)
         })
-        alert('所有数据已清除')
+        alert('All data cleared')
       }
     }
   }
 
   return (
     <div className="flex-1 p-6 space-y-6 overflow-auto">
-      {/* 页面头部 */}
+      {/* Page header */}
       <div className="page-hero p-6">
         <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-primary/20 to-transparent rounded-full blur-2xl" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-primary/20 to-transparent rounded-full blur-2xl" />
@@ -412,61 +412,61 @@ export function SettingsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-primary">{t('settings.title')}</h1>
-            <p className="text-muted-foreground">{t('settings.title') === 'Settings' ? 'Configure app features' : '配置应用的各项功能'}</p>
+            <p className="text-muted-foreground">{t('settings.title') === 'Settings' ? 'Configure app features' : 'Configure app features'}</p>
           </div>
         </div>
       </div>
 
-      {/* 语言设置 */}
+      {/* Language settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Globe className="h-4 w-4 text-primary" />
             </div>
-            语言 / Language
+            language / Language
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">显示语言 / Display Language</p>
-              <p className="text-sm text-muted-foreground">选择界面显示语言 / Select interface language</p>
+              <p className="font-medium">Display language / Display Language</p>
+              <p className="text-sm text-muted-foreground">Select interface display language / Select interface language</p>
             </div>
             <select
               className="w-[160px] h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
               value={language}
               onChange={(e) => setLanguage(e.target.value as 'auto' | 'en' | 'zh')}
             >
-              <option value="auto">🌐 自动 (Auto)</option>
-              <option value="zh">🇨🇳 简体中文</option>
+              <option value="auto">🌐 automatic (Auto)</option>
+              <option value="zh">🇨🇳 Simplified Chinese</option>
               <option value="en">🇺🇸 English</option>
             </select>
           </div>
           <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-            <p>• 自动模式会根据系统语言自动选择</p>
+            <p>• Automatic mode will automatically select based on the system language</p>
             <p>• Auto mode will follow system language</p>
-            <p>• 支持自定义翻译文件扩展（开发中）</p>
+            <p>• Support custom translation file extension (under development)</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* 主题设置 */}
+      {/* Theme settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Palette className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Theme' : '主题设置'}
+            {isEn ? 'Theme' : 'Theme settings'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* 深色模式 */}
+          {/* dark mode */}
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Dark Mode' : '深色模式'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Toggle dark/light theme' : '切换深色/浅色主题'}</p>
+              <p className="font-medium">{isEn ? 'Dark Mode' : 'dark mode'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Toggle dark/light theme' : 'switch dark color/light theme'}</p>
             </div>
             <Button
               variant={darkMode ? "default" : "outline"}
@@ -474,18 +474,18 @@ export function SettingsPage() {
               onClick={() => setDarkMode(!darkMode)}
             >
               {darkMode ? <Moon className="h-4 w-4 mr-2" /> : <Sun className="h-4 w-4 mr-2" />}
-              {darkMode ? (isEn ? 'Dark' : '深色') : (isEn ? 'Light' : '浅色')}
+              {darkMode ? (isEn ? 'Dark' : 'Dark') : (isEn ? 'Light' : 'light color')}
             </Button>
           </div>
 
-          {/* 主题颜色 */}
+          {/* theme color */}
           <div className="pt-2 border-t">
             <button 
               className="flex items-center justify-between w-full text-left"
               onClick={() => setThemeExpanded(!themeExpanded)}
             >
               <div className="flex items-center gap-2">
-                <p className="font-medium">{isEn ? 'Theme Color' : '主题颜色'}</p>
+                <p className="font-medium">{isEn ? 'Theme Color' : 'theme color'}</p>
                 {!themeExpanded && (
                   <div 
                     className="w-5 h-5 rounded-full ring-2 ring-primary ring-offset-1"
@@ -531,21 +531,21 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* 隐私设置 */}
+      {/* Privacy settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               {privacyMode ? <EyeOff className="h-4 w-4 text-primary" /> : <Eye className="h-4 w-4 text-primary" />}
             </div>
-            {isEn ? 'Privacy' : '隐私设置'}
+            {isEn ? 'Privacy' : 'Privacy settings'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Privacy Mode' : '隐私模式'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Hide emails and sensitive info' : '隐藏邮箱和账号敏感信息'}</p>
+              <p className="font-medium">{isEn ? 'Privacy Mode' : 'privacy mode'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Hide emails and sensitive info' : 'Hide sensitive email and account information'}</p>
             </div>
             <Button
               variant={privacyMode ? "default" : "outline"}
@@ -553,26 +553,26 @@ export function SettingsPage() {
               onClick={() => setPrivacyMode(!privacyMode)}
             >
               {privacyMode ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-              {privacyMode ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {privacyMode ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
           <div className="flex items-center justify-between pt-2 border-t">
             <div>
-              <p className="font-medium">{isEn ? 'Usage Precision' : '使用量精度'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Show decimal places for usage values' : '显示使用量的小数精度（如 1.22 而非 1）'}</p>
+              <p className="font-medium">{isEn ? 'Usage Precision' : 'Usage accuracy'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Show decimal places for usage values' : 'Display usage to decimal precision (e.g. 1.22 rather than 1）'}</p>
             </div>
             <Button
               variant={usagePrecision ? "default" : "outline"}
               size="sm"
               onClick={() => setUsagePrecision(!usagePrecision)}
             >
-              {usagePrecision ? (isEn ? 'Decimal' : '小数') : (isEn ? 'Integer' : '整数')}
+              {usagePrecision ? (isEn ? 'Decimal' : 'decimal') : (isEn ? 'Integer' : 'integer')}
             </Button>
           </div>
           <div className="flex items-center justify-between pt-2 border-t">
             <div>
-              <p className="font-medium">{isEn ? 'Switch Target' : '切号目标'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Which client to switch account credentials to' : '切换账号凭证写入的客户端'}</p>
+              <p className="font-medium">{isEn ? 'Switch Target' : 'Number cut target'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Which client to switch account credentials to' : 'Switch the client where account credentials are written'}</p>
             </div>
             <select
               className="h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
@@ -581,13 +581,13 @@ export function SettingsPage() {
             >
               <option value="ide">Kiro IDE</option>
               <option value="cli">Kiro CLI</option>
-              <option value="both">{isEn ? 'Both (IDE + CLI)' : '两者 (IDE + CLI)'}</option>
+              <option value="both">{isEn ? 'Both (IDE + CLI)' : 'both (IDE + CLI)'}</option>
             </select>
           </div>
           <div className="flex items-center justify-between pt-2 border-t">
             <div>
-              <p className="font-medium">{isEn ? 'Login Private Mode' : '登录隐私模式'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Open browser in incognito/private mode when logging in' : '在线登录时使用浏览器无痕/隐私模式打开'}</p>
+              <p className="font-medium">{isEn ? 'Login Private Mode' : 'Log in to privacy mode'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Open browser in incognito/private mode when logging in' : 'Use an incognito browser when logging in online/Privacy mode on'}</p>
             </div>
             <Button
               variant={loginPrivateMode ? "default" : "outline"}
@@ -595,71 +595,71 @@ export function SettingsPage() {
               onClick={() => setLoginPrivateMode(!loginPrivateMode)}
             >
               <UserX className="h-4 w-4 mr-2" />
-              {loginPrivateMode ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {loginPrivateMode ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Token 刷新设置 */}
+      {/* Token Refresh settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <RefreshCw className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Auto Refresh' : '自动刷新'}
+            {isEn ? 'Auto Refresh' : 'Auto refresh'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Auto Refresh' : '自动刷新'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Auto refresh tokens before expiration' : 'Token 过期前自动刷新，并同步更新账户信息'}</p>
+              <p className="font-medium">{isEn ? 'Auto Refresh' : 'Auto refresh'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Auto refresh tokens before expiration' : 'Token Automatically refresh before expiration and update account information synchronously'}</p>
             </div>
             <Button
               variant={autoRefreshEnabled ? "default" : "outline"}
               size="sm"
               onClick={() => setAutoRefresh(!autoRefreshEnabled)}
             >
-              {autoRefreshEnabled ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {autoRefreshEnabled ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
 
           <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3 space-y-1">
             <p className="font-medium text-amber-700 dark:text-amber-300">
-              {isEn ? 'About Kiro IDE auto refresh' : '关于 Kiro IDE 自动刷新'}
+              {isEn ? 'About Kiro IDE auto refresh' : 'about Kiro IDE Auto refresh'}
             </p>
             <p>
               {isEn
                 ? '• Kiro IDE has its own internal refresh loop (independent of this app). Disabling Auto Refresh here only stops this app from refreshing — it does NOT stop Kiro IDE.'
-                : '• Kiro IDE 自带独立的刷新循环，关闭本工具的"自动刷新"不会停止 IDE 自己的刷新。'}
+                : `• Kiro IDE Comes with independent refresh cycle, close this tool"Auto refresh"won't stop IDE own refresh.`}
             </p>
             <p>
               {isEn
                 ? '• When switching accounts or refreshing tokens here, the new token is synced to ~/.aws/sso/cache/kiro-auth-token.json only for the IDE current active account; other accounts only update the local store.'
-                : '• 切号 / 刷新 Token 时，仅当该账号是 Kiro IDE 当前激活账号才会同步到磁盘文件；非激活账号仅更新本工具内部 store。'}
+                : '• Cut number / refresh Token , only if the account is Kiro IDE Only the currently activated account will be synchronized to the disk file; inactive accounts will only update the inside of this tool. store。'}
             </p>
             <p>
               {isEn
                 ? '• If IDE refreshes the token itself, this app detects the file change and syncs the new token back to its store (bidirectional sync).'
-                : '• 当 Kiro IDE 自己 refresh 后，本工具会监听磁盘文件变化并反向同步到 store（双向同步）。'}
+                : '• when Kiro IDE Own refresh Afterwards, this tool will monitor disk file changes and reversely synchronize to store(Two-way sync).'}
             </p>
           </div>
 
-          {/* 主动续期开关（默认关闭） */}
+          {/* Active renewal switch (off by default) */}
           <div className="flex items-center justify-between pt-3 border-t">
             <div>
               <p className="font-medium">
-                {isEn ? 'Proactive Token Renewal for IDE' : 'IDE 主动续期'}
+                {isEn ? 'Proactive Token Renewal for IDE' : 'IDE Active renewal'}
                 <span className="ml-2 text-xs text-muted-foreground">
-                  ({isEn ? 'Advanced' : '进阶'})
+                  ({isEn ? 'Advanced' : 'Advanced'})
                 </span>
               </p>
               <p className="text-sm text-muted-foreground">
                 {isEn
                   ? `Renew IDE's active token ~${proactiveRenewalLeadMinutes} min before expiry, so Kiro IDE never refreshes by itself (eliminates all race conditions).`
-                  : `在 IDE 激活账号的 token 剩 ~${proactiveRenewalLeadMinutes} 分钟时抢先 refresh，让 Kiro IDE 永远不自己 refresh（彻底消除竞争条件）。`}
+                  : `exist IDE Account activated token left ~${proactiveRenewalLeadMinutes} First in minutes refresh,let Kiro IDE never myself refresh(completely eliminates race conditions).`}
               </p>
             </div>
             <Button
@@ -669,13 +669,13 @@ export function SettingsPage() {
                 const result = await setProactiveRenewalEnabled(!proactiveRenewalEnabled)
                 if (!result.success && result.error) {
                   alert(
-                    (isEn ? 'Failed to toggle proactive renewal: ' : '切换主动续期失败：') +
+                    (isEn ? 'Failed to toggle proactive renewal: ' : 'Failed to switch active renewal:') +
                       result.error
                   )
                 }
               }}
             >
-              {proactiveRenewalEnabled ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {proactiveRenewalEnabled ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
           {proactiveRenewalEnabled && (
@@ -683,17 +683,17 @@ export function SettingsPage() {
               <p>
                 {isEn
                   ? `• On: a single in-process timer renews token ${proactiveRenewalLeadMinutes} min before expiry; Kiro IDE keeps seeing fresh tokens (≥${60 - proactiveRenewalLeadMinutes} min remaining) and never invokes OIDC by itself.`
-                  : `• 启用后：账号管理器主进程会在 token 剩 ${proactiveRenewalLeadMinutes} 分钟时自动续期，Kiro IDE 始终看到剩余 ≥ ${60 - proactiveRenewalLeadMinutes} 分钟的 token，永远不会自己调 OIDC。`}
+                  : `• After enabling: the account manager main process will be in token left ${proactiveRenewalLeadMinutes} Automatically renews every minute,Kiro IDE always see remaining ≥ ${60 - proactiveRenewalLeadMinutes} minutes token, will never adjust it by itself OIDC。`}
               </p>
               <p>
                 {isEn
                   ? '• Only the IDE current active account is renewed. Switching accounts re-schedules the timer for the new active account.'
-                  : '• 仅对 IDE 当前激活账号续期。切号时 timer 会自动重新调度到新账号。'}
+                  : '• only for IDE Current active account renewal. When cutting numbers timer It will be automatically rescheduled to a new account.'}
               </p>
               <p>
                 {isEn
                   ? '• If a renewal fails (e.g. server outage), the timer stops; IDE\'s own refresh loop takes over as fallback.'
-                  : '• 续期失败时 timer 停止，由 IDE 自己的 refresh loop 接管（双向同步仍生效）。'}
+                  : '• When renewal fails timer stop by IDE own refresh loop Takeover (two-way sync still takes effect).'}
               </p>
             </div>
           )}
@@ -701,35 +701,35 @@ export function SettingsPage() {
           {autoRefreshEnabled && (
             <>
               <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-                <p>• {isEn ? 'Auto refresh tokens to keep login' : 'Token 即将过期时自动刷新，保持登录状态'}</p>
-                <p>• {isEn ? 'Update usage and subscription info after refresh' : 'Token 刷新后自动更新账户用量、订阅等信息'}</p>
-                <p>• {isEn ? 'Check all balances when auto-switch is on' : '开启自动换号时，会定期检查所有账户余额'}</p>
+                <p>• {isEn ? 'Auto refresh tokens to keep login' : 'Token Automatically refresh when it is about to expire and keep you logged in'}</p>
+                <p>• {isEn ? 'Update usage and subscription info after refresh' : 'Token Automatically update account usage, subscription and other information after refreshing'}</p>
+                <p>• {isEn ? 'Check all balances when auto-switch is on' : 'When automatic number change is turned on, all account balances will be checked regularly'}</p>
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <div>
-                  <p className="font-medium">{isEn ? 'Check Interval' : '检查间隔'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'How often to check account status' : '每隔多久检查一次账户状态'}</p>
+                  <p className="font-medium">{isEn ? 'Check Interval' : 'Check interval'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'How often to check account status' : 'How often should you check your account status?'}</p>
                 </div>
                 <select
                   className="w-[120px] h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   value={autoRefreshInterval}
                   onChange={(e) => setAutoRefresh(true, parseInt(e.target.value))}
                 >
-                  <option value="1">{isEn ? '1 min' : '1 分钟'}</option>
-                  <option value="3">{isEn ? '3 min' : '3 分钟'}</option>
-                  <option value="5">{isEn ? '5 min' : '5 分钟'}</option>
-                  <option value="10">{isEn ? '10 min' : '10 分钟'}</option>
-                  <option value="15">{isEn ? '15 min' : '15 分钟'}</option>
-                  <option value="20">{isEn ? '20 min' : '20 分钟'}</option>
-                  <option value="30">{isEn ? '30 min' : '30 分钟'}</option>
-                  <option value="45">{isEn ? '45 min' : '45 分钟'}</option>
-                  <option value="60">{isEn ? '60 min' : '60 分钟'}</option>
+                  <option value="1">{isEn ? '1 min' : '1 minute'}</option>
+                  <option value="3">{isEn ? '3 min' : '3 minute'}</option>
+                  <option value="5">{isEn ? '5 min' : '5 minute'}</option>
+                  <option value="10">{isEn ? '10 min' : '10 minute'}</option>
+                  <option value="15">{isEn ? '15 min' : '15 minute'}</option>
+                  <option value="20">{isEn ? '20 min' : '20 minute'}</option>
+                  <option value="30">{isEn ? '30 min' : '30 minute'}</option>
+                  <option value="45">{isEn ? '45 min' : '45 minute'}</option>
+                  <option value="60">{isEn ? '60 min' : '60 minute'}</option>
                 </select>
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <div>
-                  <p className="font-medium">{isEn ? 'Concurrency' : '刷新并发数'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Number of accounts to refresh simultaneously' : '同时刷新的账号数量，过大可能卡顿'}</p>
+                  <p className="font-medium">{isEn ? 'Concurrency' : 'Number of concurrent refreshes'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Number of accounts to refresh simultaneously' : 'The number of accounts refreshed at the same time may cause lag if it is too large.'}</p>
                 </div>
                 <input
                   type="number"
@@ -742,21 +742,21 @@ export function SettingsPage() {
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <div>
-                  <p className="font-medium">{isEn ? 'Sync Account Info' : '同步检测账户信息'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Detect usage, subscription, and ban status' : '刷新 Token 时同步检测用量、订阅、封禁状态'}</p>
+                  <p className="font-medium">{isEn ? 'Sync Account Info' : 'Synchronously detect account information'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Detect usage, subscription, and ban status' : 'refresh Token Detect usage, subscription, and ban status simultaneously'}</p>
                 </div>
                 <Button
                   variant={autoRefreshSyncInfo ? "default" : "outline"}
                   size="sm"
                   onClick={() => setAutoRefreshSyncInfo(!autoRefreshSyncInfo)}
                 >
-                  {autoRefreshSyncInfo ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+                  {autoRefreshSyncInfo ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
                 </Button>
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <div>
-                  <p className="font-medium">{isEn ? 'Manual Trigger' : '手动触发'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Manually trigger auto-refresh for debugging' : '手动触发一次自动刷新流程（用于调试）'}</p>
+                  <p className="font-medium">{isEn ? 'Manual Trigger' : 'manual trigger'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Manually trigger auto-refresh for debugging' : 'Manually trigger an automatic refresh process (for debugging)'}</p>
                 </div>
                 <Button
                   variant="outline"
@@ -764,7 +764,7 @@ export function SettingsPage() {
                   onClick={handleManualRefresh}
                   disabled={isManualRefreshing}
                 >
-                  {isManualRefreshing ? (isEn ? 'Refreshing...' : '刷新中...') : (isEn ? 'Trigger Now' : '立即触发')}
+                  {isManualRefreshing ? (isEn ? 'Refreshing...' : 'Refreshing...') : (isEn ? 'Trigger Now' : 'trigger immediately')}
                 </Button>
               </div>
             </>
@@ -772,21 +772,21 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* API 类型设置 */}
+      {/* API Type settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Database className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'API Settings' : 'API 设置'}
+            {isEn ? 'API Settings' : 'API set up'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Usage API Type' : '用量查询 API'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Select API type for querying usage limits' : '选择查询账户用量的 API 类型'}</p>
+              <p className="font-medium">{isEn ? 'Usage API Type' : 'Usage query API'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Select API type for querying usage limits' : 'Choose to query account usage API type'}</p>
             </div>
             <select
               className="w-[180px] h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
@@ -799,13 +799,13 @@ export function SettingsPage() {
             </select>
           </div>
           <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-            <p>• <strong>REST</strong>: {isEn ? 'Official Kiro IDE format, recommended' : '官方 Kiro IDE 使用的格式，推荐使用'}</p>
-            <p>• <strong>CBOR</strong>: {isEn ? 'Web portal format, may have different fields' : '网页端格式，字段可能有差异'}</p>
+            <p>• <strong>REST</strong>: {isEn ? 'Official Kiro IDE format, recommended' : 'official Kiro IDE The format used is recommended'}</p>
+            <p>• <strong>CBOR</strong>: {isEn ? 'Web portal format, may have different fields' : 'Web page format, fields may be different'}</p>
           </div>
           <div className="flex items-center justify-between pt-2 border-t">
             <div>
-              <p className="font-medium">{isEn ? 'Use K-Proxy for API' : 'API 请求走 K-Proxy'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Route API requests through K-Proxy MITM proxy' : 'API 请求通过 K-Proxy MITM 代理发送'}</p>
+              <p className="font-medium">{isEn ? 'Use K-Proxy for API' : 'API Ask to go K-Proxy'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Route API requests through K-Proxy MITM proxy' : 'API Request passed K-Proxy MITM Send as agent'}</p>
             </div>
             <Button
               variant={useKProxyForApi ? "default" : "outline"}
@@ -813,49 +813,49 @@ export function SettingsPage() {
               onClick={() => handleKProxyChange(!useKProxyForApi)}
               disabled={kproxyLoading}
             >
-              {useKProxyForApi ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {useKProxyForApi ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
           {useKProxyForApi && (
             <div className="text-xs text-amber-500 bg-amber-500/10 rounded-lg p-3">
-              {isEn ? '⚠️ K-Proxy must be running for this to work' : '⚠️ 需要先启动 K-Proxy MITM 代理才能生效'}
+              {isEn ? '⚠️ K-Proxy must be running for this to work' : '⚠️ Need to start first K-Proxy MITM The agent can take effect'}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* 代理设置 */}
+      {/* proxy settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Globe className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Proxy' : '代理设置'}
+            {isEn ? 'Proxy' : 'proxy settings'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Enable Proxy' : '启用代理'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'All requests through proxy server' : '所有网络请求将通过代理服务器'}</p>
+              <p className="font-medium">{isEn ? 'Enable Proxy' : 'Enable proxy'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'All requests through proxy server' : 'All network requests will go through the proxy server'}</p>
             </div>
             <Button
               variant={proxyEnabled ? "default" : "outline"}
               size="sm"
               onClick={() => setProxy(!proxyEnabled, tempProxyUrl)}
             >
-              {proxyEnabled ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {proxyEnabled ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
 
           <div className="space-y-2 pt-2 border-t">
-            <label className="text-sm font-medium">{isEn ? 'Proxy URL' : '代理地址'}</label>
+            <label className="text-sm font-medium">{isEn ? 'Proxy URL' : 'proxy address'}</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 className="flex-1 h-9 px-3 rounded-lg border bg-background text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                placeholder={isEn ? 'http://127.0.0.1:7890 or socks5://127.0.0.1:1080' : 'http://127.0.0.1:7890 或 socks5://127.0.0.1:1080'}
+                placeholder={isEn ? 'http://127.0.0.1:7890 or socks5://127.0.0.1:1080' : 'http://127.0.0.1:7890 or socks5://127.0.0.1:1080'}
                 value={tempProxyUrl}
                 onChange={(e) => setTempProxyUrl(e.target.value)}
               />
@@ -865,38 +865,38 @@ export function SettingsPage() {
                 onClick={() => setProxy(proxyEnabled, tempProxyUrl)}
                 disabled={tempProxyUrl === proxyUrl}
               >
-                {isEn ? 'Save' : '保存'}
+                {isEn ? 'Save' : 'save'}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              {isEn ? 'Supports HTTP/HTTPS/SOCKS5, format: protocol://host:port' : '支持 HTTP/HTTPS/SOCKS5 代理，格式: protocol://host:port'}
+              {isEn ? 'Supports HTTP/HTTPS/SOCKS5, format: protocol://host:port' : 'support HTTP/HTTPS/SOCKS5 agent, format: protocol://host:port'}
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* 自动换号设置 */}
+      {/* Automatic number change settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Repeat className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Auto Switch' : '自动换号'}
+            {isEn ? 'Auto Switch' : 'Automatic number change'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Enable Auto Switch' : '启用自动换号'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Auto switch when balance is low' : '余额不足时自动切换到其他可用账号'}</p>
+              <p className="font-medium">{isEn ? 'Enable Auto Switch' : 'Enable automatic number changing'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Auto switch when balance is low' : 'Automatically switch to other available accounts when the balance is insufficient'}</p>
             </div>
             <Button
               variant={autoSwitchEnabled ? "default" : "outline"}
               size="sm"
               onClick={() => setAutoSwitch(!autoSwitchEnabled)}
             >
-              {autoSwitchEnabled ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {autoSwitchEnabled ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
 
@@ -904,8 +904,8 @@ export function SettingsPage() {
             <>
               <div className="flex items-center justify-between pt-2 border-t">
                 <div>
-                  <p className="font-medium">{isEn ? 'Balance Threshold' : '余额阈值'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Switch when balance below this' : '余额低于此值时自动切换'}</p>
+                  <p className="font-medium">{isEn ? 'Balance Threshold' : 'Balance threshold'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Switch when balance below this' : 'Automatically switches when the balance is lower than this value'}</p>
                 </div>
                 <input
                   type="number"
@@ -920,21 +920,21 @@ export function SettingsPage() {
                 <div>
                   <p className="font-medium flex items-center gap-2">
                     <Clock className="h-4 w-4" />
-                    {isEn ? 'Check Interval' : '检查间隔'}
+                    {isEn ? 'Check Interval' : 'Check interval'}
                   </p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'How often to check balance' : '每隔多久检查一次余额'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'How often to check balance' : 'How often to check your balance'}</p>
                 </div>
                 <select
                   className="h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                   value={autoSwitchInterval}
                   onChange={(e) => setAutoSwitch(true, undefined, parseInt(e.target.value))}
                 >
-                  <option value="1">{isEn ? '1 min' : '1 分钟'}</option>
-                  <option value="3">{isEn ? '3 min' : '3 分钟'}</option>
-                  <option value="5">{isEn ? '5 min' : '5 分钟'}</option>
-                  <option value="10">{isEn ? '10 min' : '10 分钟'}</option>
-                  <option value="15">{isEn ? '15 min' : '15 分钟'}</option>
-                  <option value="30">{isEn ? '30 min' : '30 分钟'}</option>
+                  <option value="1">{isEn ? '1 min' : '1 minute'}</option>
+                  <option value="3">{isEn ? '3 min' : '3 minute'}</option>
+                  <option value="5">{isEn ? '5 min' : '5 minute'}</option>
+                  <option value="10">{isEn ? '10 min' : '10 minute'}</option>
+                  <option value="15">{isEn ? '15 min' : '15 minute'}</option>
+                  <option value="30">{isEn ? '30 min' : '30 minute'}</option>
                 </select>
               </div>
             </>
@@ -942,21 +942,21 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* 批量导入设置 */}
+      {/* Batch import settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Layers className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Batch Import' : '批量导入'}
+            {isEn ? 'Batch Import' : 'Batch import'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Concurrency' : '并发数'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Too high may cause API rate limiting' : '同时验证的账号数量，过大可能导致 API 限流'}</p>
+              <p className="font-medium">{isEn ? 'Concurrency' : 'Number of concurrencies'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Too high may cause API rate limiting' : 'The number of accounts to be verified simultaneously, if too large, may result in API Current limiting'}</p>
             </div>
             <input
               type="number"
@@ -968,37 +968,37 @@ export function SettingsPage() {
             />
           </div>
           <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2">
-            {isEn ? 'Recommended: 10-100. Too high may cause failures, too low is slow.' : '建议范围: 10-100。设置过大可能导致大量「验证失败」，设置过小则导入速度较慢。'}
+            {isEn ? 'Recommended: 10-100. Too high may cause failures, too low is slow.' : 'Recommended range: 10-100. Setting it too large may result in a large number of "validation failures", while setting it too small may result in slower import speeds.'}
           </p>
         </CardContent>
       </Card>
 
-      {/* 系统托盘设置 */}
+      {/* System tray settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Monitor className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'System Tray' : '系统托盘'}
+            {isEn ? 'System Tray' : 'system tray'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {trayLoading ? (
-            <div className="text-sm text-muted-foreground">{isEn ? 'Loading...' : '加载中...'}</div>
+            <div className="text-sm text-muted-foreground">{isEn ? 'Loading...' : 'loading...'}</div>
           ) : (
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">{isEn ? 'Enable System Tray' : '启用系统托盘'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Show icon in system tray' : '在系统托盘显示图标'}</p>
+                  <p className="font-medium">{isEn ? 'Enable System Tray' : 'Enable system tray'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Show icon in system tray' : 'Show icon in system tray'}</p>
                 </div>
                 <Button
                   variant={traySettings.enabled ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleTraySettingChange('enabled', !traySettings.enabled)}
                 >
-                  {traySettings.enabled ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+                  {traySettings.enabled ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
                 </Button>
               </div>
 
@@ -1006,62 +1006,62 @@ export function SettingsPage() {
                 <>
                   <div className="flex items-center justify-between pt-2 border-t">
                     <div>
-                      <p className="font-medium">{isEn ? 'Close Button Action' : '关闭按钮行为'}</p>
-                      <p className="text-sm text-muted-foreground">{isEn ? 'What happens when you click X' : '点击关闭按钮时的行为'}</p>
+                      <p className="font-medium">{isEn ? 'Close Button Action' : 'Close button behavior'}</p>
+                      <p className="text-sm text-muted-foreground">{isEn ? 'What happens when you click X' : 'Behavior when clicking close button'}</p>
                     </div>
                     <select
                       className="w-[140px] h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
                       value={traySettings.closeAction}
                       onChange={(e) => handleTraySettingChange('closeAction', e.target.value)}
                     >
-                      <option value="ask">{isEn ? 'Ask every time' : '每次询问'}</option>
-                      <option value="minimize">{isEn ? 'Minimize to tray' : '最小化到托盘'}</option>
-                      <option value="quit">{isEn ? 'Quit application' : '退出程序'}</option>
+                      <option value="ask">{isEn ? 'Ask every time' : 'Ask every time'}</option>
+                      <option value="minimize">{isEn ? 'Minimize to tray' : 'Minimize to tray'}</option>
+                      <option value="quit">{isEn ? 'Quit application' : 'Exit program'}</option>
                     </select>
                   </div>
                 </>
               )}
 
               <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-                <p>• {isEn ? 'Double-click tray icon to show window' : '双击托盘图标可以显示主窗口'}</p>
-                <p>• {isEn ? 'Right-click tray icon to show menu' : '右键托盘图标可以显示菜单'}</p>
-                <p>• {isEn ? 'Tray menu shows current account info and usage' : '托盘菜单可以查看当前账户信息和用量'}</p>
+                <p>• {isEn ? 'Double-click tray icon to show window' : 'Double-click the tray icon to display the main window'}</p>
+                <p>• {isEn ? 'Right-click tray icon to show menu' : 'Right-click on the tray icon to display the menu'}</p>
+                <p>• {isEn ? 'Tray menu shows current account info and usage' : 'You can view current account information and usage in the tray menu'}</p>
               </div>
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* 快捷键设置 */}
+      {/* Shortcut key settings */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Settings className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Keyboard Shortcuts' : '快捷键'}
+            {isEn ? 'Keyboard Shortcuts' : 'shortcut key'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {shortcutLoading ? (
-            <div className="text-sm text-muted-foreground">{isEn ? 'Loading...' : '加载中...'}</div>
+            <div className="text-sm text-muted-foreground">{isEn ? 'Loading...' : 'loading...'}</div>
           ) : (
             <>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">{isEn ? 'Show Window' : '显示主窗口'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Global shortcut to show main window' : '全局快捷键唤起主窗口'}</p>
+                  <p className="font-medium">{isEn ? 'Show Window' : 'Show main window'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Global shortcut to show main window' : 'Global shortcut keys bring up the main window'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     className={`w-[160px] h-9 px-3 rounded-lg border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-center ${isRecordingShortcut ? 'border-primary ring-1 ring-primary animate-pulse' : ''}`}
-                    value={isRecordingShortcut ? (isEn ? 'Press keys...' : '请按键...') : showWindowShortcut}
+                    value={isRecordingShortcut ? (isEn ? 'Press keys...' : 'Please press the button...') : showWindowShortcut}
                     onKeyDown={handleKeyDown}
                     onFocus={() => setIsRecordingShortcut(true)}
                     onBlur={() => setIsRecordingShortcut(false)}
                     readOnly
-                    placeholder={isEn ? 'Click to record' : '点击录制'}
+                    placeholder={isEn ? 'Click to record' : 'Click to record'}
                   />
                   {showWindowShortcut && (
                     <Button
@@ -1079,16 +1079,16 @@ export function SettingsPage() {
                 <p className="text-sm text-destructive">{shortcutError}</p>
               )}
               <div className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3 space-y-1">
-                <p>• {isEn ? 'Click input and press key combination to record' : '点击输入框后按下组合键自动录制'}</p>
-                <p>• {isEn ? 'macOS use Command, Windows/Linux use Ctrl' : 'macOS 使用 Command，Windows/Linux 使用 Ctrl'}</p>
-                <p>• {isEn ? 'Click trash icon to clear shortcut' : '点击垃圾桶图标可清除快捷键'}</p>
+                <p>• {isEn ? 'Click input and press key combination to record' : 'Click the input box and press the key combination to record automatically'}</p>
+                <p>• {isEn ? 'macOS use Command, Windows/Linux use Ctrl' : 'macOS use Command，Windows/Linux use Ctrl'}</p>
+                <p>• {isEn ? 'Click trash icon to clear shortcut' : 'Click the trash can icon to clear shortcuts'}</p>
               </div>
             </>
           )}
         </CardContent>
       </Card>
 
-      {/* 机器码管理提示 */}
+      {/* Machine code management tips */}
       <Card className="hover-lift bg-primary/5">
         <CardContent className="py-4">
           <div className="flex items-center gap-3">
@@ -1096,69 +1096,69 @@ export function SettingsPage() {
               <Fingerprint className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1">
-              <p className="font-medium text-sm">{isEn ? 'Machine ID' : '机器码管理'}</p>
+              <p className="font-medium text-sm">{isEn ? 'Machine ID' : 'Machine code management'}</p>
               <p className="text-xs text-muted-foreground">
-                {isEn ? 'Device identifier, auto-switch, account binding' : '修改设备标识符、切号自动换码、账户机器码绑定等功能'}
+                {isEn ? 'Device identifier, auto-switch, account binding' : 'Functions such as modifying device identifiers, automatically changing codes when switching numbers, binding account machine codes, etc.'}
               </p>
             </div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Info className="h-3 w-3" />
-              <span>{isEn ? 'Set in sidebar "Machine ID"' : '请在侧边栏「机器码」中设置'}</span>
+              <span>{isEn ? 'Set in sidebar "Machine ID"' : 'Please set it in the sidebar "Machine Code"'}</span>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 数据管理 */}
+      {/* Data management */}
       <Card className="hover-lift">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10">
               <Database className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Data Management' : '数据管理'}
+            {isEn ? 'Data Management' : 'Data management'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{isEn ? 'Export Data' : '导出数据'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Supports JSON, TXT, CSV, Clipboard' : '支持 JSON、TXT、CSV、剪贴板等多种格式'}</p>
+              <p className="font-medium">{isEn ? 'Export Data' : 'Export data'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Supports JSON, TXT, CSV, Clipboard' : 'support JSON、TXT、CSV, clipboard and other formats'}</p>
             </div>
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4 mr-2" />
-              {isEn ? 'Export' : '导出'}
+              {isEn ? 'Export' : 'Export'}
             </Button>
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t">
             <div>
-              <p className="font-medium">{isEn ? 'Import Data' : '导入数据'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Import accounts from JSON file' : '从 JSON 文件导入账号数据'}</p>
+              <p className="font-medium">{isEn ? 'Import Data' : 'Import data'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Import accounts from JSON file' : 'from JSON File import account data'}</p>
             </div>
             <Button variant="outline" size="sm" onClick={handleImport} disabled={isImporting}>
               <Upload className="h-4 w-4 mr-2" />
-              {isImporting ? (isEn ? 'Importing...' : '导入中...') : (isEn ? 'Import' : '导入')}
+              {isImporting ? (isEn ? 'Importing...' : 'Importing...') : (isEn ? 'Import' : 'import')}
             </Button>
           </div>
 
           <div className="flex items-center justify-between pt-2 border-t">
             <div>
-              <p className="font-medium text-destructive">{isEn ? 'Clear All Data' : '清除所有数据'}</p>
-              <p className="text-sm text-muted-foreground">{isEn ? 'Delete all accounts, groups and tags' : '删除所有账号、分组和标签'}</p>
+              <p className="font-medium text-destructive">{isEn ? 'Clear All Data' : 'Clear all data'}</p>
+              <p className="text-sm text-muted-foreground">{isEn ? 'Delete all accounts, groups and tags' : 'Delete all accounts, groups and labels'}</p>
             </div>
             <Button variant="destructive" size="sm" onClick={handleClearData}>
               <Trash2 className="h-4 w-4 mr-2" />
-              {isEn ? 'Clear' : '清除'}
+              {isEn ? 'Clear' : 'Clear'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* 配置同步（不含敏感凭据，便于多设备共享） */}
+      {/* Configuration synchronization (without sensitive credentials, easy to share across multiple devices) */}
       <ConfigSyncCard isEn={isEn} />
 
-      {/* 导出对话框 */}
+      {/* Export dialog */}
       <ExportDialog
         open={showExportDialog}
         onClose={() => setShowExportDialog(false)}
@@ -1170,17 +1170,17 @@ export function SettingsPage() {
 }
 
 /**
- * 配置同步卡片：把所有"非敏感"配置（代理池、Webhook、模板、限速、定时、各种 localStorage）打包导出/导入。
- * 不包含：账号 token / 私密凭据。
+ * Configure sync card: put all"non-sensitive"configuration(agent pool,Webhook, template, speed limit, timing, various localStorage) package export/Import.
+ * Not included: account number token / Private Credentials.
  */
 function ConfigSyncCard({ isEn }: { isEn: boolean }): React.ReactNode {
   const proxyPool = useAccountsStore((s) => s.proxyPool)
   const proxyPoolConfig = useAccountsStore((s) => s.proxyPoolConfig)
 
-  // 收集所有可同步的 localStorage key
+  // Collect all syncable localStorage key
   const COLLECTED_LS_KEYS = [
     'kiro-register-config',
-    'kiro-register-history',  // 可选：用户可决定要不要
+    'kiro-register-history',  // Optional: the user can decide whether to
     'kiro-register-templates',
     'kiro-register-ratelimit-enabled',
     'kiro-register-ratelimit-max',
@@ -1208,10 +1208,10 @@ function ConfigSyncCard({ isEn }: { isEn: boolean }): React.ReactNode {
       version: 1,
       type: 'kiro-account-manager-config',
       exportedAt: Date.now(),
-      // 代理池条目（不含敏感账号）
+      // Agent pool entries (excluding sensitive accounts)
       proxyPool: Object.fromEntries(proxyPool),
       proxyPoolConfig,
-      // 各种 localStorage
+      // Various localStorage
       localStorage: localData
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
@@ -1226,20 +1226,20 @@ function ConfigSyncCard({ isEn }: { isEn: boolean }): React.ReactNode {
   const handleImport = async (): Promise<void> => {
     const fileData = await window.api.importFromFile()
     if (!fileData || fileData.format !== 'json') {
-      alert(isEn ? 'Please select a JSON file' : '请选择 JSON 文件')
+      alert(isEn ? 'Please select a JSON file' : 'Please select JSON document')
       return
     }
     try {
       const payload = JSON.parse(fileData.content)
       if (payload.type !== 'kiro-account-manager-config') {
-        alert(isEn ? 'Not a valid config file' : '不是有效的配置文件')
+        alert(isEn ? 'Not a valid config file' : 'Not a valid configuration file')
         return
       }
-      if (!confirm(isEn ? 'This will overwrite proxy pool / webhooks / templates. Continue?' : '这将覆盖代理池 / Webhook / 模板等配置，确定继续？')) {
+      if (!confirm(isEn ? 'This will overwrite proxy pool / webhooks / templates. Continue?' : 'This will overwrite the proxy pool / Webhook / Template and other configurations, are you sure to continue?')) {
         return
       }
 
-      // 恢复 localStorage
+      // recover localStorage
       if (payload.localStorage && typeof payload.localStorage === 'object') {
         for (const [k, v] of Object.entries(payload.localStorage)) {
           if (COLLECTED_LS_KEYS.includes(k) && typeof v === 'string') {
@@ -1248,11 +1248,11 @@ function ConfigSyncCard({ isEn }: { isEn: boolean }): React.ReactNode {
         }
       }
 
-      // 恢复代理池（通过 store 接口）
+      // Recovery agent pool (via store interface)
       if (payload.proxyPool && typeof payload.proxyPool === 'object') {
         const store = useAccountsStore.getState()
         store.clearProxyPool()
-        // 直接通过 set 重建 Map（绕过 addProxy 的解析步骤，保留原 ID）
+        // pass directly set reconstruction Map(Bypass addProxy parsing steps, retaining the original ID）
         useAccountsStore.setState({
           proxyPool: new Map(Object.entries(payload.proxyPool as Record<string, never>)) as Parameters<typeof useAccountsStore.setState>[0] extends infer T ? (T extends { proxyPool: infer P } ? P : never) : never
         } as Parameters<typeof useAccountsStore.setState>[0])
@@ -1263,10 +1263,10 @@ function ConfigSyncCard({ isEn }: { isEn: boolean }): React.ReactNode {
 
       alert(isEn
         ? 'Config imported. Please restart the app to fully apply.'
-        : '配置已导入。建议重启应用以完全生效。'
+        : 'Configuration has been imported. It is recommended to restart the application to take full effect.'
       )
     } catch (e) {
-      alert((isEn ? 'Import failed: ' : '导入失败: ') + (e instanceof Error ? e.message : String(e)))
+      alert((isEn ? 'Import failed: ' : 'Import failed: ') + (e instanceof Error ? e.message : String(e)))
     }
   }
 
@@ -1277,24 +1277,24 @@ function ConfigSyncCard({ isEn }: { isEn: boolean }): React.ReactNode {
           <div className="p-2 rounded-lg bg-primary/10">
             <Repeat className="h-4 w-4 text-primary" />
           </div>
-          {isEn ? 'Configuration Sync' : '配置同步'}
+          {isEn ? 'Configuration Sync' : 'Configuration synchronization'}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           {isEn
             ? 'Export all non-sensitive settings (proxy pool, webhooks, templates, rate limits, UI preferences) to a file, for backup or multi-device sync. Does NOT include account tokens or credentials.'
-            : '导出所有"非敏感"配置（代理池、Webhook、注册模板、限速、UI 偏好等）到文件，便于备份或多设备同步。不含账号 Token 与凭据。'
+            : 'Export all"non-sensitive"configuration(agent pool,Webhook, registration template, speed limit,UI preferences, etc.) to files for easy backup or multi-device synchronization. Does not include account number Token with credentials.'
           }
         </p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
-            {isEn ? 'Export Config' : '导出配置'}
+            {isEn ? 'Export Config' : 'Export configuration'}
           </Button>
           <Button variant="outline" size="sm" onClick={handleImport}>
             <Upload className="h-4 w-4 mr-2" />
-            {isEn ? 'Import Config' : '导入配置'}
+            {isEn ? 'Import Config' : 'Import configuration'}
           </Button>
         </div>
       </CardContent>

@@ -28,9 +28,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// 解析 ARGB 颜色转换为 CSS rgba
+// parse ARGB Color converted to CSS rgba
 function toRgba(argbColor: string): string {
-  // 支持格式: #AARRGGBB 或 #RRGGBB
+  // Supported formats: #AARRGGBB or #RRGGBB
   let alpha = 255
   let rgb = argbColor
   if (argbColor.length === 9 && argbColor.startsWith('#')) {
@@ -44,19 +44,19 @@ function toRgba(argbColor: string): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha / 255})`
 }
 
-// 生成标签光环样式
+// Generate label halo style
 function generateGlowStyle(tagColors: string[]): React.CSSProperties {
   if (tagColors.length === 0) return {}
   
   if (tagColors.length === 1) {
     const color = toRgba(tagColors[0])
-    const colorTransparent = color.replace('1)', '0.15)') // 降低阴影透明度
+    const colorTransparent = color.replace('1)', '0.15)') // Reduce shadow transparency
     return {
       boxShadow: `0 0 0 1px ${color}, 0 4px 12px -2px ${colorTransparent}`
     }
   }
   
-  // 多个标签时，使用渐变边框效果
+  // When using multiple labels, use the gradient border effect
   const gradientColors = tagColors.map((c, i) => {
     const percent = (i / tagColors.length) * 100
     const nextPercent = ((i + 1) / tagColors.length) * 100
@@ -82,22 +82,22 @@ interface AccountCardProps {
 
 const getSubscriptionColor = (type: string, title?: string): string => {
   const text = (title || type).toUpperCase()
-  // KIRO PRO+ / PRO_PLUS - 紫色
+  // KIRO PRO+ / PRO_PLUS - Purple
   if (text.includes('PRO+') || text.includes('PRO_PLUS') || text.includes('PROPLUS')) return 'bg-purple-500'
-  // KIRO POWER - 金色
+  // KIRO POWER - gold
   if (text.includes('POWER')) return 'bg-amber-500'
-  // KIRO PRO - 蓝色
+  // KIRO PRO - blue
   if (text.includes('PRO')) return 'bg-blue-500'
-  // KIRO FREE - 灰色
+  // KIRO FREE - grey
   return 'bg-gray-500'
 }
 
 const StatusLabelsZh: Record<string, string> = {
-  active: '正常',
-  expired: '已过期',
-  error: '错误',
-  refreshing: '刷新中',
-  unknown: '未知'
+  active: 'normal',
+  expired: 'Expired',
+  error: 'mistake',
+  refreshing: 'Refreshing',
+  unknown: 'unknown'
 }
 
 const StatusLabelsEn: Record<string, string> = {
@@ -108,7 +108,7 @@ const StatusLabelsEn: Record<string, string> = {
   unknown: 'Unknown'
 }
 
-// 获取账户显示名称：昵称优先，无则邮箱，无邮箱则 userId
+// Get the account display name: nickname first, if not, then email address, if no email address, then userId
 function getDisplayName(account: Account): string {
   if (account.nickname) return account.nickname
   if (account.email) return account.email
@@ -116,29 +116,29 @@ function getDisplayName(account: Account): string {
   return 'Unknown'
 }
 
-// 格式化 Token 到期时间
+// format Token Expiration time
 function formatTokenExpiry(expiresAt: number, isEn: boolean): string {
   const now = Date.now()
   const diff = expiresAt - now
   
-  if (diff <= 0) return isEn ? 'Expired' : '已过期'
+  if (diff <= 0) return isEn ? 'Expired' : 'Expired'
   
   const minutes = Math.floor(diff / (60 * 1000))
   const hours = Math.floor(diff / (60 * 60 * 1000))
   
   if (minutes < 60) {
-    return isEn ? `${minutes}m` : `${minutes} 分钟`
+    return isEn ? `${minutes}m` : `${minutes} minute`
   } else if (hours < 24) {
     const remainingMinutes = minutes % 60
     return isEn 
       ? (remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`)
-      : (remainingMinutes > 0 ? `${hours} 小时 ${remainingMinutes} 分` : `${hours} 小时`)
+      : (remainingMinutes > 0 ? `${hours} Hour ${remainingMinutes} point` : `${hours} Hour`)
   } else {
     const days = Math.floor(hours / 24)
     const remainingHours = hours % 24
     return isEn
       ? (remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`)
-      : (remainingHours > 0 ? `${days} 天 ${remainingHours} 小时` : `${days} 天`)
+      : (remainingHours > 0 ? `${days} sky ${remainingHours} Hour` : `${days} sky`)
   }
 }
 
@@ -166,17 +166,17 @@ export const AccountCard = memo(function AccountCard({
     unbindAccountFromProxy
   } = useAccountsStore()
 
-  // 该账号绑定的代理（如有）
+  // The agent bound to the account (if any)
   const boundProxy = useMemo(() => {
     const proxyId = accountProxyBindings[account.id]
     if (!proxyId) return null
     return proxyPool.get(proxyId) || null
   }, [accountProxyBindings, account.id, proxyPool])
 
-  // 解除封禁标记中（loading 状态）
+  // Unblocking mark (loading state)
   const [isClearingSuspended, setIsClearingSuspended] = useState(false)
 
-  // 手动解除封禁标记：调用后端 IPC → 清反代池 suspended + 清前端 lastError
+  // Manually unblock the block mark: call the backend IPC → Qing anti-generation pool suspended + Clean the front end lastError
   const handleClearSuspended = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isClearingSuspended) return
@@ -184,7 +184,7 @@ export const AccountCard = memo(function AccountCard({
     try {
       const result = await window.api.proxyClearAccountSuspended(account.id)
       if (result.success) {
-        // 前端 store 同步：status → active, lastError → undefined
+        // front end store synchronous:status → active, lastError → undefined
         updateAccountStatus(account.id, 'active', undefined)
         setShowBanDialog(false)
       } else {
@@ -200,7 +200,7 @@ export const AccountCard = memo(function AccountCard({
   const { t } = useTranslation()
   const isEn = t('common.unknown') === 'Unknown'
 
-  // 格式化使用量数值
+  // Format usage values
   const formatUsage = (value: number): string => {
     if (usagePrecision) {
       return value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -212,13 +212,13 @@ export const AccountCard = memo(function AccountCard({
     const { credentials } = account
     const { switchTarget } = useAccountsStore.getState()
     
-    // 社交登录只需要 refreshToken，IdC 登录需要 clientId 和 clientSecret
+    // Social login only requires refreshToken，IdC Login required clientId and clientSecret
     if (!credentials.refreshToken) {
-      alert(isEn ? 'Incomplete credentials, cannot switch' : '账号凭证不完整，无法切换')
+      alert(isEn ? 'Incomplete credentials, cannot switch' : 'The account credentials are incomplete and cannot be switched.')
       return
     }
     if (credentials.authMethod !== 'social' && (!credentials.clientId || !credentials.clientSecret)) {
-      alert(isEn ? 'Incomplete credentials, cannot switch' : '账号凭证不完整，无法切换')
+      alert(isEn ? 'Incomplete credentials, cannot switch' : 'The account credentials are incomplete and cannot be switched.')
       return
     }
 
@@ -247,14 +247,14 @@ export const AccountCard = memo(function AccountCard({
     let success = true
     let errorMsg = ''
 
-    // 根据 switchTarget 设置决定切换目标
+    // according to switchTarget Settings determine switching target
     if (switchTarget === 'ide' || switchTarget === 'both') {
       const result = await window.api.switchAccount(idePayload)
       if (!result.success) {
         success = false
         errorMsg = result.error || ''
       } else if (result.refreshedCredentials) {
-        // 同步 main 进程 refresh 后的最新 credentials 到 store，避免反代 store 留下已作废的 refreshToken
+        // synchronous main process refresh Latest after credentials arrive store, to avoid counter-generation store Leave the voided refreshToken
         const rc = result.refreshedCredentials
         useAccountsStore.setState((state) => {
           const accounts = new Map(state.accounts)
@@ -283,27 +283,27 @@ export const AccountCard = memo(function AccountCard({
     if (success) {
       setActiveAccount(account.id)
     } else {
-      alert(isEn ? `Switch failed: ${errorMsg}` : `切换失败: ${errorMsg}`)
+      alert(isEn ? `Switch failed: ${errorMsg}` : `Switch failed: ${errorMsg}`)
     }
   }
 
   const handleRefresh = async (): Promise<void> => {
-    // 获取最新的使用量数据
+    // Get the latest usage data
     await checkAccountStatus(account.id)
   }
 
   const handleLogout = async (): Promise<void> => {
-    if (!confirm(isEn ? 'This will clear local SSO cache and logout from Kiro. Continue?' : '这将清除本地 SSO 缓存并退出 Kiro 登录，是否继续？')) {
+    if (!confirm(isEn ? 'This will clear local SSO cache and logout from Kiro. Continue?' : 'This will clear the local SSO Cache and exit Kiro Log in, continue?')) {
       return
     }
     
     const result = await window.api.logoutAccount()
     if (result.success) {
-      // 取消当前账号的激活状态
+      // Cancel the activation status of the current account
       setActiveAccount(null)
-      alert(isEn ? `Logged out successfully, cleared ${result.deletedCount} cache files` : `退出成功，已清除 ${result.deletedCount} 个缓存文件`)
+      alert(isEn ? `Logged out successfully, cleared ${result.deletedCount} cache files` : `Exit successfully, cleared ${result.deletedCount} cache files`)
     } else {
-      alert(isEn ? `Logout failed: ${result.error}` : `退出失败: ${result.error}`)
+      alert(isEn ? `Logout failed: ${result.error}` : `Exit failed: ${result.error}`)
     }
   }
 
@@ -318,7 +318,7 @@ export const AccountCard = memo(function AccountCard({
   }
 
   const handleDelete = (): void => {
-    if (confirm(isEn ? `Delete account ${getDisplayName(account)}?` : `确定要删除账号 ${getDisplayName(account)} 吗？`)) {
+    if (confirm(isEn ? `Delete account ${getDisplayName(account)}?` : `Confirm to delete account ${getDisplayName(account)} ?`)) {
       removeAccount(account.id)
     }
   }
@@ -342,10 +342,10 @@ export const AccountCard = memo(function AccountCard({
     .map((id) => tags.get(id))
     .filter((t): t is AccountTag => t !== undefined)
 
-  // 获取分组信息
+  // Get group information
   const accountGroup = account.groupId ? groups.get(account.groupId) : undefined
 
-  // 生成光环样式
+  // Generate halo style
   const glowStyle = useMemo(() => {
     const tagColors = accountTags.map(t => t.color)
     return generateGlowStyle(tagColors)
@@ -354,11 +354,11 @@ export const AccountCard = memo(function AccountCard({
   const isExpiringSoon = account.subscription.daysRemaining !== undefined &&
                          account.subscription.daysRemaining <= 7
 
-  // percentUsed 是 0~1 的小数（如 0.85 = 85%），超 1 表示 >100%
+  // percentUsed yes 0~1 decimal (such as 0.85 = 85%),overtake 1 express >100%
   const isHighUsage = account.usage.percentUsed > 0.8
   const isCritical = account.usage.percentUsed > 1
 
-  // 检测账号是否被封禁/暂停（多种错误格式）
+  // Check if account is banned/Pause (various error formats)
   const lowerError = account.lastError?.toLowerCase()
   const isUnauthorized = !!lowerError && (
     lowerError.includes('accountsuspendedexception') ||
@@ -366,15 +366,15 @@ export const AccountCard = memo(function AccountCard({
     lowerError.includes('temporarily_suspended') ||
     lowerError.includes('temporarily suspended') ||
     (lowerError.includes('user id is') && lowerError.includes('suspended')) ||
-    lowerError.includes('账户已封禁') ||
-    lowerError.includes('已封禁') ||
+    lowerError.includes('Account has been banned') ||
+    lowerError.includes('Banned') ||
     /\b423\b/.test(lowerError)
   )
   
-  // 封禁详情弹窗状态
+  // Banning details popup status
   const [showBanDialog, setShowBanDialog] = useState(false)
   
-  // 订阅管理弹窗状态
+  // Subscription management pop-up status
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false)
   const [subscriptionLoading, setSubscriptionLoading] = useState(false)
   const [subscriptionPlans, setSubscriptionPlans] = useState<Array<{
@@ -386,25 +386,25 @@ export const AccountCard = memo(function AccountCard({
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
   const [paymentLoading, setPaymentLoading] = useState(false)
 
-  // 是否为首次用户（需要选择订阅类型）
+  // Whether you are a first-time user (need to select subscription type)
   const [isFirstTimeUser, setIsFirstTimeUser] = useState(false)
-  // 订阅错误信息
+  // Subscribe to error messages
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
-  // 订阅成功提示
+  // Subscription success prompt
   const [subscriptionSuccess, setSubscriptionSuccess] = useState<string | null>(null)
 
-  // 点击订阅标签打开订阅管理
+  // Click the Subscriptions tab to open subscription management
   const handleSubscriptionClick = async (e: React.MouseEvent): Promise<void> => {
     e.stopPropagation()
     if (subscriptionLoading || !account.credentials?.accessToken) return
     
     setSubscriptionLoading(true)
     try {
-      // 统一先获取可用订阅列表
+      // Get the list of available subscriptions first
       const result = await window.api.accountGetSubscriptions(account.credentials.accessToken, account.credentials?.region, account.profileArn, account.machineId, account.credentials?.provider || account.idp, account.credentials?.authMethod, account.id)
       if (result.success && result.plans.length > 0) {
         setSubscriptionPlans(result.plans)
-        // 检查是否是首次用户（当前订阅类型为 FREE 或无订阅）
+        // Check if this is a first time user (current subscription type is FREE or no subscription)
         const currentType = account.subscription.type?.toUpperCase() || ''
         const isFirstTime = currentType === '' || currentType.includes('FREE')
         setIsFirstTimeUser(isFirstTime)
@@ -419,7 +419,7 @@ export const AccountCard = memo(function AccountCard({
     }
   }
 
-  // 选择订阅计划并获取支付链接
+  // Choose a subscription plan and get payment link
   const handleSelectPlan = async (planName: string): Promise<void> => {
     if (paymentLoading || !account.credentials?.accessToken) return
     
@@ -429,11 +429,11 @@ export const AccountCard = memo(function AccountCard({
     try {
       const result = await window.api.accountGetSubscriptionUrl(account.credentials.accessToken, planName, account.credentials?.region, account.profileArn, account.machineId, account.credentials?.provider || account.idp, account.credentials?.authMethod, account.id)
       if (result.success && result.url) {
-        // 自动复制链接到剪贴板
+        // Automatically copy link to clipboard
         await navigator.clipboard.writeText(result.url)
-        // 显示复制成功提示
-        setSubscriptionSuccess(isEn ? 'Link copied to clipboard!' : '链接已复制到剪贴板！')
-        // 短暂显示后关闭弹窗并打开链接
+        // Show copy success prompt
+        setSubscriptionSuccess(isEn ? 'Link copied to clipboard!' : 'Link copied to clipboard!')
+        // After a short display, close the pop-up window and open the link
         const urlToOpen = result.url
         setTimeout(async () => {
           setShowSubscriptionDialog(false)
@@ -441,12 +441,12 @@ export const AccountCard = memo(function AccountCard({
           await window.api.openSubscriptionWindow(urlToOpen)
         }, 800)
       } else {
-        const errorMsg = result.error || (isEn ? 'Failed to get payment URL' : '获取支付链接失败')
+        const errorMsg = result.error || (isEn ? 'Failed to get payment URL' : 'Failed to obtain payment link')
         setSubscriptionError(errorMsg)
         console.error('[AccountCard] Failed to get payment URL:', result.error)
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : (isEn ? 'Unknown error' : '未知错误')
+      const errorMsg = error instanceof Error ? error.message : (isEn ? 'Unknown error' : 'unknown error')
       setSubscriptionError(errorMsg)
       console.error('[AccountCard] Payment URL error:', error)
     } finally {
@@ -455,7 +455,7 @@ export const AccountCard = memo(function AccountCard({
     }
   }
 
-  // 获取订阅管理链接（已有订阅用户）
+  // Get subscription management link (already subscribed user)
   const handleManageSubscription = async (): Promise<void> => {
     if (paymentLoading || !account.credentials?.accessToken) return
     
@@ -467,13 +467,13 @@ export const AccountCard = memo(function AccountCard({
         setShowSubscriptionDialog(false)
         await window.api.openSubscriptionWindow(result.url)
       } else {
-        // 显示错误信息
-        const errorMsg = result.error || (isEn ? 'Failed to get management URL' : '获取管理链接失败')
+        // Show error message
+        const errorMsg = result.error || (isEn ? 'Failed to get management URL' : 'Failed to get management link')
         setSubscriptionError(errorMsg)
         console.error('[AccountCard] Failed to get management URL:', result.error)
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : (isEn ? 'Unknown error' : '未知错误')
+      const errorMsg = error instanceof Error ? error.message : (isEn ? 'Unknown error' : 'unknown error')
       setSubscriptionError(errorMsg)
       console.error('[AccountCard] Management URL error:', error)
     } finally {
@@ -481,7 +481,7 @@ export const AccountCard = memo(function AccountCard({
     }
   }
 
-  // 封禁状态样式（红色）- 优先级最高
+  // Ban status style (red)- highest priority
   const unauthorizedStyle: React.CSSProperties = isUnauthorized ? {
     backgroundColor: 'var(--card-unauthorized-bg)',
     borderColor: 'var(--card-unauthorized-border)',
@@ -492,22 +492,22 @@ export const AccountCard = memo(function AccountCard({
     `
   } : {}
 
-  // 当前使用的高级感样式 - 流光边框时仅保留外发光
+  // Currently used high-end style - Only the outer glow is retained when the streamer border is used
   const activeGlowStyle: React.CSSProperties = account.isActive ? {
     boxShadow: '0 8px 24px -4px var(--card-active-shadow)'
   } : {}
 
-  // 最终样式合并逻辑
+  // Final style merge logic
   let finalStyle: React.CSSProperties = {}
   
   if (account.isActive) {
-    // 当前使用（包括封禁+当前使用）：流光边框 + 外发光，封禁通过角标显示
+    // Current use (including bans)+Currently used): Streamer Border + External glow, bans are displayed through corner markers
     finalStyle = { ...glowStyle, ...activeGlowStyle }
   } else if (isUnauthorized) {
-    // 仅封禁状态：显示完整封禁样式
+    // Ban status only: Show full ban style
     finalStyle = unauthorizedStyle
   } else {
-    // 普通状态：只显示标签光环
+    // Normal state: only display label halo
     finalStyle = glowStyle
   }
 
@@ -515,25 +515,25 @@ export const AccountCard = memo(function AccountCard({
     <Card
       className={cn(
         'relative cursor-pointer h-full flex flex-col overflow-hidden bg-solid-card',
-        // 默认 hover 浮起 + 阴影增强（除 active/封禁状态外，状态自带样式）
+        // default hover float + Shadow enhancement (except active/Except for the banned state, the state has its own style)
         !account.isActive && !isUnauthorized && 'hover-lift',
-        // 当前使用：流光边框，去掉默认边框
+        // Current use: streamer border, remove default border
         account.isActive && 'border-transparent active-glow-border',
-        // 封禁：红色边框
+        // Banned: red border
         isUnauthorized && 'border-destructive/50',
-        // 有标签光环：透明边框给光环让位
+        // There is a halo of tags: transparent borders give way to halos
         accountTags.length > 0 && !account.isActive && !isUnauthorized && 'border-transparent'
       )}
       style={finalStyle}
       onClick={() => toggleSelection(account.id)}
     >
-      {/* 选中态独立覆盖层 — 避免被标签光环的 inline style (box-shadow/background) 覆盖
-          z-10 在卡片内容上方，pointer-events-none 让交互穿透到 Card */}
+      {/* Selected independent overlay — Avoid being haloed by labels inline style (box-shadow/background) cover
+          z-10 Above the card content,pointer-events-none Let the interaction penetrate Card */}
       {isSelected && !account.isActive && !isUnauthorized && (
         <div className="absolute inset-0 pointer-events-none rounded-[inherit] ring-2 ring-inset ring-primary/60 bg-primary/[0.08] z-10" />
       )}
 
-      {/* 封禁角标 - 当前使用时显示在流光边框上 */}
+      {/* ban corner mark - Shown on streamer border when currently in use */}
       {account.isActive && isUnauthorized && (
         <div className="banned-badge" title={t('accounts.card.banned')} />
       )}
@@ -563,7 +563,7 @@ export const AccountCard = memo(function AccountCard({
                      "font-semibold text-sm truncate cursor-pointer transition-colors",
                      emailCopied ? "text-success" : "text-foreground/90 hover:text-primary"
                    )}
-                   title={`${getDisplayName(account)} (${isEn ? 'Click to copy' : '点击复制'})`}
+                   title={`${getDisplayName(account)} (${isEn ? 'Click to copy' : 'Click to copy'})`}
                    onClick={(e) => {
                      e.stopPropagation()
                      const text = account.email || account.userId || ''
@@ -573,7 +573,7 @@ export const AccountCard = memo(function AccountCard({
                        setTimeout(() => setEmailCopied(false), 1500)
                      }
                    }}
-                 >{emailCopied ? (isEn ? 'Copied!' : '已复制!') : (account.email ? maskEmail(account.email) : getDisplayName(account))}</h3>
+                 >{emailCopied ? (isEn ? 'Copied!' : 'Copied!') : (account.email ? maskEmail(account.email) : getDisplayName(account))}</h3>
                  {/* Status Badge */}
                  <div className={cn(
                     "text-[10px] font-medium px-2 py-0.5 rounded-full flex items-center gap-1 flex-shrink-0",
@@ -591,7 +591,7 @@ export const AccountCard = memo(function AccountCard({
                         className="cursor-pointer hover:underline" 
                         onClick={(e) => { e.stopPropagation(); setShowBanDialog(true); }}
                       >
-                        {isEn ? 'Banned' : '已封禁'}
+                        {isEn ? 'Banned' : 'Banned'}
                       </span>
                     ) : (isEn ? StatusLabelsEn : StatusLabelsZh)[account.status]}
                  </div>
@@ -619,14 +619,14 @@ export const AccountCard = memo(function AccountCard({
                 subscriptionLoading && 'opacity-60 cursor-wait'
               )}
               onClick={handleSubscriptionClick}
-              title={isEn ? 'Click to manage subscription' : '点击管理订阅'}
+              title={isEn ? 'Click to manage subscription' : 'Click Manage Subscriptions'}
             >
-                {subscriptionLoading ? (isEn ? 'Loading...' : '加载中...') : (account.subscription.title || account.subscription.type)}
+                {subscriptionLoading ? (isEn ? 'Loading...' : 'loading...') : (account.subscription.title || account.subscription.type)}
             </Badge>
             <Badge variant="outline" className="text-[10px] h-5 px-2 text-muted-foreground font-normal border-muted-foreground/30 bg-muted/30">
                 {account.idp}
             </Badge>
-            {/* 代理绑定徽章：可点击解绑 */}
+            {/* Agent binding badge: click to unbind */}
             {boundProxy && (
               <Badge
                 variant="outline"
@@ -636,12 +636,12 @@ export const AccountCard = memo(function AccountCard({
                     ? 'border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20'
                     : 'border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/10'
                 )}
-                title={`${isEn ? 'Bound proxy:' : '绑定代理：'} ${boundProxy.host}:${boundProxy.port}${boundProxy.label ? ` (${boundProxy.label})` : ''}\n${isEn ? 'Click to unbind' : '点击解绑'}`}
+                title={`${isEn ? 'Bound proxy:' : 'Bind proxy:'} ${boundProxy.host}:${boundProxy.port}${boundProxy.label ? ` (${boundProxy.label})` : ''}\n${isEn ? 'Click to unbind' : 'Click to unbind'}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   if (confirm(isEn
                     ? `Unbind ${account.email} from ${boundProxy.host}:${boundProxy.port}?`
-                    : `解绑 ${account.email} 与 ${boundProxy.host}:${boundProxy.port}？`
+                    : `unbundle ${account.email} and ${boundProxy.host}:${boundProxy.port}？`
                   )) {
                     unbindAccountFromProxy(account.id)
                   }
@@ -654,7 +654,7 @@ export const AccountCard = memo(function AccountCard({
             )}
             {account.isActive && (
               <Badge variant="default" className="ml-auto h-5 bg-success text-white border-0 hover:bg-success/90">
-                {isEn ? 'Active' : '当前使用'}
+                {isEn ? 'Active' : 'currently in use'}
               </Badge>
             )}
         </div>
@@ -662,7 +662,7 @@ export const AccountCard = memo(function AccountCard({
         {/* Usage Section */}
         <div className="bg-muted/30 p-3 rounded-lg space-y-2 border border-border/50">
             <div className="flex justify-between items-end text-xs">
-                <span className="text-muted-foreground font-medium">{isEn ? 'Usage' : '使用量'}</span>
+                <span className="text-muted-foreground font-medium">{isEn ? 'Usage' : 'Usage'}</span>
                 <span className={cn(
                   "font-mono font-medium tabular-nums",
                   isCritical ? "text-destructive" : isHighUsage ? "text-warning" : "text-foreground"
@@ -670,16 +670,16 @@ export const AccountCard = memo(function AccountCard({
                    {(account.usage.percentUsed * 100).toFixed(usagePrecision ? 2 : 0)}%
                    {isCritical && (
                      <span className="ml-1.5 text-[10px] text-red-600 font-semibold">
-                       (+{((account.usage.percentUsed - 1) * 100).toFixed(usagePrecision ? 2 : 0)}% {isEn ? 'over' : '超'})
+                       (+{((account.usage.percentUsed - 1) * 100).toFixed(usagePrecision ? 2 : 0)}% {isEn ? 'over' : 'overtake'})
                      </span>
                    )}
                 </span>
             </div>
-            {/* 自定义双层进度条：超额时分段显示套餐内（amber）+ 超额（red） */}
+            {/* Customized double-layer progress bar: Display the package in segments when overage (amber）+ excess (red） */}
             {(() => {
               const percent = account.usage.percentUsed
               if (isCritical) {
-                // 套餐部分占总进度的比例 = 1 / percent
+                // The proportion of the package part to the total progress = 1 / percent
                 const planRatioPct = (1 / percent) * 100
                 return (
                   <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
@@ -723,7 +723,7 @@ export const AccountCard = memo(function AccountCard({
                       try {
                          return (typeof d === 'string' ? d : new Date(d as Date).toISOString()).split('T')[0]
                       } catch { return 'Unknown' }
-                    })()} {isEn ? 'reset' : '重置'}
+                    })()} {isEn ? 'reset' : 'reset'}
                   </span>
                 )}
             </div>
@@ -731,15 +731,15 @@ export const AccountCard = memo(function AccountCard({
 
         {/* Detailed Quotas - Compact list */}
         <div className="space-y-1.5 min-h-0 overflow-y-auto pr-1 text-[10px] max-h-24">
-           {/* 基础额度 */}
+           {/* Basic amount */}
            {account.usage.baseLimit !== undefined && account.usage.baseLimit > 0 && (
              <div className="flex items-center gap-2">
                <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-               <span className="text-muted-foreground">{isEn ? 'Base:' : '基础:'}</span>
+               <span className="text-muted-foreground">{isEn ? 'Base:' : 'Base:'}</span>
                <span className="font-medium">{formatUsage(account.usage.baseCurrent ?? 0)}/{formatUsage(account.usage.baseLimit)}</span>
                {account.usage.nextResetDate && (
                  <span className="text-muted-foreground/70 ml-auto">
-                   {isEn ? 'to' : '至'} {(() => {
+                   {isEn ? 'to' : 'to'} {(() => {
                       const d = account.usage.nextResetDate as unknown
                       try { return (typeof d === 'string' ? d : new Date(d as Date).toISOString()).split('T')[0] } catch { return '' }
                    })()}
@@ -747,15 +747,15 @@ export const AccountCard = memo(function AccountCard({
                )}
              </div>
            )}
-           {/* 试用额度 */}
+           {/* Trial amount */}
            {account.usage.freeTrialLimit !== undefined && account.usage.freeTrialLimit > 0 && (
              <div className="flex items-center gap-2">
                <div className="w-1.5 h-1.5 rounded-full bg-warning flex-shrink-0" />
-               <span className="text-muted-foreground">{isEn ? 'Trial:' : '试用:'}</span>
+               <span className="text-muted-foreground">{isEn ? 'Trial:' : 'try out:'}</span>
                <span className="font-medium">{formatUsage(account.usage.freeTrialCurrent ?? 0)}/{formatUsage(account.usage.freeTrialLimit)}</span>
                {account.usage.freeTrialExpiry && (
                  <span className="text-muted-foreground/70 ml-auto">
-                   {isEn ? 'to' : '至'} {(() => {
+                   {isEn ? 'to' : 'to'} {(() => {
                       const d = account.usage.freeTrialExpiry as unknown
                       try { return (typeof d === 'string' ? d : new Date(d as Date).toISOString()).split('T')[0] } catch { return '' }
                    })()}
@@ -763,7 +763,7 @@ export const AccountCard = memo(function AccountCard({
                )}
              </div>
            )}
-           {/* 奖励额度 */}
+           {/* Reward amount */}
            {account.usage.bonuses?.map((bonus) => (
              <div key={bonus.code} className="flex items-center gap-2">
                <div className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0" />
@@ -771,7 +771,7 @@ export const AccountCard = memo(function AccountCard({
                <span className="font-medium">{formatUsage(bonus.current)}/{formatUsage(bonus.limit)}</span>
                {bonus.expiresAt && (
                  <span className="text-muted-foreground/70 ml-auto">
-                   {isEn ? 'to' : '至'} {(() => {
+                   {isEn ? 'to' : 'to'} {(() => {
                       const d = bonus.expiresAt as unknown
                       try { return (typeof d === 'string' ? d : new Date(d as Date).toISOString()).split('T')[0] } catch { return '' }
                    })()}
@@ -808,10 +808,10 @@ export const AccountCard = memo(function AccountCard({
                 <div className="flex items-center gap-1">
                    <Clock className="h-3 w-3" />
                    <span className={isExpiringSoon ? "text-warning font-medium" : ""}>
-                      {account.subscription.daysRemaining !== undefined ? (isEn ? `${account.subscription.daysRemaining}d left` : `剩 ${account.subscription.daysRemaining} 天`) : '-'}
+                      {account.subscription.daysRemaining !== undefined ? (isEn ? `${account.subscription.daysRemaining}d left` : `left ${account.subscription.daysRemaining} sky`) : '-'}
                    </span>
                 </div>
-                <div className="flex items-center gap-1" title={account.credentials.expiresAt ? new Date(account.credentials.expiresAt).toLocaleString(isEn ? 'en-US' : 'zh-CN') : (isEn ? 'Unknown' : '未知')}>
+                <div className="flex items-center gap-1" title={account.credentials.expiresAt ? new Date(account.credentials.expiresAt).toLocaleString(isEn ? 'en-US' : 'zh-CN') : (isEn ? 'Unknown' : 'unknown')}>
                    <KeyRound className="h-3 w-3" />
                    <span className={account.credentials.expiresAt && account.credentials.expiresAt - Date.now() < 5 * 60 * 1000 ? "text-red-500 font-medium" : ""}>
                       Token: {account.credentials.expiresAt ? formatTokenExpiry(account.credentials.expiresAt, isEn) : '-'}
@@ -827,7 +827,7 @@ export const AccountCard = memo(function AccountCard({
                    variant="ghost"
                    className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors"
                    onClick={(e) => { e.stopPropagation(); handleLogout() }}
-                   title={isEn ? 'Logout (clear SSO cache)' : '退出登录（清除 SSO 缓存）'}
+                   title={isEn ? 'Logout (clear SSO cache)' : 'Log out (clear SSO cache)'}
                  >
                    <LogOut className="h-3.5 w-3.5" />
                  </Button>
@@ -837,32 +837,32 @@ export const AccountCard = memo(function AccountCard({
                    variant="ghost"
                    className="h-7 w-7 hover:bg-primary/10 hover:text-primary transition-colors"
                    onClick={(e) => { e.stopPropagation(); handleSwitch() }}
-                   title={isEn ? 'Switch to this account' : '切换到此账号'}
+                   title={isEn ? 'Switch to this account' : 'Switch to this account'}
                  >
                    <Power className="h-3.5 w-3.5" />
                  </Button>
                )}
                
-               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); handleRefresh() }} disabled={account.status === 'refreshing'} title={isEn ? 'Check account info' : '检查账户信息（用量、订阅、封禁状态）'}>
+               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); handleRefresh() }} disabled={account.status === 'refreshing'} title={isEn ? 'Check account info' : 'Check account information (usage, subscriptions, ban status)'}>
                   <RefreshCw className={cn("h-3.5 w-3.5", account.status === 'refreshing' && "animate-spin")} />
                </Button>
-               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); handleRefreshToken() }} disabled={isRefreshingToken} title={isEn ? 'Refresh Token' : '刷新 Token（仅刷新访问令牌）'}>
+               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); handleRefreshToken() }} disabled={isRefreshingToken} title={isEn ? 'Refresh Token' : 'refresh Token(Only refresh access token)'}>
                   <KeyRound className={cn("h-3.5 w-3.5", isRefreshingToken && "animate-pulse")} />
                </Button>
                
-               <Button size="icon" variant="ghost" className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", copied && "text-success")} onClick={(e) => { e.stopPropagation(); handleCopyCredentials() }} title={isEn ? 'Copy credentials' : '复制凭证'}>
+               <Button size="icon" variant="ghost" className={cn("h-7 w-7 text-muted-foreground hover:text-foreground", copied && "text-success")} onClick={(e) => { e.stopPropagation(); handleCopyCredentials() }} title={isEn ? 'Copy credentials' : 'Copy credentials'}>
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                </Button>
 
-               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); onShowDetail() }} title={isEn ? 'Details' : '详情'}>
+               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); onShowDetail() }} title={isEn ? 'Details' : 'Details'}>
                   <Info className="h-3.5 w-3.5" />
                </Button>
                
-               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); onEdit() }} title={isEn ? 'Edit' : '编辑'}>
+               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={(e) => { e.stopPropagation(); onEdit() }} title={isEn ? 'Edit' : 'edit'}>
                   <Edit className="h-3.5 w-3.5" />
                </Button>
                
-               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive transition-colors" onClick={(e) => { e.stopPropagation(); handleDelete() }} title={isEn ? 'Delete' : '删除'}>
+               <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-destructive transition-colors" onClick={(e) => { e.stopPropagation(); handleDelete() }} title={isEn ? 'Delete' : 'delete'}>
                   <Trash2 className="h-3.5 w-3.5" />
                </Button>
             </div>
@@ -877,7 +877,7 @@ export const AccountCard = memo(function AccountCard({
         )}
       </CardContent>
 
-      {/* 封禁详情弹窗 */}
+      {/* Ban details popup */}
       {showBanDialog && isUnauthorized && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowBanDialog(false)} />
@@ -885,7 +885,7 @@ export const AccountCard = memo(function AccountCard({
             <div className="p-4 border-b flex items-center justify-between bg-red-50 dark:bg-red-900/20">
               <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
                 <AlertCircle className="h-5 w-5" />
-                <span className="font-bold">{isEn ? 'Account Suspended' : '账户已封禁'}</span>
+                <span className="font-bold">{isEn ? 'Account Suspended' : 'Account has been banned'}</span>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-red-500 hover:text-white transition-colors" onClick={() => setShowBanDialog(false)}>
                 <X className="h-4 w-4" />
@@ -893,11 +893,11 @@ export const AccountCard = memo(function AccountCard({
             </div>
             <div className="p-4 space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">{isEn ? 'Account' : '账户'}</label>
+                <label className="text-xs font-medium text-muted-foreground">{isEn ? 'Account' : 'Account'}</label>
                 <div className="text-sm font-medium">{getDisplayName(account)}</div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">{isEn ? 'Error Details' : '错误详情'}</label>
+                <label className="text-xs font-medium text-muted-foreground">{isEn ? 'Error Details' : 'Error details'}</label>
                 <div className="text-xs font-mono bg-muted/50 p-3 rounded-lg border break-all whitespace-pre-wrap max-h-[200px] overflow-y-auto">
                   {account.lastError}
                 </div>
@@ -911,7 +911,7 @@ export const AccountCard = memo(function AccountCard({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <ExternalLink className="h-3 w-3" />
-                  {isEn ? 'Contact Support' : '联系支持'}
+                  {isEn ? 'Contact Support' : 'Contact support'}
                 </a>
                 <div className="flex items-center gap-2">
                   <Button
@@ -919,17 +919,17 @@ export const AccountCard = memo(function AccountCard({
                     variant="outline"
                     onClick={handleClearSuspended}
                     disabled={isClearingSuspended}
-                    title={isEn ? 'Mark as recovered — proxy pool will use this account again' : '标记为已恢复 — 反代池会重新使用该账号'}
+                    title={isEn ? 'Mark as recovered — proxy pool will use this account again' : 'Mark as recovered — The anti-generation pool will reuse the account'}
                   >
                     {isClearingSuspended ? (
                       <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
                     ) : (
                       <RotateCcw className="h-3 w-3 mr-1" />
                     )}
-                    {isEn ? 'Reset Suspended' : '重置封禁状态'}
+                    {isEn ? 'Reset Suspended' : 'Reset ban status'}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => setShowBanDialog(false)}>
-                    {isEn ? 'Close' : '关闭'}
+                    {isEn ? 'Close' : 'closure'}
                   </Button>
                 </div>
               </div>
@@ -939,7 +939,7 @@ export const AccountCard = memo(function AccountCard({
         document.body
       )}
 
-      {/* 订阅管理弹窗 */}
+      {/* Subscription management pop-up window */}
       {showSubscriptionDialog && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => { setShowSubscriptionDialog(false); setIsFirstTimeUser(false); setSubscriptionError(null); setSubscriptionSuccess(null) }} />
@@ -947,7 +947,7 @@ export const AccountCard = memo(function AccountCard({
             <div className="p-4 border-b flex items-center justify-between bg-gradient-to-r from-primary/10 to-[var(--gradient-to)]/10">
               <div className="flex items-center gap-2 text-primary">
                 <CreditCard className="h-5 w-5" />
-                <span className="font-bold">{isEn ? (isFirstTimeUser ? 'Choose Your Plan' : 'Subscription Plans') : (isFirstTimeUser ? '选择订阅计划' : '订阅计划')}</span>
+                <span className="font-bold">{isEn ? (isFirstTimeUser ? 'Choose Your Plan' : 'Subscription Plans') : (isFirstTimeUser ? 'Choose a subscription plan' : 'Subscription plan')}</span>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-red-500 hover:text-white transition-colors" onClick={() => { setShowSubscriptionDialog(false); setIsFirstTimeUser(false); setSubscriptionError(null); setSubscriptionSuccess(null) }}>
                 <X className="h-4 w-4" />
@@ -956,11 +956,11 @@ export const AccountCard = memo(function AccountCard({
             <div className="p-4 space-y-4">
               {isFirstTimeUser ? (
                 <div className="text-xs text-muted-foreground mb-2 bg-warning/10 text-warning p-2 rounded-lg">
-                  {isEn ? 'Please select a subscription plan to continue.' : '请选择一个订阅计划以继续使用。'}
+                  {isEn ? 'Please select a subscription plan to continue.' : 'Please select a subscription plan to continue using it.'}
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground mb-2">
-                  {isEn ? 'Current subscription: ' : '当前订阅: '}
+                  {isEn ? 'Current subscription: ' : 'Current subscription: '}
                   <span className="font-medium text-foreground">{account.subscription.title || account.subscription.type}</span>
                 </div>
               )}
@@ -995,7 +995,7 @@ export const AccountCard = memo(function AccountCard({
                     >
                       {isCurrent && (
                         <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-[10px] px-2 py-0.5 rounded-full font-medium">
-                          {isEn ? 'Current' : '当前'}
+                          {isEn ? 'Current' : 'current'}
                         </div>
                       )}
                       <div className="flex items-center gap-2 mb-2">
@@ -1003,7 +1003,7 @@ export const AccountCard = memo(function AccountCard({
                         <span className="font-bold text-sm">{plan.description.title}</span>
                       </div>
                       <div className="text-2xl font-bold mb-2">
-                        {plan.pricing.amount === 0 ? (isEn ? 'Free' : '免费') : `$${plan.pricing.amount}`}
+                        {plan.pricing.amount === 0 ? (isEn ? 'Free' : 'free') : `$${plan.pricing.amount}`}
                         {plan.pricing.amount > 0 && <span className="text-xs font-normal text-muted-foreground">/{plan.description.billingInterval}</span>}
                       </div>
                       <ul className="space-y-1.5">
@@ -1022,9 +1022,9 @@ export const AccountCard = memo(function AccountCard({
                           disabled={isLoading}
                         >
                           {isLoading ? (
-                            <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{isEn ? 'Loading...' : '加载中...'}</>
+                            <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{isEn ? 'Loading...' : 'loading...'}</>
                           ) : (
-                            isEn ? 'Select' : '选择'
+                            isEn ? 'Select' : 'choose'
                           )}
                         </Button>
                       )}
@@ -1042,13 +1042,13 @@ export const AccountCard = memo(function AccountCard({
                   className="text-xs"
                 >
                   {paymentLoading && !selectedPlan ? (
-                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{isEn ? 'Loading...' : '加载中...'}</>
+                    <><Loader2 className="h-3 w-3 mr-1 animate-spin" />{isEn ? 'Loading...' : 'loading...'}</>
                   ) : (
-                    <><ExternalLink className="h-3 w-3 mr-1" />{isEn ? 'Manage Billing' : '管理账单'}</>
+                    <><ExternalLink className="h-3 w-3 mr-1" />{isEn ? 'Manage Billing' : 'Manage bills'}</>
                   )}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => { setShowSubscriptionDialog(false); setIsFirstTimeUser(false); setSubscriptionError(null); setSubscriptionSuccess(null) }}>
-                  {isEn ? 'Close' : '关闭'}
+                  {isEn ? 'Close' : 'closure'}
                 </Button>
               </div>
             </div>

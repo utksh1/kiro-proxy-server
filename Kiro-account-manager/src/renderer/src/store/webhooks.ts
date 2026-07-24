@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 
 /**
- * Webhook 通知中心
+ * Webhook Notification center
  *
- * 用于把关键事件（批量完成、风控触发、单账号注册成功/失败等）推送到外部 IM。
- * 内置常见 IM 的消息模板：钉钉 / 企微 / Telegram / Discord / 自定义 JSON。
+ * Used to record key events (batch completion, risk control trigger, single account registration success)/failure, etc.) pushed to the outside IM。
+ * Built-in common IM Message template: DingTalk / Qiwei / Telegram / Discord / Customize JSON。
  */
 
 export type WebhookKind = 'dingtalk' | 'wechat-work' | 'telegram' | 'discord' | 'feishu' | 'custom'
@@ -15,39 +15,39 @@ export interface WebhookEntry {
   url: string
   label?: string
   enabled: boolean
-  /** Telegram bot 模式需要 chat_id */
+  /** Telegram bot pattern requires chat_id */
   telegramChatId?: string
-  /** 自定义模式的 JSON 模板，{{title}} {{message}} {{level}} 占位符 */
+  /** custom mode JSON template,{{title}} {{message}} {{level}} placeholder */
   customTemplate?: string
-  /** 订阅哪些事件 */
+  /** Which events to subscribe to */
   events: WebhookEvent[]
   createdAt: number
 }
 
 export type WebhookEvent =
-  | 'batch-completed'      // 批量任务完成
-  | 'batch-error'          // 批量任务严重错误
-  | 'risk-warning'         // 风控警告触发
-  | 'account-banned'       // 账号被封禁
-  | 'register-success'     // 单账号注册成功
-  | 'register-failed'      // 单账号注册失败
-  | 'token-expired'        // Token 过期/刷新失败
+  | 'batch-completed'      // Batch task completed
+  | 'batch-error'          // Batch task critical error
+  | 'risk-warning'         // Risk control warning triggered
+  | 'account-banned'       // Account banned
+  | 'register-success'     // Single account registration successful
+  | 'register-failed'      // Single account registration failed
+  | 'token-expired'        // Token Expired/Refresh failed
 
 export const ALL_WEBHOOK_EVENTS: { value: WebhookEvent; label: string; labelEn: string }[] = [
-  { value: 'batch-completed', label: '批量任务完成', labelEn: 'Batch completed' },
-  { value: 'batch-error', label: '批量任务严重错误', labelEn: 'Batch error' },
-  { value: 'risk-warning', label: '风控警告触发', labelEn: 'Risk warning' },
-  { value: 'account-banned', label: '账号被封禁', labelEn: 'Account banned' },
-  { value: 'register-success', label: '注册成功（单账号）', labelEn: 'Register success' },
-  { value: 'register-failed', label: '注册失败（单账号）', labelEn: 'Register failed' },
-  { value: 'token-expired', label: 'Token 过期/刷新失败', labelEn: 'Token expired' }
+  { value: 'batch-completed', label: 'Batch task completed', labelEn: 'Batch completed' },
+  { value: 'batch-error', label: 'Batch task critical error', labelEn: 'Batch error' },
+  { value: 'risk-warning', label: 'Risk control warning triggered', labelEn: 'Risk warning' },
+  { value: 'account-banned', label: 'Account banned', labelEn: 'Account banned' },
+  { value: 'register-success', label: 'Registration successful (single account)', labelEn: 'Register success' },
+  { value: 'register-failed', label: 'Registration failed (single account)', labelEn: 'Register failed' },
+  { value: 'token-expired', label: 'Token Expired/Refresh failed', labelEn: 'Token expired' }
 ]
 
 export interface WebhookMessage {
   title: string
   message: string
   level: 'info' | 'warn' | 'error' | 'success'
-  /** 可选的额外字段（追加到 message 后） */
+  /** Optional extra fields (appended to message back) */
   fields?: Record<string, string | number>
 }
 
@@ -60,11 +60,11 @@ interface WebhooksActions {
   updateWebhook: (id: string, updates: Partial<WebhookEntry>) => void
   removeWebhook: (id: string) => void
   toggleWebhook: (id: string) => void
-  /** 触发某个事件：自动给所有订阅了该事件的启用 webhook 发推送 */
+  /** Trigger an event: automatically enable all subscribers to the event webhook Send push */
   triggerEvent: (event: WebhookEvent, payload: WebhookMessage) => Promise<void>
-  /** 测试单个 webhook（发一条测试消息） */
+  /** test single webhook(Send a test message) */
   testWebhook: (id: string) => Promise<{ success: boolean; error?: string }>
-  /** 持久化加载（在 store 初始化时调用） */
+  /** Persistent loading (in store Called during initialization) */
   loadFromStorage: () => void
   saveToStorage: () => void
 }
@@ -130,13 +130,13 @@ export const useWebhookStore = create<WebhooksStore>()((set, get) => ({
 
   testWebhook: async (id) => {
     const webhook = get().webhooks.get(id)
-    if (!webhook) return { success: false, error: 'Webhook 不存在' }
+    if (!webhook) return { success: false, error: 'Webhook does not exist' }
     try {
       await sendWebhook(webhook, {
-        title: '🧪 测试通知',
-        message: '这是来自 Kiro 账号管理器的测试消息。如果你看到这条消息，说明 Webhook 配置正确。',
+        title: '🧪 Test notification',
+        message: 'This is from Kiro Test message for the account manager. If you see this message, it means Webhook The configuration is correct.',
         level: 'info',
-        fields: { 时间: new Date().toLocaleString('zh-CN') }
+        fields: { time: new Date().toLocaleString('zh-CN') }
       })
       return { success: true }
     } catch (err) {
@@ -168,21 +168,21 @@ export const useWebhookStore = create<WebhooksStore>()((set, get) => ({
   }
 }))
 
-// ==================== Webhook 发送实现 ====================
+// ==================== Webhook Send implementation ====================
 
-/** C9: 每个 webhook 的最近发送时间戳队列（用于本地速率限制） */
+/** C9: each webhook Last sent timestamp queue (used for local rate limiting) */
 const sendTimestamps = new Map<string, number[]>()
-const MAX_PER_MINUTE = 20  // 每个 webhook 最多每分钟 20 条
+const MAX_PER_MINUTE = 20  // each webhook max per minute 20 strip
 const RETRY_COUNT = 3
-const RETRY_DELAY_BASE_MS = 1500  // 指数退避基数
+const RETRY_DELAY_BASE_MS = 1500  // Exponential backoff base
 
 /**
- * 检查并记录速率：超过阈值时返回 false，调用方应跳过本次发送
+ * Check and log rate: return when threshold is exceeded false, the caller should skip sending this
  */
 function checkAndRecordRate(webhookId: string): boolean {
   const now = Date.now()
   const arr = sendTimestamps.get(webhookId) || []
-  // 清理 1 分钟外
+  // clean up 1 minutes away
   const filtered = arr.filter((t) => now - t < 60_000)
   if (filtered.length >= MAX_PER_MINUTE) {
     sendTimestamps.set(webhookId, filtered)
@@ -194,11 +194,11 @@ function checkAndRecordRate(webhookId: string): boolean {
 }
 
 /**
- * 按 webhook 类型构造消息体并 POST（含重试 + 速率限制）
- * 网络错误不会抛到调用方（仅 console.warn），避免影响主业务流程
+ * according to webhook Type construct message body and POST(Including retry + rate limit)
+ * Network errors are not thrown to the caller (only console.warn) to avoid affecting the main business process
  */
 async function sendWebhook(webhook: WebhookEntry, payload: WebhookMessage): Promise<void> {
-  // C9: 速率限制
+  // C9: rate limit
   if (!checkAndRecordRate(webhook.id)) {
     console.warn(`[Webhook] ${webhook.kind} ${webhook.label || webhook.id} rate limit exceeded (>${MAX_PER_MINUTE}/min), drop`)
     return
@@ -209,7 +209,7 @@ async function sendWebhook(webhook: WebhookEntry, payload: WebhookMessage): Prom
     ? buildTelegramUrl(webhook)
     : webhook.url
 
-  // C9: 重试逻辑（指数退避）
+  // C9: Retry logic (exponential backoff)
   let lastError: unknown
   for (let attempt = 0; attempt <= RETRY_COUNT; attempt++) {
     if (attempt > 0) {
@@ -233,7 +233,7 @@ async function sendWebhook(webhook: WebhookEntry, payload: WebhookMessage): Prom
         }
         return
       }
-      // 4xx 客户端错误（除 408/429）不重试
+      // 4xx Client error (except 408/429) do not retry
       if (resp.status >= 400 && resp.status < 500 && resp.status !== 408 && resp.status !== 429) {
         console.warn(`[Webhook] ${webhook.kind} ${webhook.label || webhook.id} HTTP ${resp.status} (no retry)`)
         return
@@ -247,7 +247,7 @@ async function sendWebhook(webhook: WebhookEntry, payload: WebhookMessage): Prom
 }
 
 function buildTelegramUrl(webhook: WebhookEntry): string {
-  // Telegram 的 URL 直接是 https://api.telegram.org/bot<token>/sendMessage
+  // Telegram of URL directly https://api.telegram.org/bot<token>/sendMessage
   return webhook.url.endsWith('/sendMessage') ? webhook.url : `${webhook.url.replace(/\/$/, '')}/sendMessage`
 }
 
@@ -263,7 +263,7 @@ function buildWebhookBody(webhook: WebhookEntry, payload: WebhookMessage): unkno
 
   switch (webhook.kind) {
     case 'dingtalk':
-      // 钉钉机器人 markdown
+      // DingTalk Robot markdown
       return {
         msgtype: 'markdown',
         markdown: {
@@ -272,7 +272,7 @@ function buildWebhookBody(webhook: WebhookEntry, payload: WebhookMessage): unkno
         }
       }
     case 'wechat-work':
-      // 企业微信机器人 markdown
+      // Enterprise WeChat robot markdown
       return {
         msgtype: 'markdown',
         markdown: {
@@ -280,7 +280,7 @@ function buildWebhookBody(webhook: WebhookEntry, payload: WebhookMessage): unkno
         }
       }
     case 'feishu':
-      // 飞书机器人 text
+      // Feishu Robot text
       return {
         msg_type: 'text',
         content: { text: fullText }
@@ -311,7 +311,7 @@ function buildWebhookBody(webhook: WebhookEntry, payload: WebhookMessage): unkno
     case 'custom':
     default: {
       if (webhook.customTemplate) {
-        // 简易模板替换
+        // Easy template replacement
         try {
           const tpl = webhook.customTemplate
             .replace(/\{\{title\}\}/g, escapeJsonString(payload.title))
@@ -320,7 +320,7 @@ function buildWebhookBody(webhook: WebhookEntry, payload: WebhookMessage): unkno
             .replace(/\{\{icon\}\}/g, icon)
           return JSON.parse(tpl)
         } catch {
-          // 模板解析失败：退回简单 JSON
+          // Template parsing failed: return to simple JSON
         }
       }
       return {

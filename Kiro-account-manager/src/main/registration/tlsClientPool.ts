@@ -1,21 +1,21 @@
-// TLS 客户端进程级共享池
+// TLS Client process level shared pool
 //
-// 背景：tlsclientwrapper 的 ModuleClient 内部是 piscina worker pool + 加载 DLL，
-// 每次新建 + open() 大约要 1-3 秒，批量注册时累计可达数十秒。
-// 由于 DLL 路径 / customLibraryPath 在整个应用生命周期内是稳定的，所有 Registrar 完全可以共用同一个 ModuleClient
-// （SessionClient 才是真正"按注册"独立的 TLS 会话/指纹层）。
+// background:tlsclientwrapper of ModuleClient inside is piscina worker pool + load DLL，
+// New each time + open() Approximately 1-3 seconds, and the total can reach tens of seconds during batch registration.
+// because DLL path / customLibraryPath Is stable throughout the application life cycle, all Registrar It's entirely possible to share the same ModuleClient
+// （SessionClient is the real"Press Register"independent TLS session/fingerprint layer).
 //
-// 设计：
-//   - 首次 acquireModuleClient() 时 open，之后所有调用直接拿同一个实例
-//   - 用 openPromise 防止并发首调导致重复 open
-//   - 主进程退出前统一 shutdownTlsClientPool() 释放 worker pool
+// design:
+//   - first acquireModuleClient() hour open, all subsequent calls directly take the same instance
+//   - use openPromise Prevent concurrent initialization from causing duplication open
+//   - Unify before main process exits shutdownTlsClientPool() release worker pool
 
 import { ModuleClient } from 'tlsclientwrapper'
 
 interface AcquireOpts {
-  /** 已存在的完整 DLL 文件路径（首次 open 时使用） */
+  /** existing complete DLL File path (first time open when used) */
   customLibraryPath?: string
-  /** 没有 customLibraryPath 时，由 tlsclientwrapper 自动下载到此目录 */
+  /** No customLibraryPath time, by tlsclientwrapper Automatically download to this directory */
   customLibraryDownloadPath?: string
 }
 
@@ -23,8 +23,8 @@ let shared: ModuleClient | null = null
 let openPromise: Promise<ModuleClient> | null = null
 
 /**
- * 获取共享 ModuleClient。首次调用 open()，之后所有调用都拿同一个实例。
- * 注意：传入的 opts 仅在首次有效；后续调用会忽略 opts 直接复用。
+ * get share ModuleClient. first call open(), all subsequent calls will take the same instance.
+ * Note: the incoming opts Valid only the first time; ignored on subsequent calls opts Direct reuse.
  */
 export async function acquireModuleClient(opts: AcquireOpts): Promise<ModuleClient> {
   if (shared) return shared
@@ -44,19 +44,19 @@ export async function acquireModuleClient(opts: AcquireOpts): Promise<ModuleClie
   }
 }
 
-/** 是否已经开启了共享池（用于诊断 / 日志） */
+/** Whether the shared pool has been enabled (for diagnostic purposes / log) */
 export function isModuleClientReady(): boolean {
   return shared !== null
 }
 
-/** 调试用：拿到 piscina 池统计 */
+/** For debugging: get piscina Pool Statistics */
 export function getModuleClientPoolStats(): unknown {
   return shared ? shared.getPoolStats() : null
 }
 
 /**
- * 应用退出前统一清理：terminate 共享 ModuleClient。
- * 带超时保护（5s），避免 DLL 内残留请求把退出卡住。
+ * Clean up before exiting the application:terminate shared ModuleClient。
+ * With timeout protection (5s),avoid DLL Exit is stuck with remaining requests.
  */
 export async function shutdownTlsClientPool(): Promise<void> {
   const mc = shared
@@ -68,5 +68,5 @@ export async function shutdownTlsClientPool(): Promise<void> {
       mc.terminate(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('terminate timeout')), 5000))
     ])
-  } catch { /* 超时 / piscina 终止错误均忽略 */ }
+  } catch { /* time out / piscina Termination errors are ignored */ }
 }

@@ -28,7 +28,7 @@ function genUUID(): string {
   ].join('-')
 }
 
-/** JWE 加密密码 (RSA-OAEP-256 + A256GCM) */
+/** JWE Encrypted password (RSA-OAEP-256 + A256GCM) */
 export function encryptPassword(
   password: string,
   publicKey: Record<string, string>,
@@ -47,10 +47,10 @@ export function encryptPassword(
   const headerJSON = Buffer.from(JSON.stringify(header))
   const headerB64 = b64url(headerJSON)
 
-  // CEK (内容加密密钥)
+  // CEK (Content encryption key)
   const cek = crypto.randomBytes(32)
 
-  // RSA-OAEP-256 加密 CEK
+  // RSA-OAEP-256 encryption CEK
   const pubKey = jwkToPublicKey(publicKey)
   const encryptedCEK = crypto.publicEncrypt(
     {
@@ -74,7 +74,7 @@ export function encryptPassword(
   }
   const plaintext = Buffer.from(JSON.stringify(claims))
 
-  // AES-256-GCM 加密
+  // AES-256-GCM encryption
   const iv = crypto.randomBytes(12)
   const cipher = crypto.createCipheriv('aes-256-gcm', cek, iv, { authTagLength: 16 })
   cipher.setAAD(Buffer.from(headerB64, 'ascii'))

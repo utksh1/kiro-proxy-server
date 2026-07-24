@@ -20,16 +20,16 @@ export function EditAccountDialog({
   const { t } = useTranslation()
   const isEn = t('common.unknown') === 'Unknown'
 
-  // OIDC 凭证（核心）
+  // OIDC Credentials (Core)
   const [refreshToken, setRefreshToken] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [region, setRegion] = useState('us-east-1')
 
-  // 可编辑字段
+  // editable fields
   const [nickname, setNickname] = useState('')
 
-  // 自动获取的信息（只读显示）
+  // Automatically obtained information (read-only display)
   const [accountInfo, setAccountInfo] = useState<{
     email: string
     userId: string
@@ -51,7 +51,7 @@ export function EditAccountDialog({
     expiresAt?: number
   } | null>(null)
 
-  // 状态
+  // state
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copiedToken, setCopiedToken] = useState(false)
@@ -64,7 +64,7 @@ export function EditAccountDialog({
     }
   }
 
-  // 当账号变化时更新表单
+  // Update form when account changes
   useEffect(() => {
     if (account) {
       setRefreshToken(account.credentials.refreshToken || '')
@@ -73,7 +73,7 @@ export function EditAccountDialog({
       setRegion(account.credentials.region || 'us-east-1')
       setNickname(account.nickname || '')
       
-      // 设置当前账号信息
+      // Set current account information
       setAccountInfo({
         email: account.email,
         userId: account.userId || '',
@@ -91,7 +91,7 @@ export function EditAccountDialog({
     }
   }, [account])
 
-  // 从本地配置导入
+  // Import from local configuration
   const handleImportFromLocal = async () => {
     try {
       const result = await window.api.loadKiroCredentials()
@@ -102,22 +102,22 @@ export function EditAccountDialog({
         setRegion(result.data.region)
         setError(null)
       } else {
-        setError(result.error || '导入失败')
+        setError(result.error || 'Import failed')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '导入失败')
+      setError(e instanceof Error ? e.message : 'Import failed')
     }
   }
 
-  // 验证并刷新信息
+  // Verify and refresh information
   const handleVerifyAndRefresh = async () => {
     const isSocial = account?.credentials.authMethod === 'social'
     if (!refreshToken) {
-      setError('请填写 Refresh Token')
+      setError('Please fill in Refresh Token')
       return
     }
     if (!isSocial && (!clientId || !clientSecret)) {
-      setError('请填写 Client ID 和 Client Secret')
+      setError('Please fill in Client ID and Client Secret')
       return
     }
 
@@ -145,21 +145,21 @@ export function EditAccountDialog({
           daysRemaining: result.data.daysRemaining,
           expiresAt: result.data.expiresAt
         })
-        // 更新 refreshToken（可能返回新的）
+        // renew refreshToken(may return new one)
         if (result.data.refreshToken) {
           setRefreshToken(result.data.refreshToken)
         }
       } else {
-        setError(result.error || '验证失败')
+        setError(result.error || 'Authentication failed')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '验证失败')
+      setError(e instanceof Error ? e.message : 'Authentication failed')
     } finally {
       setIsVerifying(false)
     }
   }
 
-  // 保存
+  // save
   const handleSave = () => {
     if (!account || !accountInfo) return
 
@@ -213,69 +213,69 @@ export function EditAccountDialog({
       <div className="absolute inset-0 bg-black/50" onClick={() => onOpenChange(false)} />
 
       <Card className="relative w-full max-w-lg max-h-[90vh] overflow-auto z-10 animate-in zoom-in-95 duration-200">
-        {/* 头部 */}
+        {/* head */}
         <CardHeader className="pb-4 border-b sticky top-0 bg-background z-20">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-xl font-bold">{isEn ? 'Edit Account' : '编辑账号'}</CardTitle>
+            <CardTitle className="text-xl font-bold">{isEn ? 'Edit Account' : 'Edit account'}</CardTitle>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-red-500 hover:text-white transition-colors" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">{isEn ? 'Modify account settings or update credentials' : '修改账号配置或更新凭证'}</p>
+          <p className="text-sm text-muted-foreground mt-1">{isEn ? 'Modify account settings or update credentials' : 'Modify account configuration or update credentials'}</p>
         </CardHeader>
 
         <CardContent className="p-6 space-y-6">
-          {/* 当前账号信息 */}
+          {/* Current account information */}
           {accountInfo && (
             <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 space-y-3">
               <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                <span className="text-sm font-semibold text-foreground/80">{isEn ? 'Account Status' : '当前账号状态'}</span>
+                <span className="text-sm font-semibold text-foreground/80">{isEn ? 'Account Status' : 'Current account status'}</span>
                 <div className="px-2.5 py-0.5 rounded-full bg-success/10 text-success text-xs font-medium flex items-center gap-1.5">
                   <CheckCircle className="h-3.5 w-3.5" />
-                  {isEn ? 'Verified' : '已验证'}
+                  {isEn ? 'Verified' : 'Verified'}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Email' : '邮箱'}</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Email' : 'Mail'}</span>
                   <span className="font-medium font-mono text-xs truncate block" title={accountInfo.email}>{accountInfo.email}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Plan' : '订阅计划'}</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Plan' : 'Subscription plan'}</span>
                   <span className="font-medium">{accountInfo.subscriptionTitle}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Usage' : '使用额度'}</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Usage' : 'Usage quota'}</span>
                   <span className="font-medium">
                     {accountInfo.usage.current.toLocaleString()} / {accountInfo.usage.limit.toLocaleString()}
                   </span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Days Left' : '剩余天数'}</span>
-                  <span className="font-medium">{accountInfo.daysRemaining ?? '-'} {isEn ? 'd' : '天'}</span>
+                  <span className="text-muted-foreground text-xs block mb-1">{isEn ? 'Days Left' : 'Days remaining'}</span>
+                  <span className="font-medium">{accountInfo.daysRemaining ?? '-'} {isEn ? 'd' : 'sky'}</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* 别名 */}
+          {/* Alias */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">{isEn ? 'Nickname' : '账号别名'}</label>
+            <label className="text-sm font-medium">{isEn ? 'Nickname' : 'Account alias'}</label>
             <input
               type="text"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
-              placeholder={isEn ? 'Give this account a memorable name' : '给这个账号起个好记的名字'}
+              placeholder={isEn ? 'Give this account a memorable name' : 'Give this account a memorable name'}
               className="w-full h-10 px-3 py-2 text-sm rounded-xl border border-input bg-background/50 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             />
           </div>
 
-          {/* 凭证配置 */}
+          {/* Credential configuration */}
           <div className="space-y-5 pt-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold">
-                  {account?.credentials.authMethod === 'social' ? (isEn ? 'Social Login' : '社交登录凭证') : (isEn ? 'OIDC Credentials' : 'OIDC 凭证配置')}
+                  {account?.credentials.authMethod === 'social' ? (isEn ? 'Social Login' : 'Social login credentials') : (isEn ? 'OIDC Credentials' : 'OIDC Credential configuration')}
                 </h3>
                 {account?.credentials.authMethod === 'social' && (
                   <span className="px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary">
@@ -292,19 +292,19 @@ export function EditAccountDialog({
                   onClick={handleImportFromLocal}
                 >
                   <Download className="h-3 w-3 mr-1.5" />
-                  {isEn ? 'Import Local' : '从本地导入'}
+                  {isEn ? 'Import Local' : 'Import from local'}
                 </Button>
               )}
             </div>
 
             {account?.credentials.authMethod === 'social' && (
               <p className="text-xs text-muted-foreground">
-                {isEn ? 'Social login only needs Refresh Token' : '社交登录账号只需要 Refresh Token，不需要 Client ID 和 Client Secret'}
+                {isEn ? 'Social login only needs Refresh Token' : 'Social login account only requires Refresh Token,unnecessary Client ID and Client Secret'}
               </p>
             )}
 
             <div className="space-y-4">
-              {/* Access Token (只读，可复制) */}
+              {/* Access Token (Read only, copyable) */}
               {accountInfo?.accessToken && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -317,7 +317,7 @@ export function EditAccountDialog({
                       onClick={handleCopyAccessToken}
                     >
                       {copiedToken ? <Check className="h-3 w-3 mr-1 text-success" /> : <Copy className="h-3 w-3 mr-1" />}
-                      {copiedToken ? (isEn ? 'Copied' : '已复制') : (isEn ? 'Copy' : '复制')}
+                      {copiedToken ? (isEn ? 'Copied' : 'Copied') : (isEn ? 'Copy' : 'copy')}
                     </Button>
                   </div>
                   <div className="w-full px-3 py-2.5 text-sm rounded-xl border border-input bg-muted/50 font-mono text-muted-foreground truncate">
@@ -395,12 +395,12 @@ export function EditAccountDialog({
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                {isEn ? 'Verify & Refresh' : '验证并刷新凭证信息'}
+                {isEn ? 'Verify & Refresh' : 'Verify and refresh credential information'}
               </Button>
             </div>
           </div>
 
-          {/* 错误信息 */}
+          {/* error message */}
           {error && (
             <div className="p-3 bg-destructive/10 text-destructive rounded-xl text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
               <div className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" />
@@ -409,13 +409,13 @@ export function EditAccountDialog({
           )}
         </CardContent>
 
-        {/* 底部按钮 */}
+        {/* bottom button */}
         <div className="sticky bottom-0 bg-background/95 backdrop-blur p-4 border-t flex justify-end gap-3 z-20">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl h-10 px-6">
-            {isEn ? 'Cancel' : '取消'}
+            {isEn ? 'Cancel' : 'Cancel'}
           </Button>
           <Button onClick={handleSave} disabled={!accountInfo} className="rounded-xl h-10 px-6">
-            {isEn ? 'Save Changes' : '保存更改'}
+            {isEn ? 'Save Changes' : 'Save changes'}
           </Button>
         </div>
       </Card>

@@ -96,7 +96,7 @@ export function AccountToolbar({
   const tagMenuRef = useRef<HTMLDivElement>(null)
   const proxyMenuRef = useRef<HTMLDivElement>(null)
   
-  // 点击外部关闭菜单
+  // Click outside to close menu
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (groupMenuRef.current && !groupMenuRef.current.contains(e.target as Node)) {
@@ -113,7 +113,7 @@ export function AccountToolbar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 选中账号已绑定到每个代理的统计
+  // The selected account has been bound to the statistics of each agent
   const getSelectedProxyBindingStatus = useCallback(() => {
     const selectedAccs = Array.from(selectedIds).map((id) => accounts.get(id)).filter(Boolean)
     const proxyCounts = new Map<string | 'none', number>()
@@ -140,7 +140,7 @@ export function AccountToolbar({
     setShowProxyMenu(false)
   }
   
-  // 获取选中账户的分组状态（useMemo 缓存，避免每次渲染重算 O(N)）
+  // Get the group status of the selected account (useMemo Caching to avoid recalculation for each rendering O(N)）
   const selectedGroupStatus = useMemo(() => {
     const selectedAccounts = Array.from(selectedIds).map(id => accounts.get(id)).filter(Boolean)
     const groupCounts = new Map<string | undefined, number>()
@@ -166,18 +166,18 @@ export function AccountToolbar({
     return { selectedAccounts, tagCounts, total: selectedAccounts.length }
   }, [selectedIds, accounts])
 
-  // 兼容入口：保持现有调用签名
+  // Compatibility entry: keep existing call signature
   const getSelectedAccountsGroupStatus = useCallback(() => selectedGroupStatus, [selectedGroupStatus])
   const getSelectedAccountsTagStatus = useCallback(() => selectedTagStatus, [selectedTagStatus])
   
-  // 处理分组操作
+  // Handle grouping operations
   const handleMoveToGroup = (groupId: string | undefined) => {
     if (selectedIds.size === 0) return
     moveAccountsToGroup(Array.from(selectedIds), groupId)
     setShowGroupMenu(false)
   }
   
-  // 处理标签操作
+  // Handle label operations
   const handleAddTag = (tagId: string) => {
     if (selectedIds.size === 0) return
     addTagToAccounts(Array.from(selectedIds), tagId)
@@ -193,10 +193,10 @@ export function AccountToolbar({
     const count = tagCounts.get(tagId) || 0
     
     if (count === total) {
-      // 所有选中账户都有此标签，移除
+      // All selected accounts have this label, remove it
       handleRemoveTag(tagId)
     } else {
-      // 部分或无账户有此标签，添加
+      // Some or no accounts have this label, add
       handleAddTag(tagId)
     }
   }
@@ -207,7 +207,7 @@ export function AccountToolbar({
   const filteredCount = getFilteredAccounts().length
   const selectedCount = selectedIds.size
 
-  // 分组 Tab 计数（全部 / 未分组 / 各分组）
+  // Group Tab count (all / Not grouped / each group)
   const tabCounts = useMemo(() => {
     const all = accounts.size
     let ungrouped = 0
@@ -222,17 +222,17 @@ export function AccountToolbar({
     return { all, ungrouped, byGroup }
   }, [accounts])
 
-  // 用户分组按 order 升序
+  // User grouping by order Ascending order
   const sortedGroups = useMemo(
     () => Array.from(groups.values()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [groups]
   )
 
-  // 当前激活 Tab 的展示信息（用于按钮文字 + 颜色圆点）
+  // Currently active Tab display information (for button text + color dots)
   const activeTabInfo = useMemo(() => {
     if (activeGroupTab === 'all') {
       return {
-        label: isEn ? 'All' : '全部',
+        label: isEn ? 'All' : 'all',
         color: undefined as string | undefined,
         icon: <Users className="h-4 w-4 mr-1.5" />,
         count: tabCounts.all
@@ -240,7 +240,7 @@ export function AccountToolbar({
     }
     if (activeGroupTab === 'ungrouped') {
       return {
-        label: isEn ? 'Ungrouped' : '未分组',
+        label: isEn ? 'Ungrouped' : 'Not grouped',
         color: undefined as string | undefined,
         icon: <Inbox className="h-4 w-4 mr-1.5" />,
         count: tabCounts.ungrouped
@@ -255,9 +255,9 @@ export function AccountToolbar({
         count: tabCounts.byGroup.get(g.id) || 0
       }
     }
-    // 兜底：activeGroupTab 是失效的 groupId（分组被删了）→ 回退到全部
+    // reveal all the details:activeGroupTab is invalid groupId(The group was deleted) → Go back to all
     return {
-      label: isEn ? 'All' : '全部',
+      label: isEn ? 'All' : 'all',
       color: undefined as string | undefined,
       icon: <Users className="h-4 w-4 mr-1.5" />,
       count: tabCounts.all
@@ -282,7 +282,7 @@ export function AccountToolbar({
     setIsChecking(false)
   }
 
-  // 跳转到一键诊断页"账号测活"，对当前选中账号做批量测活（选中状态保存在 store，跳页后仍在）
+  // Jump to one-click diagnostic page"Account activity test", do a batch activity test on the currently selected account (the selected status is saved in store, still after page jump)
   const handleBatchLiveness = (): void => {
     if (selectedCount === 0) return
     window.dispatchEvent(new CustomEvent('navigate-page', { detail: 'diagnose' }))
@@ -290,7 +290,7 @@ export function AccountToolbar({
 
   const handleBatchDelete = (): void => {
     if (selectedCount === 0) return
-    if (confirm(isEn ? `Delete ${selectedCount} selected accounts?` : `确定要删除选中的 ${selectedCount} 个账号吗？`)) {
+    if (confirm(isEn ? `Delete ${selectedCount} selected accounts?` : `Are you sure you want to delete the selected ${selectedCount} An account?`)) {
       removeAccounts(Array.from(selectedIds))
     }
   }
@@ -305,28 +305,28 @@ export function AccountToolbar({
 
   return (
     <div className="space-y-3">
-      {/* 搜索和主要操作 */}
+      {/* Search and main operations */}
       <div className="flex items-center gap-3">
-        {/* 搜索框 */}
+        {/* search box */}
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder={isEn ? 'Search accounts...' : '搜索账号...'}
+            placeholder={isEn ? 'Search accounts...' : 'Search account...'}
             className="w-full pl-9 pr-4 py-2 text-sm rounded-xl bg-[var(--glass-bg-subtle)] backdrop-blur-md border border-[var(--glass-border)] focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/30 transition-all"
             value={filter.search ?? ''}
             onChange={(e) => handleSearch(e.target.value)}
           />
         </div>
 
-        {/* 主要操作按钮 - 右对齐 */}
+        {/* Main operation buttons - Align right */}
         <div className="flex items-center gap-2 ml-auto">
-          {/* 视图切换 (卡片 / 列表) */}
+          {/* View switching (card / list) */}
           <div className="flex items-center rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg-subtle)] backdrop-blur-md overflow-hidden">
             <button
               type="button"
               onClick={() => onViewModeChange('grid')}
-              title={isEn ? 'Grid view' : '卡片视图'}
+              title={isEn ? 'Grid view' : 'card view'}
               className={`flex items-center justify-center h-8 w-8 transition-colors ${
                 viewMode === 'grid'
                   ? 'bg-primary text-primary-foreground'
@@ -338,7 +338,7 @@ export function AccountToolbar({
             <button
               type="button"
               onClick={() => onViewModeChange('list')}
-              title={isEn ? 'List view' : '列表视图'}
+              title={isEn ? 'List view' : 'list view'}
               className={`flex items-center justify-center h-8 w-8 transition-colors ${
                 viewMode === 'list'
                   ? 'bg-primary text-primary-foreground'
@@ -350,39 +350,39 @@ export function AccountToolbar({
           </div>
           <Button onClick={onAddAccount}>
             <Plus className="h-4 w-4 mr-1" />
-            {isEn ? 'Add' : '添加账号'}
+            {isEn ? 'Add' : 'Add account'}
           </Button>
           <Button variant="outline" onClick={onImport}>
             <Upload className="h-4 w-4 mr-1" />
-            {isEn ? 'Import' : '导入'}
+            {isEn ? 'Import' : 'import'}
           </Button>
           <Button variant="outline" onClick={onExport}>
             <Download className="h-4 w-4 mr-1" />
-            {isEn ? 'Export' : '导出'}
+            {isEn ? 'Export' : 'Export'}
           </Button>
         </div>
       </div>
 
-      {/* 统计和选择操作 */}
+      {/* Statistics and selection operations */}
       <div className="flex items-center justify-between">
-        {/* 左侧：统计信息 */}
+        {/* Left: Statistics */}
         <div className="flex items-center gap-4 text-sm">
           <span className="text-muted-foreground">
-            {isEn ? '' : '共 '}<span className="font-medium text-foreground">{stats.total}</span> {isEn ? 'accounts' : '个账号'}
+            {isEn ? '' : 'common '}<span className="font-medium text-foreground">{stats.total}</span> {isEn ? 'accounts' : 'accounts'}
             {filteredCount !== stats.total && (
-              <span>{isEn ? ', ' : '，已筛选 '}<span className="font-medium text-foreground">{filteredCount}</span> {isEn ? 'filtered' : '个'}</span>
+              <span>{isEn ? ', ' : ', filtered '}<span className="font-medium text-foreground">{filteredCount}</span> {isEn ? 'filtered' : 'indivual'}</span>
             )}
           </span>
           {stats.expiringSoonCount > 0 && (
             <Badge variant="destructive" className="gap-1">
-              {stats.expiringSoonCount} {isEn ? 'expiring' : '个即将到期'}
+              {stats.expiringSoonCount} {isEn ? 'expiring' : 'is about to expire'}
             </Badge>
           )}
         </div>
 
-        {/* 右侧：选择操作和管理 - 缩小间距 */}
+        {/* Right: Select Actions and Management - narrow spacing */}
         <div className="flex items-center gap-1">
-          {/* 分组按钮 — 切换视图 + 批量移动 + 管理 三合一 */}
+          {/* Group buttons — Switch view + Batch move + manage triple */}
           <div className="relative" ref={groupMenuRef}>
             <Button
               variant={showGroupMenu ? "default" : "ghost"}
@@ -391,7 +391,7 @@ export function AccountToolbar({
                 setShowGroupMenu(!showGroupMenu)
                 setShowTagMenu(false)
               }}
-              title={isEn ? 'Switch group view / Manage' : '切换分组视图 / 管理'}
+              title={isEn ? 'Switch group view / Manage' : 'Switch group view / manage'}
             >
               {activeTabInfo.color ? (
                 <span
@@ -453,7 +453,7 @@ export function AccountToolbar({
                     </span>
                     {isActive && <Check className="h-3 w-3 ml-0.5" />}
                   </button>
-                  {/* 行尾批量移动快捷按钮 — 仅选中账户时显示 */}
+                  {/* End-of-line batch move shortcut button — Shown only when account is selected */}
                   {moveAction && (
                     <button
                       className={cn(
@@ -465,8 +465,8 @@ export function AccountToolbar({
                       )}
                       onClick={(e) => { e.stopPropagation(); moveAction.onMove() }}
                       title={moveAction.isAllInGroup
-                        ? (isEn ? 'All selected already in this group' : '所有选中账户已在该组')
-                        : (isEn ? `Move ${moveAction.selCount} selected here` : `移动选中 ${moveAction.selCount} 个账户到此`)
+                        ? (isEn ? 'All selected already in this group' : 'All selected accounts are already in this group')
+                        : (isEn ? `Move ${moveAction.selCount} selected here` : `Move selected ${moveAction.selCount} account here`)
                       }
                     >
                       {moveAction.isAllInGroup ? <Check className="h-3 w-3" /> : <ArrowRightLeft className="h-3 w-3" />}
@@ -479,37 +479,37 @@ export function AccountToolbar({
                 <div className="absolute left-0 top-full mt-2 z-50 w-[320px] max-h-[80vh] overflow-y-auto bg-popover border rounded-lg shadow-lg p-2">
                   <div className="absolute -top-2 left-4 w-4 h-4 bg-popover border-l border-t rotate-45" />
 
-                  {/* === 区头：标题 + 选中提示 === */}
+                  {/* === Section header: title + Check tip === */}
                   <div className="flex items-center justify-between px-2 py-1 mb-1">
                     <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                      {isEn ? 'Groups' : '分组'}
+                      {isEn ? 'Groups' : 'Group'}
                     </span>
                     {selectedCount > 0 && (
                       <span className="flex items-center gap-1 text-[10px] text-primary">
                         <ArrowRightLeft className="h-3 w-3" />
-                        {isEn ? `${selectedCount} selected` : `已选 ${selectedCount}`}
+                        {isEn ? `${selectedCount} selected` : `Selected ${selectedCount}`}
                       </span>
                     )}
                   </div>
 
-                  {/* === 2 列网格 === */}
+                  {/* === 2 column grid === */}
                   <div className="grid grid-cols-2 gap-1">
-                    {/* 全部 */}
+                    {/* all */}
                     {renderTile(
                       'all',
                       activeGroupTab === 'all',
                       () => { setActiveGroupTab('all'); setShowGroupMenu(false) },
                       <Users className="h-3.5 w-3.5 flex-shrink-0" />,
-                      isEn ? 'All' : '全部',
+                      isEn ? 'All' : 'all',
                       tabCounts.all
                     )}
-                    {/* 未分组 — 选中时可"移除分组" */}
+                    {/* Not grouped — Can be selected"Remove group" */}
                     {renderTile(
                       'ungrouped',
                       activeGroupTab === 'ungrouped',
                       () => { setActiveGroupTab('ungrouped'); setShowGroupMenu(false) },
                       <Inbox className="h-3.5 w-3.5 flex-shrink-0" />,
-                      isEn ? 'Ungrouped' : '未分组',
+                      isEn ? 'Ungrouped' : 'Not grouped',
                       tabCounts.ungrouped,
                       undefined,
                       selectedCount > 0 ? {
@@ -518,7 +518,7 @@ export function AccountToolbar({
                         onMove: () => handleMoveToGroup(undefined)
                       } : undefined
                     )}
-                    {/* 用户分组 */}
+                    {/* User grouping */}
                     {sortedGroups.map(group => {
                       const color = group.color ? toRgba(group.color) : undefined
                       const isActive = activeGroupTab === group.id
@@ -545,22 +545,22 @@ export function AccountToolbar({
                     })}
                   </div>
 
-                  {/* === 管理分组 === */}
+                  {/* === Management grouping === */}
                   <div className="border-t my-2" />
                   <button
                     className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-muted text-primary"
                     onClick={() => { setShowGroupMenu(false); onManageGroups() }}
                   >
                     <FolderPlus className="h-3.5 w-3.5" />
-                    <span>{isEn ? 'Manage groups' : '管理分组'}</span>
+                    <span>{isEn ? 'Manage groups' : 'Management grouping'}</span>
                   </button>
 
-                  {/* === 选中提示（hover 行尾按钮即可移动） === */}
+                  {/* === Select the prompt (hover Click the end of line button to move) === */}
                   {selectedCount > 0 && (
                     <div className="text-[10px] text-muted-foreground px-2 pt-1 pb-0.5 italic">
                       {isEn
                         ? 'Tip: hover a tile and click ⇄ to move selected accounts here'
-                        : '提示：将鼠标悬停到分组上，点击右侧 ⇄ 按钮即可批量移动选中账户'}
+                        : 'Tip: Hover the mouse over the group and click on the right ⇄ Click the button to move selected accounts in batches'}
                     </div>
                   )}
                 </div>
@@ -568,7 +568,7 @@ export function AccountToolbar({
             })()}
           </div>
           
-          {/* 标签下拉菜单 — 纯图标 + tooltip，选中时右上角小红点提示有可操作下拉 */}
+          {/* Label drop-down menu — Pure icon + tooltip, when selected, the little red dot in the upper right corner prompts that there is an operable drop-down */}
           <div className="relative" ref={tagMenuRef}>
             <Button
               variant={showTagMenu ? "default" : "ghost"}
@@ -583,8 +583,8 @@ export function AccountToolbar({
                 }
               }}
               title={selectedCount > 0
-                ? (isEn ? `Set tags for ${selectedCount} selected` : `批量设置 ${selectedCount} 个选中账号的标签`)
-                : (isEn ? 'Manage tags' : '管理标签')
+                ? (isEn ? `Set tags for ${selectedCount} selected` : `Batch settings ${selectedCount} Tags for selected accounts`)
+                : (isEn ? 'Manage tags' : 'Manage tags')
               }
             >
               <Tag className="h-4 w-4" />
@@ -597,11 +597,11 @@ export function AccountToolbar({
               <div className="absolute left-0 top-full mt-2 z-50 min-w-[220px] bg-popover border rounded-lg shadow-lg p-2">
                 <div className="absolute -top-2 left-4 w-4 h-4 bg-popover border-l border-t rotate-45" />
                 <div className="text-xs text-muted-foreground px-2 py-1 mb-1">
-                  {isEn ? `${selectedCount} selected (multi)` : `已选 ${selectedCount} 个账户（可多选）`}
+                  {isEn ? `${selectedCount} selected (multi)` : `Selected ${selectedCount} accounts (multiple choices available)`}
                 </div>
                 <div className="border-t my-1" />
                 
-                {/* 标签列表 */}
+                {/* tag list */}
                 <div className="max-h-[300px] overflow-y-auto">
                   {Array.from(tags.values()).map(tag => {
                     const { tagCounts, total } = getSelectedAccountsTagStatus()
@@ -636,7 +636,7 @@ export function AccountToolbar({
                 
                 {tags.size === 0 && (
                   <div className="text-sm text-muted-foreground px-2 py-2 text-center">
-                    {isEn ? 'No tags' : '暂无标签'}
+                    {isEn ? 'No tags' : 'No tags yet'}
                   </div>
                 )}
                 
@@ -649,12 +649,12 @@ export function AccountToolbar({
                   }}
                 >
                   <Plus className="h-4 w-4" />
-                  <span>{isEn ? 'Manage tags' : '管理标签'}</span>
+                  <span>{isEn ? 'Manage tags' : 'Manage tags'}</span>
                 </button>
               </div>
             )}
           </div>
-          {/* 代理绑定下拉（选中账号时才高亮，未选时可作为信息查看入口） */}
+          {/* Agent binding drop-down (highlighted only when the account is selected, and can be used as an information viewing portal when not selected) */}
           <div className="relative" ref={proxyMenuRef}>
             <Button
               variant={showProxyMenu ? 'default' : 'ghost'}
@@ -666,8 +666,8 @@ export function AccountToolbar({
                 setShowTagMenu(false)
               }}
               title={selectedCount > 0
-                ? (isEn ? `Bind ${selectedCount} selected accounts to a proxy` : `把选中 ${selectedCount} 个账号绑定到代理`)
-                : (isEn ? 'View proxy bindings' : '查看账号-代理绑定')
+                ? (isEn ? `Bind ${selectedCount} selected accounts to a proxy` : `select ${selectedCount} An account is bound to an agent`)
+                : (isEn ? 'View proxy bindings' : 'View account-proxy binding')
               }
             >
               <NetworkIcon className="h-4 w-4" />
@@ -685,11 +685,11 @@ export function AccountToolbar({
 
                   <div className="flex items-center justify-between px-2 py-1 mb-1">
                     <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                      {isEn ? 'Proxy Bindings' : '代理绑定'}
+                      {isEn ? 'Proxy Bindings' : 'proxy binding'}
                     </span>
                     {selectedCount > 0 && (
                       <span className="text-[10px] text-primary">
-                        {isEn ? `${selectedCount} selected` : `已选 ${selectedCount}`}
+                        {isEn ? `${selectedCount} selected` : `Selected ${selectedCount}`}
                       </span>
                     )}
                   </div>
@@ -698,7 +698,7 @@ export function AccountToolbar({
                     <div className="px-2 py-3 text-[11px] text-muted-foreground">
                       {isEn
                         ? 'Select accounts first, then choose a proxy to bind to.'
-                        : '请先选择账号，再点击要绑定的代理'
+                        : 'Please select the account first and then click on the agent to be bound.'
                       }
                     </div>
                   ) : (
@@ -707,7 +707,7 @@ export function AccountToolbar({
                         <div className="px-2 py-3 text-[11px] text-amber-600 dark:text-amber-400">
                           {isEn
                             ? 'No alive proxies. Add and validate proxies in "Proxy Pool" first.'
-                            : '没有可用代理。请先在"代理池"页面添加并验活代理'
+                            : 'No proxy available. please first"proxy pool"Add and verify the agent on the page'
                           }
                         </div>
                       ) : (
@@ -759,7 +759,7 @@ export function AccountToolbar({
                         disabled={proxyCounts.get('none') === total}
                       >
                         <UnlinkIcon className="h-3.5 w-3.5" />
-                        <span>{isEn ? `Unbind selected (${selectedCount})` : `解绑选中 (${selectedCount})`}</span>
+                        <span>{isEn ? `Unbind selected (${selectedCount})` : `Unbind selected (${selectedCount})`}</span>
                       </button>
                     </>
                   )}
@@ -768,7 +768,7 @@ export function AccountToolbar({
                   <div className="text-[10px] text-muted-foreground px-2 py-1 italic">
                     {isEn
                       ? 'Tip: bind N accounts to 1 proxy to reduce risk-control association.'
-                      : '提示：把 N 个账号绑定到同一代理 IP，可降低风控关联风险'
+                      : 'Tip: put N accounts bound to the same agent IP, which can reduce risks associated with risk control'
                     }
                   </div>
                 </div>
@@ -781,25 +781,25 @@ export function AccountToolbar({
             size="icon"
             className="h-8 w-8"
             onClick={() => setPrivacyMode(!privacyMode)}
-            title={privacyMode ? (isEn ? 'Disable privacy mode' : '关闭隐私模式') : (isEn ? 'Enable privacy mode' : '开启隐私模式')}
+            title={privacyMode ? (isEn ? 'Disable privacy mode' : 'Turn off privacy mode') : (isEn ? 'Enable privacy mode' : 'Turn on privacy mode')}
           >
             {privacyMode ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </Button>
-          {/* 筛选按钮与气泡 */}
+          {/* Filter buttons and bubbles */}
           <div className="relative">
             <Button
               variant={isFilterExpanded ? "default" : "ghost"}
               size="icon"
               className="h-8 w-8"
               onClick={onToggleFilter}
-              title={isEn ? 'Toggle advanced filter' : '展开/收起高级筛选'}
+              title={isEn ? 'Toggle advanced filter' : 'Expand/Close advanced filtering'}
             >
               <Filter className="h-4 w-4" />
             </Button>
-            {/* 筛选气泡面板 */}
+            {/* filter bubble panel */}
             {isFilterExpanded && (
               <div className="absolute right-0 top-full mt-2 z-50 min-w-[600px] bg-popover border rounded-lg shadow-lg">
-                {/* 气泡箭头 */}
+                {/* bubble arrow */}
                 <div className="absolute -top-2 right-4 w-4 h-4 bg-popover border-l border-t rotate-45" />
                 <AccountFilterPanel />
               </div>
@@ -808,7 +808,7 @@ export function AccountToolbar({
 
           <div className="w-px h-6 bg-border mx-1" />
 
-          {/* 批量操作 — 纯图标 + tooltip（带选中计数）*/}
+          {/* Batch operation — Pure icon + tooltip(with selected count)*/}
           <Button
             variant="ghost"
             size="icon"
@@ -816,11 +816,11 @@ export function AccountToolbar({
             onClick={handleBatchCheck}
             disabled={isChecking || selectedCount === 0}
             title={selectedCount > 0
-              ? (isEn ? `Check ${selectedCount} accounts info (usage / subscription / banned)` : `检查选中 ${selectedCount} 个账号信息：刷新用量、订阅详情、封禁状态`)
-              : (isEn ? 'Check accounts info (select first)' : '检查账户信息（请先选中账号）')
+              ? (isEn ? `Check ${selectedCount} accounts info (usage / subscription / banned)` : `Check selected ${selectedCount} Account information: refresh usage, subscription details, ban status`)
+              : (isEn ? 'Check accounts info (select first)' : 'Check account information (please select account first)')
             }
           >
-            {/* 与 batchRefresh 区分图标：Activity 代表"查看状态/活动" */}
+            {/* and batchRefresh Distinguish icon:Activity represent"View status/Activity" */}
             {isChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
           </Button>
           <Button
@@ -830,8 +830,8 @@ export function AccountToolbar({
             onClick={handleBatchLiveness}
             disabled={selectedCount === 0}
             title={selectedCount > 0
-              ? (isEn ? `Liveness test ${selectedCount} accounts via reverse-proxy` : `走反代对选中 ${selectedCount} 个账号批量测活`)
-              : (isEn ? 'Liveness test (select first)' : '账号测活（请先选中账号）')
+              ? (isEn ? `Liveness test ${selectedCount} accounts via reverse-proxy` : `Go against the selection ${selectedCount} Batch activity test of individual accounts`)
+              : (isEn ? 'Liveness test (select first)' : 'Account activity test (please select the account first)')
             }
           >
             <Zap className="h-4 w-4" />
@@ -843,8 +843,8 @@ export function AccountToolbar({
             onClick={handleBatchDelete}
             disabled={selectedCount === 0}
             title={selectedCount > 0
-              ? (isEn ? `Delete ${selectedCount} selected accounts` : `删除选中的 ${selectedCount} 个账号`)
-              : (isEn ? 'Delete (select first)' : '删除选中账号（请先选中账号）')
+              ? (isEn ? `Delete ${selectedCount} selected accounts` : `Delete selected ${selectedCount} accounts`)
+              : (isEn ? 'Delete (select first)' : 'Delete the selected account (please select the account first)')
             }
           >
             <Trash2 className="h-4 w-4" />
@@ -856,25 +856,25 @@ export function AccountToolbar({
             onClick={handleBatchRefresh}
             disabled={isRefreshing || selectedCount === 0}
             title={selectedCount > 0
-              ? (isEn ? `Refresh ${selectedCount} access tokens` : `刷新选中 ${selectedCount} 个账号的访问令牌`)
-              : (isEn ? 'Refresh Token (select first)' : '刷新 Token（请先选中账号）')
+              ? (isEn ? `Refresh ${selectedCount} access tokens` : `Refresh selected ${selectedCount} access token for an account`)
+              : (isEn ? 'Refresh Token (select first)' : 'refresh Token(Please select the account first)')
             }
           >
-            {/* 与 batchCheck 区分图标：KeyRound 代表"刷新令牌"，与 AccountCard 单账号视图一致 */}
+            {/* and batchCheck Distinguish icon:KeyRound represent"refresh token",and AccountCard Single account view consistent */}
             {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
           </Button>
 
           <div className="w-px h-6 bg-border mx-1" />
 
-          {/* 全选 / 取消全选 */}
+          {/* Select all / Deselect all */}
           <Button
             variant="ghost"
             size="sm"
             onClick={handleToggleSelectAll}
             title={
               selectedCount === filteredCount && filteredCount > 0
-                ? (isEn ? 'Deselect all' : '取消全选')
-                : (isEn ? 'Select all' : '全选')
+                ? (isEn ? 'Deselect all' : 'Deselect all')
+                : (isEn ? 'Select all' : 'Select all')
             }
           >
             {selectedCount === filteredCount && filteredCount > 0 ? (
@@ -882,17 +882,17 @@ export function AccountToolbar({
             ) : (
               <Square className="h-4 w-4 mr-1" />
             )}
-            {selectedCount > 0 ? (isEn ? `${selectedCount} sel` : `已选 ${selectedCount}`) : (isEn ? 'All' : '全选')}
+            {selectedCount > 0 ? (isEn ? `${selectedCount} sel` : `Selected ${selectedCount}`) : (isEn ? 'All' : 'Select all')}
           </Button>
 
-          {/* 清除选中（仅多选时显示，独立明确入口） */}
+          {/* Clear selection (only displayed when multiple selections are made, independent clear entry) */}
           {selectedCount > 0 && (
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
               onClick={() => deselectAll()}
-              title={isEn ? `Clear ${selectedCount} selected` : `清除 ${selectedCount} 个选中`}
+              title={isEn ? `Clear ${selectedCount} selected` : `Clear ${selectedCount} selected`}
             >
               <X className="h-4 w-4" />
             </Button>

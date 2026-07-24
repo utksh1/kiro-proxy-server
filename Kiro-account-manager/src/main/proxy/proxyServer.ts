@@ -52,6 +52,8 @@ export interface ProxyServerEvents {
   onTokensUpdate?: (inputTokens: number, outputTokens: number) => void
   onRequestStatsUpdate?: (totalRequests: number, successRequests: number, failedRequests: number) => void
   onPoolEmpty?: () => Promise<void> // Triggered when the account pool is empty (cold start lazy loading)
+  /** Custom route handler. Return true if the route was handled by this callback, false to continue default routing. */
+  onCustomRoute?: (req: import('http').IncomingMessage, res: import('http').ServerResponse) => boolean | Promise<boolean>
 }
 
 type ModelModality = 'text' | 'audio' | 'image' | 'video' | 'pdf'
@@ -198,13 +200,9 @@ function buildClientModel(input: {
   const outputModalities: ModelModality[] = ['text']
   const output = modelOutputLimit(input.id, input.maxOutputTokens)
   const context = typeof input.maxInputTokens === 'number' && input.maxInputTokens > 0 ? input.maxInputTokens : 200000
-  
-  const lowerId = input.id.toLowerCase()
+
   let extractedThinking = extractThinkingSchema(input.additionalModelRequestFieldsSchema)
-  if (!extractedThinking && (lowerId.includes('claude-3-7-sonnet') || lowerId.includes('claude-sonnet-3.7') || lowerId.includes('claude-sonnet-4.5') || lowerId.includes('claude-4-5-sonnet'))) {
-    extractedThinking = { schemaPath: 'default', efforts: ['low', 'medium', 'high', 'xhigh'] }
-  }
-  
+
   const hasThinking = !!extractedThinking
   const reasoning = hasThinking
   const interleaved = hasThinking ? { field: 'reasoning_content' as const } : false
@@ -414,7 +412,7 @@ export class ProxyServer {
 
     return new Promise((resolve, reject) => {
       this.isStopping = false
-      const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse) => 
+      const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse) =>
         this.handleRequest(req, res)
 
       // Check if enabled TLS
@@ -521,7 +519,7 @@ export class ProxyServer {
   // P1-13 when tls.enabled but not provided cert/key When, a self-signed certificate is automatically generated
   private getTlsOptions(): https.ServerOptions {
     const tls = this.config.tls!
-    
+
     let cert: string
     let key: string
 
@@ -1056,71 +1054,99 @@ export class ProxyServer {
     try {
       require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `\n[${new Date().toISOString()}] getThinkingConfig CALLED for model: ${modelId}\n`)
       require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  modelCache exists: ${!!this.modelCache}\n`)
-    } catch(e) {}
-    
+    } catch (e) { }
+
     const logMsg = `[getThinkingConfig] model=${modelId}, cacheExists=${!!this.modelCache}`
     console.log(logMsg)
     proxyLogger.info('ThinkingConfig', logMsg)
-    
+
     if (!this.modelCache) {
       const errMsg = `modelCache is null for model ${modelId}`
       console.log(`[ERROR] ${errMsg}`)
       proxyLogger.error('ThinkingConfig', errMsg)
       try {
         require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: undefined (modelCache is null)\n`)
-      } catch(e) {}
+      } catch (e) { }
       return undefined
     }
-    
+
     try {
       require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  modelCache has ${this.modelCache.models.length} models\n`)
-    } catch(e) {}
-    
+    } catch (e) { }
+
     proxyLogger.info('ThinkingConfig', `modelCache has ${this.modelCache.models.length} models`)
-    
+
+    // Dump all model IDs and their schema status
+    try {
+      for (const m of this.modelCache.models) {
+        const hasS = !!m.additionalModelRequestFieldsSchema
+        const sPath = hasS ? extractThinkingSchema(m.additionalModelRequestFieldsSchema)?.schemaPath : 'N/A'
+        require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `    - ${m.modelId}: hasSchema=${hasS}, schemaPath=${sPath}\n`)
+      }
+    } catch (e) { }
+
     const lower = modelId.toLowerCase()
     const model = this.modelCache.models.find(m => m.modelId.toLowerCase() === lower)
-    
+
     if (!model) {
       const errMsg = `model ${modelId} not found in cache`
       console.log(`[ERROR] ${errMsg}`)
       proxyLogger.error('ThinkingConfig', errMsg)
       try {
         require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: undefined (model not found in cache)\n`)
-      } catch(e) {}
+      } catch (e) { }
       return undefined
     }
-    
+
     try {
       require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  Found model, hasSchema: ${!!model.additionalModelRequestFieldsSchema}\n`)
-    } catch(e) {}
-    
+    } catch (e) { }
+
     proxyLogger.info('ThinkingConfig', `Found model ${modelId}, hasSchema=${!!model.additionalModelRequestFieldsSchema}`)
-    
+
+    // Dump full raw model data for debugging
+    try {
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RAW model keys: ${Object.keys(model).join(', ')}\n`)
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RAW additionalModelRequestFieldsSchema: ${JSON.stringify(model.additionalModelRequestFieldsSchema, null, 2)}\n`)
+      require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RAW modelId: ${model.modelId}\n`)
+    } catch (e) { }
+
     let schema = extractThinkingSchema(model.additionalModelRequestFieldsSchema)
-    
-    // Fallback for models known to support thinking but Kiro backend hasn't updated their schema yet
-    if (!schema && (lower.includes('claude-3-7-sonnet') || lower.includes('claude-sonnet-3.7') || lower.includes('claude-sonnet-4.5') || lower.includes('claude-4-5-sonnet'))) {
-      schema = { schemaPath: 'default', efforts: ['low', 'medium', 'high', 'xhigh'] }
-      proxyLogger.info('ThinkingConfig', `Applied hardcoded thinking fallback for known model ${modelId}`)
+
+    // Fallback: Kiro backend currently returns null schema for ALL models,
+    // but thinking is fully supported server-side (reasoningContentEvent works).
+    // Inject thinking config for Claude models that are known to support it.
+    if (!schema) {
+      const lower = modelId.toLowerCase()
+      if (lower.includes('claude-sonnet-4.5') || lower.includes('claude-4-5-sonnet') ||
+        lower.includes('claude-sonnet-4') || lower.includes('claude-4-sonnet') ||
+        lower.includes('claude-3-7-sonnet') || lower.includes('claude-sonnet-3.7') ||
+        lower.includes('claude-haiku-4') || lower.includes('claude-4-haiku') ||
+        lower.includes('claude-opus') || lower.includes('claude-4-opus')) {
+        schema = { schemaPath: 'output_config', efforts: ['low', 'medium', 'high', 'xhigh'] }
+        proxyLogger.info('ThinkingConfig', `Applied thinking fallback for Claude model ${modelId} (output_config path)`)
+        try {
+          require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  FALLBACK: Applied output_config thinking for Claude model ${modelId}\n`)
+        } catch (e) { }
+      }
     }
-    
+
     if (!schema?.schemaPath || !schema.efforts?.length) {
-      const errMsg = `model ${modelId} has no valid thinking schema`
-      console.log(`[ERROR] ${errMsg}`)
-      proxyLogger.error('ThinkingConfig', errMsg)
+      const infoMsg = `model ${modelId} has no valid thinking schema`
+      console.log(`[INFO] ${infoMsg}`)
+      proxyLogger.info('ThinkingConfig', infoMsg)
       try {
         require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: undefined (no valid schema - schemaPath: ${schema?.schemaPath}, efforts: ${schema?.efforts})\n`)
-      } catch(e) {}
+      } catch (e) { }
       return undefined
     }
-    
+
     const successMsg = `model ${modelId} supports thinking: schema=${schema.schemaPath}, efforts=${schema.efforts.join(',')}`
     console.log(`[SUCCESS] ${successMsg}`)
     proxyLogger.info('ThinkingConfig', successMsg)
     try {
       require('fs').appendFileSync('/tmp/kiro-thinking-debug.log', `  RESULT: ThinkingConfig { schemaPath: ${schema.schemaPath}, efforts: [${schema.efforts.join(',')}], defaultEffort: 'high' }\n`)
-    } catch(e) {}
+    } catch (e) { }
     return { schemaPath: schema.schemaPath, efforts: schema.efforts, defaultEffort: 'high' }
   }
 
@@ -1145,7 +1171,7 @@ export class ProxyServer {
 
   async getAvailableModels(signal?: AbortSignal): Promise<{ models: ReturnType<typeof ProxyServer.mapKiroModelToApi>[]; fromCache: boolean }> {
     const now = Date.now()
-    
+
     let kiroModels: KiroModel[]
     let fromCache = false
 
@@ -1238,7 +1264,7 @@ export class ProxyServer {
       // random delay 0-3 seconds to prevent simultaneous refresh of multiple accounts from being recognized as a batch operation.
       const jitter = Math.floor(Math.random() * 3000)
       if (jitter > 0) await this.waitForRetry(jitter, signal)
-      
+
       const result = await this.abortable(this.events.onTokenRefresh!(account), signal)
       if (result.success && result.accessToken) {
         // Update the account pool Token
@@ -1368,7 +1394,7 @@ export class ProxyServer {
         account = allAccounts.length > 0 ? allAccounts[0] : null
       }
     }
-    
+
     if (!account) return null
 
     // Automatic switching K-Proxy equipment ID(if K-Proxy service available)
@@ -1403,7 +1429,7 @@ export class ProxyServer {
 
     // Try switching to the device bound to the account ID
     const switched = kproxyService.switchToAccount(account.id)
-    
+
     if (!switched) {
       // The account is not bound to a device ID, automatically generated and bound
       const newDeviceId = generateDeviceId()
@@ -1753,7 +1779,7 @@ export class ProxyServer {
 
     const today = new Date().toISOString().split('T')[0]
     const now = Date.now()
-    
+
     // Update total
     apiKey.usage.totalRequests++
     apiKey.usage.totalCredits += credits
@@ -1909,7 +1935,7 @@ export class ProxyServer {
           return
         }
         // will match API Key Stored in the request object for subsequent statistics
-        ;(req as unknown as { matchedApiKey?: import('./types').ApiKey }).matchedApiKey = authResult.apiKey
+        ; (req as unknown as { matchedApiKey?: import('./types').ApiKey }).matchedApiKey = authResult.apiKey
 
         // P1-7 according to API Key(or if anonymous, press IP) request current limit
         const rateLimitId = authResult.apiKey?.id || `ip:${clientIP || 'unknown'}`
@@ -1931,7 +1957,12 @@ export class ProxyServer {
 
       // Routing (remove query parameters)
       const pathWithoutQuery = path.split('?')[0]
-      
+
+      if (this.events.onCustomRoute) {
+        const handled = await this.events.onCustomRoute(req, res)
+        if (handled) return
+      }
+
       if (pathWithoutQuery === '/v1/models' || pathWithoutQuery === '/models') {
         await this.handleModels(res, controller.signal)
       } else if (pathWithoutQuery === '/v1/chat/completions' || pathWithoutQuery === '/chat/completions') {
@@ -2240,7 +2271,7 @@ export class ProxyServer {
         throw new Error('count_tokens requires messages')
       }
       const estimatedTokens = Math.max(1, this.estimateTokenCount(request.system) + this.estimateTokenCount(request.messages) + this.estimateTokenCount(request.tools))
-      
+
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ input_tokens: estimatedTokens }))
     } catch (error) {
@@ -2450,15 +2481,15 @@ export class ProxyServer {
   // Model list
   private async handleModels(res: http.ServerResponse, signal?: AbortSignal): Promise<void> {
     const now = Date.now()
-    
+
     // Kiro official model (with UI be consistent)
     // Include thinking Supported default schema（output_config path)
     const kiroOfficialModels = [
       buildClientModel({ id: 'auto', created: now, ownedBy: 'kiro-api', description: 'Auto select best model' }),
-      buildClientModel({ 
-        id: 'claude-sonnet-4.5', 
-        created: now, 
-        ownedBy: 'kiro-api', 
+      buildClientModel({
+        id: 'claude-sonnet-4.5',
+        created: now,
+        ownedBy: 'kiro-api',
         description: 'The latest Claude Sonnet model',
         additionalModelRequestFieldsSchema: {
           properties: {
@@ -2472,10 +2503,10 @@ export class ProxyServer {
           }
         }
       }),
-      buildClientModel({ 
-        id: 'claude-sonnet-4', 
-        created: now, 
-        ownedBy: 'kiro-api', 
+      buildClientModel({
+        id: 'claude-sonnet-4',
+        created: now,
+        ownedBy: 'kiro-api',
         description: 'Hybrid reasoning and coding',
         additionalModelRequestFieldsSchema: {
           properties: {
@@ -2490,10 +2521,10 @@ export class ProxyServer {
         }
       }),
       buildClientModel({ id: 'claude-haiku-4.5', created: now, ownedBy: 'kiro-api', description: 'The latest Claude Haiku model' }),
-      buildClientModel({ 
-        id: 'claude-opus-4.5', 
-        created: now, 
-        ownedBy: 'kiro-api', 
+      buildClientModel({
+        id: 'claude-opus-4.5',
+        created: now,
+        ownedBy: 'kiro-api',
         description: 'The most powerful model',
         additionalModelRequestFieldsSchema: {
           properties: {
@@ -2528,7 +2559,7 @@ export class ProxyServer {
 
     // try to start from Kiro API Get dynamic model
     let kiroModels: KiroModel[] = []
-    
+
     // Check cache
     if (this.modelCache && (now - this.modelCache.timestamp) < this.MODEL_CACHE_TTL) {
       kiroModels = this.modelCache.models
@@ -2596,22 +2627,22 @@ export class ProxyServer {
                 }
               }
             ]
-            
+
             // Merge fetched models with hardcoded thinking models
             // Strategy: Use API models as base, but if hardcoded model has thinking schema and API model doesn't, use hardcoded schema
             const modelMap = new Map<string, KiroModel>()
             const hardcodedMap = new Map<string, KiroModel>()
-            
+
             // Build hardcoded lookup
             for (const m of hardcodedThinkingModels) {
               hardcodedMap.set(m.modelId.toLowerCase(), m)
             }
-            
+
             // Process API models: use API data but augment with hardcoded thinking schema if missing
             for (const m of kiroModels) {
               const lower = m.modelId.toLowerCase()
               const hardcoded = hardcodedMap.get(lower)
-              
+
               // If API model has no thinking schema but hardcoded version does, use hardcoded schema
               if (hardcoded && hardcoded.additionalModelRequestFieldsSchema && !m.additionalModelRequestFieldsSchema) {
                 modelMap.set(lower, {
@@ -2622,7 +2653,7 @@ export class ProxyServer {
                 modelMap.set(lower, m)
               }
             }
-            
+
             // Add hardcoded models that don't exist in API response
             for (const m of hardcodedThinkingModels) {
               const lower = m.modelId.toLowerCase()
@@ -2630,10 +2661,10 @@ export class ProxyServer {
                 modelMap.set(lower, m)
               }
             }
-            
+
             const mergedModels = Array.from(modelMap.values())
             this.modelCache = { models: mergedModels, timestamp: now }
-            
+
             // Sync to kiroApi of ctx cache, for token Clipping logic usage
             for (const m of mergedModels) {
               if (m.tokenLimits?.maxInputTokens) {
@@ -2669,7 +2700,7 @@ export class ProxyServer {
     // Merge model lists and remove duplicates
     const modelIds = new Set<string>()
     const allModels: ClientModel[] = []
-    
+
     // 1. Add dynamic models first (from API Obtained, including true token limit / input types）
     for (const m of dynamicModels) {
       if (!modelIds.has(m.id)) {
@@ -2677,7 +2708,7 @@ export class ProxyServer {
         allModels.push(m)
       }
     }
-    
+
     // 2. Added hidden model (not available in official ListAvailableModels returned, but the backend may support it)
     for (const m of hiddenModels) {
       if (!modelIds.has(m.id)) {
@@ -2685,7 +2716,7 @@ export class ProxyServer {
         allModels.push(m)
       }
     }
-    
+
     // 3. Only add static cover when the dynamic model is missing
     if (dynamicModels.length === 0) {
       for (const m of [...kiroOfficialModels, ...presetModels]) {
@@ -2777,7 +2808,7 @@ export class ProxyServer {
         const toolsCount = userInput?.userInputMessageContext?.tools?.length || 0
         const historyLength = kiroPayload.conversationState.history?.length || 0
         const hasImages = (userInput?.images?.length || 0) > 0
-        
+
         proxyLogger.info('ProxyServer', `OpenAI API: ${request.model}`, {
           model: request.model,
           stream: request.stream,
@@ -3050,7 +3081,7 @@ export class ProxyServer {
             resolve()
             return
           }
-          
+
           this.recordRequestSuccess()
           this.stats.totalTokens += usage.inputTokens + usage.outputTokens
           this.stats.inputTokens += usage.inputTokens
@@ -3218,7 +3249,7 @@ export class ProxyServer {
         const toolsCount = userInput?.userInputMessageContext?.tools?.length || 0
         const historyLength = kiroPayload.conversationState.history?.length || 0
         const hasImages = (userInput?.images?.length || 0) > 0
-        
+
         proxyLogger.info('ProxyServer', `Claude API: ${request.model}`, {
           model: request.model,
           stream: request.stream,
@@ -3316,7 +3347,7 @@ export class ProxyServer {
 
     // Estimate input tokens(based on payload size)
     const estimatedInputTokens = Math.max(1, Math.round(JSON.stringify(kiroPayload).length / 3))
-    
+
     // send message_start(First round only)
     if (currentRound === 0) {
       const messageStart = createClaudeStreamEvent('message_start', {

@@ -246,7 +246,7 @@ const en = {
       description: 'Select display language',
       auto: 'Auto (System)',
       en: 'English',
-      zh: '简体中文',
+      zh: 'Simplified Chinese',
       customFile: 'Custom Translation File',
       loadCustom: 'Load Custom',
       customHint: 'Load custom translation JSON file from local'

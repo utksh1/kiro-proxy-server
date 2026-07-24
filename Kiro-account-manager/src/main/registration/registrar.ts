@@ -13,7 +13,7 @@ import {
   getNestedMap, getNestedStringMap
 } from './http-utils'
 import {
-  TempEmailService, MoEmailService, TempMailPlusService, ProtonWebviewService, GptMailService,
+  TempEmailService, MoEmailService, TempMailPlusService, GptMailService,
   parseOutlookLines, getInboxCount, waitForOTP
 } from './email-service'
 import { getSystemProxy, safeCreateProxyAgent } from '../proxy/systemProxy'
@@ -28,9 +28,9 @@ export interface FingerprintSnapshot {
   gpuModel: string
   canvasHash: number
   screen: { width: number; height: number }
-  /** 注册时使用的出口代理 URL（脱敏前缀） */
+  /** Proxy URL used during registration (redacted prefix) */
   proxyUrl?: string
-  /** 探测到的出口 IP（注册时实际用的公网 IP） */
+  /** Detected exit IP (actual public IP used during registration) */
   exitIP?: string
 }
 
@@ -46,13 +46,13 @@ export interface RegistrationResult {
   region?: string
   provider?: string
   verify?: Record<string, unknown>
-  /** 本次注册使用的指纹摘要（用于审计与后续复用） */
+  /** Fingerprint snapshot used in this registration (for audit and future reuse) */
   fingerprint?: FingerprintSnapshot
 }
 
 type StepFn = () => Promise<void>
 
-/** 注册流程的可观察「阶段」标识，供前端按 taskId 实时显示进度 */
+/** Observable "stage" identifier for the registration process, for real-time progress display by task ID on frontend */
 export type RegStepName =
   | 'init' | 'proxy-chain-ready' | 'tls-ready' | 'exit-ip'
   | 'oidc' | 'device' | 'email-created'
@@ -74,7 +74,7 @@ export type StepFn2 = (event: RegStepEvent) => void
 export class Registrar {
   private cfg: RegistrationConfig
   private session: SessionClient | null = null
-  /** 共享的 ModuleClient（来自 tlsClientPool）；不在 cleanup 中 terminate，由进程退出时统一释放 */
+  /** Shared ModuleClient (from tlsClientPool); not terminated in cleanup, released when process exits */
   private moduleClient: ModuleClient | null = null
   private cookies = new Map<string, string>()
   private identity: BrowserIdentity
@@ -105,41 +105,41 @@ export class Registrar {
   private chainRelay: ChainProxyRelay | null = null
   private chainTargetProxy = ''
   private exitIP = ''
-  private readonly tlsSessionId = newUUID() // 固定：整个 Registrar 生命周期内 DLL 中只注册一个 session
+  private readonly tlsSessionId = newUUID() // Fixed: only one session registered in DLL throughout the Registrar lifecycle
 
   constructor(cfg: RegistrationConfig, log?: LogFn, onStep?: StepFn2) {
     this.cfg = cfg
     this.identity = randomIdentity()
     this.fpCtx = newFPContext(this.identity)
     this.vid = visitorId()
-    // 注册日志会推送到 UI / 控制台，统一脱敏代理账密、token 等敏感片段
+    // Registration logs are pushed to UI/console, uniformly redacting proxy credentials, tokens and other sensitive fragments
     const rawLog = log || ((msg: string): void => console.log(msg))
     this.log = (msg: string): void => rawLog(redactString(msg))
     this.onStep = onStep || ((): void => {})
   }
 
-  /** 触发 step 事件：上层（前端 UI）可据此实时展示注册到了哪一步。失败时静默以不影响主流程。 */
+  /** Trigger step event: upper layer (frontend UI) can display real-time progress based on this. Fails silently to avoid affecting main flow. */
   private emitStep(name: RegStepName, info?: Partial<RegStepEvent>): void {
     try {
       this.onStep({ name, ts: Date.now(), email: this.email || undefined, exitIp: this.exitIP || undefined, ...info })
     } catch { /* ignore */ }
   }
 
-  /** 基于当前 identity 的 sec-ch-ua 头（动态生成，跟 chromeVer 对齐） */
+  /** sec-ch-ua header based on current identity (dynamically generated, aligned with chromeVer) */
   private get secUA(): string {
     const major = this.identity.chromeVer.split('.')[0]
     return `"Chromium";v="${major}", "Not/A)Brand";v="24", "Google Chrome";v="${major}"`
   }
 
-  /** 中止当前注册流程 */
+  /** Abort current registration process */
   abort(): void {
     this.abortController.abort()
   }
 
   /**
-   * 启用代理链：若同时配置了 upstreamProxy(上游中转) 与 proxy(目标代理)，
-   * 在本机起一个中继把链路串成「本机 → 中继 → 上游中转(非大陆) → 目标代理 → 目标站点」，
-   * 并把 cfg.proxy 指向本地中继，使后续所有请求自动走链路。
+   * Enable proxy chain: if both upstreamProxy (upstream relay) and proxy (target proxy) are configured,
+   * start a relay on localhost to chain the route as "localhost → relay → upstream relay (non-mainland) → target proxy → target site",
+   * and point cfg.proxy to the local relay, making all subsequent requests automatically go through the chain.
    */
   private async setupProxyChain(): Promise<void> {
     const target = (this.cfg.proxy || '').trim()
@@ -150,26 +150,26 @@ export class Registrar {
       const relayUrl = await this.chainRelay.start()
       this.chainTargetProxy = target
       this.cfg.proxy = relayUrl
-      this.log('[ProxyChain] 已启用代理链：本机 → 上游中转 → 目标代理 → 目标站点')
+      this.log('[ProxyChain] Proxy chain enabled: localhost → upstream relay → target proxy → target site')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       this.chainRelay = null
-      // 严格代理模式下，链路失败必须立刻中止，防止"回退仅用目标代理"时大陆 IP 被目标拒绝
+      // In strict proxy mode, chain failure must abort immediately to prevent "fallback to target proxy only" when mainland IP would be rejected by target
       if (this.cfg.strictProxy) {
-        throw new Error(`[ProxyChain] 启用失败，严格代理模式已中止: ${msg}`)
+        throw new Error(`[ProxyChain] Failed to enable, strict proxy mode aborted: ${msg}`)
       }
-      this.log(`[ProxyChain] 启用失败，回退为直接使用目标代理: ${msg}`)
+      this.log(`[ProxyChain] Failed to enable, falling back to direct target proxy use: ${msg}`)
     }
   }
 
   private checkAborted(): void {
-    if (this.abortController.signal.aborted) throw new Error('注册已取消')
+    if (this.abortController.signal.aborted) throw new Error('Registration cancelled')
   }
 
   /**
-   * 探测当前代理的出口 IP 并写入日志。
-   * 如果探测失败且代理 URL 是参数化格式（bestproxy 等），自动换 session 重建代理链重试。
-   * 最多重试 maxRetries 次（默认 2），保证拿到可用出口再继续注册。
+   * Detect exit IP of current proxy and log it.
+   * If detection fails and proxy URL is in parameterized format (bestproxy etc.), automatically switch session and rebuild proxy chain for retry.
+   * Retry up to maxRetries times (default 2), ensuring a usable exit is obtained before continuing registration.
    */
   private async detectExitIP(maxRetries = 2): Promise<void> {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -190,74 +190,74 @@ export class Registrar {
             this.emitStep('exit-ip', { exitIp: ip })
           }
           const via = proxyUrl ? proxyUrl.replace(/:([^:@/]+)@/, ':***@') : undefined
-          this.log(`[✓ IP] 出口 IP: ${ip || '未知'}${via ? ` (via ${via})` : ' (直连)'}`)
-          return // 成功，退出
+          this.log(`[✓ IP] Exit IP: ${ip || 'unknown'}${via ? ` (via ${via})` : ' (direct)'}`)
+          return // Success, exit
         }
-        this.log(`[IP] 出口 IP 检测失败: HTTP ${resp.status}`)
+        this.log(`[IP] Exit IP detection failed: HTTP ${resp.status}`)
       } catch (err) {
-        this.log(`[IP] 出口 IP 检测失败: ${err instanceof Error ? err.message : String(err)}`)
+        this.log(`[IP] Exit IP detection failed: ${err instanceof Error ? err.message : String(err)}`)
       }
 
-      // 失败后尝试换 session 重建代理链
+      // After failure, try switching session and rebuilding proxy chain
       if (attempt < maxRetries && this.canRefreshProxySession()) {
-        this.log(`[IP] 换 session 重试 (${attempt + 1}/${maxRetries})...`)
+        this.log(`[IP] Switching session for retry (${attempt + 1}/${maxRetries})...`)
         await this.refreshProxySession()
       }
     }
-    // 所有重试都失败，继续注册（可能代理暂时不稳定但 TLS Client 走不同路径能通）
-    this.log('[IP] 出口 IP 检测全部失败，继续注册流程')
+    // All retries failed, continue registration (proxy might be temporarily unstable but TLS Client might work on different path)
+    this.log('[IP] All exit IP detections failed, continuing registration process')
   }
 
-  /** 判断当前代理是否支持 session 轮换（参数化格式 + 含 _session- 或含 _area-/_life- 等） */
+  /** Check if current proxy supports session rotation (parameterized format + contains _session- or _area-/_life- etc.) */
   private canRefreshProxySession(): boolean {
     const target = this.chainTargetProxy || this.cfg.proxy || ''
     return /_(area|life|city|state|region|country)-/i.test(target)
   }
 
-  /** 重新随机 session 并重建代理链 */
+  /** Re-randomize session and rebuild proxy chain */
   private async refreshProxySession(): Promise<void> {
-    // 还原到原始目标代理 URL（代理链会把 cfg.proxy 替换为本地中继地址）
+    // Restore to original target proxy URL (proxy chain replaces cfg.proxy with local relay address)
     const original = this.chainTargetProxy || this.cfg.proxy || ''
     if (!original) return
 
-    // 替换或追加 _session-随机值
+    // Replace or append _session-randomvalue
     const session = Array.from({ length: 8 }, () =>
       'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 62)]
     ).join('')
 
     let newTarget: string
     if (/_session-[^_:@/]*/i.test(original)) {
-      // 已有 _session-xxx → 替换
+      // Already has _session-xxx → replace
       newTarget = original.replace(/(_session-)[^_:@/]*/i, `$1${session}`)
     } else {
-      // 没有 _session- → 在 : 或 @ 之前插入
+      // No _session- → insert before : or @
       const atIdx = original.indexOf('@')
       const colonIdx = original.indexOf(':', original.indexOf('://') + 3)
       const insertPos = colonIdx > 0 && colonIdx < atIdx ? colonIdx : atIdx
       newTarget = original.slice(0, insertPos) + `_session-${session}` + original.slice(insertPos)
     }
 
-    this.log(`[IP] 新 session: ${newTarget.replace(/:([^:@/]+)@/, ':***@')}`)
+    this.log(`[IP] New session: ${newTarget.replace(/:([^:@/]+)@/, ':***@')}`)
 
-    // 停掉旧代理链
+    // Stop old proxy chain
     if (this.chainRelay) {
       await this.chainRelay.stop()
       this.chainRelay = null
     }
 
-    // 重建
+    // Rebuild
     this.cfg.proxy = newTarget
     this.chainTargetProxy = ''
     await this.setupProxyChain()
   }
 
-  /** TLS SessionClient 选项 */
+  /** TLS SessionClient options */
   private get sessionOpts() {
     const explicit = (this.cfg.proxy && this.cfg.proxy.trim()) || undefined
-    // 严格模式：必须有显式代理，禁止回退到环境变量/系统代理，防止裸奔真实 IP
+    // Strict mode: must have explicit proxy, forbid fallback to environment variable/system proxy to prevent exposing real IP
     if (this.cfg.strictProxy) {
       if (!explicit) {
-        throw new Error('严格代理模式：cfg.proxy 为空，已中止以防止裸奔直连')
+        throw new Error('Strict proxy mode: cfg.proxy is empty, aborted to prevent direct connection exposing real IP')
       }
     }
     const proxyUrl = this.cfg.strictProxy
@@ -268,44 +268,44 @@ export class Registrar {
         || getSystemProxy() || undefined)
     return {
       tlsClientIdentifier: 'chrome_146' as const,
-      // 25s：AWS 注册 API 正常响应 1-5s，慢住宅代理 10-15s；超过基本是挂起。
-      // 配合 sendRequest 的 3 次重试，单步最坏 ~75s（旧值 60s 会到 ~180s，是批量卡 1-5 分钟主因）
+      // 25s：AWS register API normal response 1-5s, slow residential agent 10-15s;More than basic is a hang.
+      // Cooperate sendRequest of 3 retries, single step worst ~75s(old value 60s Will arrive ~180s, is a batch card 1-5 minute main reason)
       timeoutSeconds: 25,
       followRedirects: true,
       insecureSkipVerify: true,
-      // 多线程隔离：固定 sessionId 隔离 DLL 层面共享的 TLS session cache
-      // 整个 Registrar 生命周期内用同一个 ID，避免 rebuildTlsClient 产生僵尸 session
+      // Multithread isolation: fixed sessionId isolation DLL level shared TLS session cache
+      // entire Registrar Use the same one during the life cycle ID,avoid rebuildTlsClient spawn zombies session
       sessionId: this.tlsSessionId,
       proxyUrl
     }
   }
 
   /**
-   * 初始化 TLS 客户端
+   * initialization TLS client
    *
-   * DLL 存储策略（按优先级，从高到低）：
-   *   1. userData/tls-client/ — 应用用户数据目录（系统不会清理，**永久复用**）
-   *   2. resources/ — 应用安装目录（打包资源，开发版可能不存在）
-   *   3. tmpdir → 自动迁移到 userData（老版本兼容）
-   *   4. GitHub 下载到 userData（最后兜底，仅首次）
+   * DLL Storage policy (by priority, from high to low):
+   *   1. userData/tls-client/ — Application user data directory (the system will not clean it,**permanent reuse**）
+   *   2. resources/ — Application installation directory (packaged resources, development version may not exist)
+   *   3. tmpdir → Automatically migrate to userData(Old version compatible)
+   *   4. GitHub Download to userData(The final answer, only the first time)
    */
   private async initTlsClient(): Promise<void> {
     const { existingPath, downloadDir } = this.ensureTlsLib()
     const opts = existingPath
       ? { customLibraryPath: existingPath }
       : { customLibraryDownloadPath: downloadDir }
-    // 共享池：首次注册才真正 open(DLL+worker pool)，之后所有注册秒级复用
+    // Shared pool: the first registration is the real open(DLL+worker pool), after which all registrations are reused in seconds
     this.moduleClient = await acquireModuleClient(opts)
     this.log('[TLS] using shared ModuleClient, pool stats: ' + JSON.stringify(this.moduleClient.getPoolStats()))
     this.session = new SessionClient(this.moduleClient, this.sessionOpts)
   }
 
   /**
-   * 确保 tls-client 共享库可用
-   * @returns existingPath 已经存在的完整 DLL 文件路径（如有，传 customLibraryPath）
-   *          downloadDir  需要下载到的目录（如未找到，传 customLibraryDownloadPath 让 tlsclientwrapper 自动下载）
+   * make sure tls-client Shared libraries are available
+   * @returns existingPath Already existing complete DLL File path (if any, pass customLibraryPath）
+   *          downloadDir  The directory to be downloaded (if not found, pass customLibraryDownloadPath let tlsclientwrapper automatic download)
    *
-   * 优先放到 userData，避免被系统临时目录清理工具误删（之前用 tmpdir 会被清理）
+   * Prioritize to userData, to avoid being accidentally deleted by the system temporary directory cleaning tool (previously used tmpdir will be cleaned)
    */
   private ensureTlsLib(): { existingPath?: string; downloadDir: string } {
     const os = require('os')
@@ -324,22 +324,22 @@ export class Registrar {
       filename += (arch === 'arm64' ? 'linux-arm64' : 'linux-amd64') + '.so'
     }
 
-    // 1. userData 永久目录（首选）
+    // 1. userData Permanent directory (preferred)
     const userDataDir = app.getPath('userData')
     const tlsClientDir = path.join(userDataDir, 'tls-client')
     const finalPath = path.join(tlsClientDir, filename)
 
-    // 确保目录存在
+    // Make sure the directory exists
     try { fs.mkdirSync(tlsClientDir, { recursive: true }) } catch { /* ignore */ }
 
-    // 已存在 → 直接复用
+    // Already exists → Direct reuse
     if (fs.existsSync(finalPath)) {
       this.log('[TLS] Library reused from userData (persistent): ' + finalPath)
       return { existingPath: finalPath, downloadDir: tlsClientDir }
     }
 
-    // 2. 从打包资源复制（安装包自带）
-    const resourcePath = path.join(process.resourcesPath || '', filename)
+    // 2. Copy from packaged resources (included in the installation package)
+    const resourcePath = path.join(process.cwd() || '', filename)
     if (fs.existsSync(resourcePath)) {
       this.log('[TLS] Copying library from resources to userData (one-time): ' + resourcePath + ' -> ' + finalPath)
       try {
@@ -350,7 +350,7 @@ export class Registrar {
       }
     }
 
-    // 3. 兼容老版本：检测 tmpdir 副本并迁移到 userData
+    // 3. Compatible with older versions: Check tmpdir copy and migrate to userData
     const tmpPath = path.join(os.tmpdir(), filename)
     if (fs.existsSync(tmpPath)) {
       this.log('[TLS] Migrating library from tmpdir to userData: ' + tmpPath + ' -> ' + finalPath)
@@ -363,14 +363,14 @@ export class Registrar {
       }
     }
 
-    // 4. 都没有 → 返回 downloadDir，让 tlsclientwrapper open() 自动下载到此目录（永久保存）
+    // 4. None → return downloadDir,let tlsclientwrapper open() Automatically download to this directory (save permanently)
     this.log('[TLS] Library not found, will download from GitHub to userData (one-time): ' + tlsClientDir)
     return { downloadDir: tlsClientDir }
   }
 
   private async rebuildTlsClient(): Promise<void> {
-    // 只重建轻量级的 SessionClient（新 TLS 连接），复用重量级的 ModuleClient（worker pool + DLL）
-    // 之前的实现会 terminate + 重新 open ModuleClient，导致每次注册创建 2 个 worker pool
+    // Only rebuild lightweight ones SessionClient(new TLS connection), reuse heavyweight ModuleClient（worker pool + DLL）
+    // Previous implementation meeting terminate + again open ModuleClient, causing each registration to create 2 indivual worker pool
     try { await this.session?.destroySession() } catch { /* ignore */ }
     if (!this.moduleClient) {
       await this.initTlsClient()
@@ -380,10 +380,10 @@ export class Registrar {
   }
 
   /**
-   * 用 undici 直接 fetch 静态资源（如 AWS signin app.js），绕过 tls-client。
-   * 原因：tls-client 的 dll 是进程级单例，失败请求会污染其全局状态，
-   * 导致后续重建 SessionClient 后仍报 "no tls client for modification check"。
-   * 静态资源不需要 TLS 指纹伪装，直接用 Node/undici fetch 即可。
+   * use undici direct fetch Static resources (such as AWS signin app.js), bypassing tls-client。
+   * reason:tls-client of dll It is a process-level singleton, and failed requests will pollute its global state.
+   * resulting in subsequent reconstruction SessionClient Still reported later "no tls client for modification check"。
+   * Static resources are not required TLS Fingerprint camouflage, use directly Node/undici fetch That’s it.
    */
   private async fetchAppJS(url: string, init?: RequestInit): Promise<Response> {
     const proxyUrl = (this.cfg.proxy && this.cfg.proxy.trim())
@@ -405,14 +405,14 @@ export class Registrar {
       || err.message.includes('failed to modify existing client')
   }
 
-  /** 清理 TLS 客户端资源：仅销毁 SessionClient；ModuleClient 是进程级共享池，不再每次 terminate */
+  /** clean up TLS Client resources: destroyed only SessionClient；ModuleClient It is a process-level shared pool, no longer every time terminate */
   private async cleanup(): Promise<void> {
     if (this.chainRelay) {
       try { await this.chainRelay.stop() } catch { /* ignore */ }
       this.chainRelay = null
     }
     if (this.session) {
-      // destroySession 带 3 秒超时：Go runtime 的 idle connections 可能要等 60 秒才关闭
+      // destroySession bring 3 Second timeout:Go runtime of idle connections May have to wait 60 Close in seconds
       const s = this.session
       this.session = null
       try {
@@ -422,17 +422,17 @@ export class Registrar {
         ])
       } catch { /* ignore */ }
     }
-    // moduleClient 是共享引用，不能 terminate（会影响其它正在跑的注册）
+    // moduleClient It is a shared reference and cannot terminate(It will affect other running registrations)
     this.moduleClient = null
   }
 
-  /** 公共销毁方法，供外部调用释放资源。同时 abort 所有进行中的异步操作。 */
+  /** Public destruction method for external calls to release resources. at the same time abort All ongoing asynchronous operations. */
   async destroy(): Promise<void> {
     this.abortController.abort()
     await this.cleanup()
   }
 
-  // ============ HTTP 工具方法 ============
+  // ============ HTTP Tool method ============
 
   private cookieString(): string {
     return Array.from(this.cookies.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
@@ -489,16 +489,16 @@ export class Registrar {
     return this.sendRequest('POST', url, headers, JSON.stringify(payload))
   }
 
-  /** 网络层退避时长：指数 + 抖动（约 0.8s / 1.6s / 3.2s，封顶 8s） */
+  /** Network layer backoff duration: index + Jitter (approx. 0.8s / 1.6s / 3.2s, capped 8s） */
   private netBackoffMs(attempt: number): number {
     const base = Math.min(800 * Math.pow(2, attempt - 1), 8000)
     return base + Math.floor(Math.random() * 400)
   }
 
   /**
-   * 判断响应是否为「瞬时失败」需要重试。
-   * 关键：tlsclientwrapper 会把连接层失败（EOF / 重置 / 超时）包装成 status=0 + body 错误描述，
-   * 并不抛异常；若不在响应层识别，会被上层当成业务失败直接判死号（如 #9 的「未获取到加密公钥」）。
+   * Determine whether the response is a "transient failure" and need to be retried.
+   * key:tlsclientwrapper Will fail the connection layer (EOF / reset / timeout) packaged as status=0 + body error description,
+   * No exception is thrown; if it is not recognized by the response layer, it will be regarded as a business failure by the upper layer and directly sentenced to death (such as #9 "The encryption public key was not obtained").
    */
   private isTransientResponse(status: number, body: string): boolean {
     if (status === 0 || status === 429 || status === 502 || status === 503 || status === 504) return true
@@ -508,8 +508,8 @@ export class Registrar {
   }
 
   /**
-   * 判断是否为「超时类」失败（出口 IP 慢 / 被限流 / 隧道挂起）。
-   * 这类失败重建 TLS（同 IP 重连）无用，应换 proxy session 切换出口 IP。
+   * Determining whether it is a "timeout type" failed (exit IP slow / Being restricted / tunnel hang).
+   * This type of failed reconstruction TLS(same IP Reconnect) is useless and should be replaced proxy session switch outlet IP。
    */
   private isTimeoutResponse(status: number, body: string): boolean {
     if (status === 504) return true
@@ -520,8 +520,8 @@ export class Registrar {
   }
 
   /**
-   * 统一的 TLS 请求发送：对瞬时网络失败（status=0 / EOF / 5xx / 429）自动「重建 TLS + 指数退避」重试。
-   * 连接类失败才重建客户端，限流类仅退避；cookies 存于 this.cookies，不随重建丢失。
+   * unified TLS Request Sent: Failure on transient network (status=0 / EOF / 5xx / 429) automatically "rebuilds TLS + Exponential backoff" and try again.
+   * The client will only be rebuilt if the connection class fails, and the current limiting class will only back off;cookies exist in this.cookies, will not be lost with reconstruction.
    */
   private async sendRequest(
     method: 'GET' | 'POST',
@@ -529,10 +529,10 @@ export class Registrar {
     headers: Record<string, string>,
     body?: string
   ): Promise<{ body: string; status: number; headers: Record<string, string | string[]> }> {
-    if (!this.session) throw new Error('TLS 客户端未初始化')
+    if (!this.session) throw new Error('TLS Client not initialized')
     const maxAttempts = 3
     let lastErr: unknown = null
-    let sessionRefreshed = false // 整个请求最多换 1 次 proxy session，避免频繁停建代理链
+    let sessionRefreshed = false // The entire request can be changed at most 1 Second-rate proxy session, to avoid frequent suspension of proxy chain construction
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const resp = method === 'GET'
@@ -542,19 +542,19 @@ export class Registrar {
         const status = resp.status
         if (attempt < maxAttempts && this.isTransientResponse(status, decoded)) {
           const broken = status === 0 || /eof|reset|failed to do request/i.test(decoded)
-          // 超时类（出口 IP 慢/被限/隧道挂起）：重建 TLS 同 IP 无用，换 proxy session 切换出口 IP
+          // Timeout class (export IP slow/restricted/Tunnel hung): Rebuild TLS same IP Useless, change proxy session switch outlet IP
           if (this.isTimeoutResponse(status, decoded) && !sessionRefreshed && this.canRefreshProxySession()) {
-            this.log(`[Net] ${method} 超时(status=${status})，换 proxy session 切换出口 IP 重试 ${attempt}/${maxAttempts - 1}`)
+            this.log(`[Net] ${method} time out(status=${status}),Change proxy session switch outlet IP Try again ${attempt}/${maxAttempts - 1}`)
             try {
               await this.refreshProxySession()
               await this.rebuildTlsClient()
               sessionRefreshed = true
             } catch (e) {
-              this.log(`[Net] 换 session 失败，回退普通重建: ${e instanceof Error ? e.message : String(e)}`)
+              this.log(`[Net] Change session Failure, fallback to normal reconstruction: ${e instanceof Error ? e.message : String(e)}`)
               await this.rebuildTlsClient()
             }
           } else {
-            this.log(`[Net] ${method} 瞬时失败 status=${status}，${broken ? '重建 TLS + ' : ''}退避重试 ${attempt}/${maxAttempts - 1}`)
+            this.log(`[Net] ${method} instantaneous failure status=${status}，${broken ? 'reconstruction TLS + ' : ''}Back off and retry ${attempt}/${maxAttempts - 1}`)
             if (broken) await this.rebuildTlsClient()
           }
           await this.abortableSleep(this.netBackoffMs(attempt))
@@ -564,7 +564,7 @@ export class Registrar {
       } catch (err: unknown) {
         lastErr = err
         if (attempt < maxAttempts && this.isRecoverableTlsClientError(err)) {
-          this.log(`[TLS] ${method} 可恢复错误：${err instanceof Error ? err.message : String(err)}，重建 TLS 退避重试 ${attempt}/${maxAttempts - 1}`)
+          this.log(`[TLS] ${method} Recoverable errors:${err instanceof Error ? err.message : String(err)},reconstruction TLS Back off and retry ${attempt}/${maxAttempts - 1}`)
           await this.rebuildTlsClient()
           await this.abortableSleep(this.netBackoffMs(attempt))
           continue
@@ -573,34 +573,34 @@ export class Registrar {
       }
     }
     if (lastErr) throw lastErr
-    throw new Error(`${method} ${url} 重试 ${maxAttempts} 次仍失败`)
+    throw new Error(`${method} ${url} Try again ${maxAttempts} Still failed`)
   }
 
-  /** 可被中止打断的 sleep：停止注册时立即结束等待，让 abort 即时生效 */
+  /** Interruptible by abort sleep: Stop waiting immediately when registration is stopped, let abort Effective immediately */
   private abortableSleep(ms: number): Promise<void> {
     const signal = this.abortController.signal
     return new Promise((resolve, reject) => {
-      if (signal.aborted) { reject(new Error('注册已取消')); return }
+      if (signal.aborted) { reject(new Error('Registration canceled')); return }
       let timer: ReturnType<typeof setTimeout>
-      const onAbort = (): void => { clearTimeout(timer); reject(new Error('注册已取消')) }
+      const onAbort = (): void => { clearTimeout(timer); reject(new Error('Registration canceled')) }
       timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve() }, ms)
       signal.addEventListener('abort', onAbort, { once: true })
     })
   }
 
-  /** 拟人随机延迟：步骤之间停顿，降低机械化节奏特征 */
-  private async humanDelay(min = 280, max = 1200): Promise<void> {
+  /** Anthropomorphic random delays: pauses between steps, reducing robotic rhythm characteristics */
+  private async humanDelay(min = 800, max = 2500): Promise<void> {
     await this.abortableSleep(min + Math.floor(Math.random() * Math.max(1, max - min)))
   }
 
   /**
-   * 整体超时看门狗：给任意步骤 Promise 加上限，超时后 reject（原 Promise 在后台自生自灭）。
-   * 用于批量场景快速释放卡住的线程，避免单个账号占用并发槽 1-5 分钟。支持 abort 即时中断。
+   * Overall timeout watchdog: give arbitrary steps Promise Add upper limit, after timeout reject(Original Promise fend for themselves in the background).
+   * Used in batch scenarios to quickly release stuck threads to avoid a single account occupying a concurrent slot. 1-5 minute. support abort Instant interruption.
    */
   private withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     const signal = this.abortController.signal
     return new Promise<T>((resolve, reject) => {
-      if (signal.aborted) { reject(new Error('注册已取消')); return }
+      if (signal.aborted) { reject(new Error('Registration canceled')); return }
       let done = false
       const settle = (fn: () => void): void => {
         if (done) return
@@ -609,8 +609,8 @@ export class Registrar {
         signal.removeEventListener('abort', onAbort)
         fn()
       }
-      const timer = setTimeout(() => settle(() => reject(new Error(`${label} 整体超时 ${Math.round(ms / 1000)}s`))), ms)
-      const onAbort = (): void => settle(() => reject(new Error('注册已取消')))
+      const timer = setTimeout(() => settle(() => reject(new Error(`${label} overall timeout ${Math.round(ms / 1000)}s`))), ms)
+      const onAbort = (): void => settle(() => reject(new Error('Registration canceled')))
       signal.addEventListener('abort', onAbort, { once: true })
       p.then(
         (v) => settle(() => resolve(v)),
@@ -620,9 +620,9 @@ export class Registrar {
   }
 
   /**
-   * 幂等步骤重试：失败后退避重试（仅用于无副作用的前置步骤，如 OIDC / Device / Portal / WorkflowInit）。
-   * - timeoutMs：每次尝试加整体超时看门狗，超时即判失败进入下一次（防止单次卡满 3×25s）
-   * - refreshSession：失败后若代理支持，换 proxy session 切换出口 IP 再退避（避开慢/被限的 IP）
+   * Idempotent step retry: retreat and retry after failure (only used for pre-steps without side effects, such as OIDC / Device / Portal / WorkflowInit）。
+   * - timeoutMs: Add an overall timeout watchdog for each attempt. When the timeout expires, it will be judged as failed and enter the next time (to prevent the card from being full in a single time). 3×25s）
+   * - refreshSession: After failure, if the agent supports it, change proxy session switch outlet IP Retreat (avoid the slow/restricted IP）
    */
   private async retryStep(
     name: string,
@@ -639,16 +639,16 @@ export class Registrar {
       } catch (err) {
         lastErr = err
         if (i < attempts) {
-          // 幂等步骤失败：若支持换 session，先切换出口 IP 再退避（针对慢/被限的住宅 IP）
+          // Idempotent step failed: if it supports changing session, switch the export first IP Back off again (for slow/Restricted residence IP）
           if (opts?.refreshSession && this.canRefreshProxySession()) {
             try {
               await this.refreshProxySession()
               await this.rebuildTlsClient()
-              this.log(`[${name}] 已换 proxy session 切换出口 IP`)
-            } catch { /* 换 session 失败则继续普通重试 */ }
+              this.log(`[${name}] Already replaced proxy session switch outlet IP`)
+            } catch { /* Change session If it fails, continue to retry normally. */ }
           }
           const wait = 1500 * i + Math.floor(Math.random() * 800)
-          this.log(`[${name}] 第 ${i}/${attempts} 次失败：${(err as Error).message}，${wait}ms 后重试`)
+          this.log(`[${name}] No. ${i}/${attempts} failed:${(err as Error).message}，${wait}ms Try again later`)
           await this.abortableSleep(wait)
         }
       }
@@ -657,21 +657,21 @@ export class Registrar {
   }
 
   /**
-   * tls-client 返回的 body 是字节透传字符串（latin1）；
-   * 如果响应实际是 UTF-8 编码（含中文等多字节），需要二次解码。
-   * 实现：把 string 当作 latin1 字节读回，再用 UTF-8 解码；
-   * 若解码后含 U+FFFD 替换字符比原文多很多，则回退原值（说明原本就是 latin1 / ASCII）。
+   * tls-client returned body Is a byte transparent transmission string (latin1）；
+   * If the response is actually UTF-8 Encoding (including Chinese and other multi-byte characters) requires secondary decoding.
+   * Implementation: put string as latin1 Read the bytes back and use them again UTF-8 decoding;
+   * If decoded it contains U+FFFD If there are many more replacement characters than the original text, the original value will be returned (indicating that it was originally latin1 / ASCII）。
    */
   private decodeBody(body: string | undefined | null): string {
     if (!body) return ''
     try {
-      // 快速路径：纯 ASCII 直接返回
+      // Fast Path: Pure ASCII Return directly
       // eslint-disable-next-line no-control-regex
       if (/^[\x00-\x7F]*$/.test(body)) return body
       const buf = Buffer.from(body, 'latin1')
       const utf8 = buf.toString('utf-8')
-      // 检测 mojibake：原文如果在 latin1 解码 UTF-8 字节，会出现大量字符在 \u00a0-\u00ff 区间
-      // 重解后如果替换字符数量明显多于原文，说明不是 UTF-8，回退原值
+      // Detection mojibake:Original text if in latin1 decoding UTF-8 Bytes, a large number of characters will appear in \u00a0-\u00ff interval
+      // After reinterpreting, if the number of replacement characters is significantly more than the original text, it means that it is not UTF-8, return to the original value
       const replaceInOriginal = (body.match(/\uFFFD/g) || []).length
       const replaceInUtf8 = (utf8.match(/\uFFFD/g) || []).length
       if (replaceInUtf8 > replaceInOriginal + 2) return body
@@ -686,26 +686,26 @@ export class Registrar {
   }
 
   /**
-   * 识别 AWS 风控触发的错误响应，返回人类可读的标签
-   * @returns 风控类型标签（如 'AWS-RISK-CONTROL'），不是风控返回 null
+   * identify AWS Error response triggered by risk control, returning a human-readable label
+   * @returns Risk control type label (such as 'AWS-RISK-CONTROL'), not a risk control return null
    */
   private detectRiskControl(body: string, status: number): string | null {
     if (status !== 400) return null
     const lower = body.toLowerCase()
-    // 中文消息（已正确解码）
-    if (body.includes('请稍后再试') && body.includes('管理员')) return 'AWS-RISK-CONTROL'
-    if (body.includes('发生意外错误')) return 'AWS-RISK-CONTROL'
-    // 英文消息
+    // Chinese message (correctly decoded)
+    if (body.includes('Please try again later') && body.includes('administrator')) return 'AWS-RISK-CONTROL'
+    if (body.includes('An unexpected error occurred')) return 'AWS-RISK-CONTROL'
+    // English message
     if (lower.includes('try again later') && lower.includes('administrator')) return 'AWS-RISK-CONTROL'
     if (lower.includes('unexpected error') && lower.includes('contact')) return 'AWS-RISK-CONTROL'
     return null
   }
 
-  /** 把响应错误格式化为更友好的消息（含风控识别） */
+  /** Format response errors into more friendly messages (including risk control identification) */
   private formatErrorBody(body: string, status: number): string {
     const risk = this.detectRiskControl(body, status)
     if (risk) {
-      return `${risk}（AWS 风控，建议：1) 启用代理池 N:1 分桶；2) 启用限速 + 风控自动暂停；3) 避免同邮箱域名大量注册）`
+      return `${risk}（AWS Risk control, suggestions:1) Enable proxy pool N:1 bucket;2) Enable speed limit + Risk control automatically pauses;3) Avoid mass registration of domain names with the same email address)`
     }
     return `status=${status} body=${body.substring(0, 200)}`
   }
@@ -736,7 +736,7 @@ export class Registrar {
     if (tok) {
       this.cookies.set('awsd2c-token', tok)
       this.cookies.set('awsd2c-token-c', tok)
-      // 从 JWT 中提取 visitor ID
+      // from JWT extracted from visitor ID
       const jwtParts = tok.split('.')
       if (jwtParts.length >= 2) {
         try {
@@ -747,7 +747,7 @@ export class Registrar {
     }
   }
 
-  // ============ 指纹生成 ============
+  // ============ Fingerprint generation ============
 
   private genFP(pageType: string, eventType: string, emailLen: number, emailAddr: string): string {
     return this.genFPWithTime(pageType, eventType, 0, emailLen, emailAddr)
@@ -782,11 +782,11 @@ export class Registrar {
     return generateFingerprint(this.identity, loc, ref, this.fpCtx, pageType, eventType, timeOnPage, emailLen, emailAddr)
   }
 
-  // ============ 注册步骤 ============
+  // ============ Registration steps ============
 
   private async step1OIDC(): Promise<void> {
     this.emitStep('oidc')
-    this.log('[1] OIDC 注册')
+    this.log('[1] OIDC register')
     const payload = {
       clientName: 'Amazon Q Developer for command line',
       clientType: 'public',
@@ -801,7 +801,7 @@ export class Registrar {
         if (resp.status === 200) break
       } catch (err: unknown) {
         if (attempt < 2) {
-          this.log(`[1] OIDC 重试 (${attempt + 1}/3)...`)
+          this.log(`[1] OIDC Try again (${attempt + 1}/3)...`)
           await this.abortableSleep(2000 * (attempt + 1))
           await this.rebuildTlsClient()
           continue
@@ -809,16 +809,16 @@ export class Registrar {
         throw err
       }
     }
-    if (!resp) throw new Error('OIDC 注册失败: 所有重试均失败')
+    if (!resp) throw new Error('OIDC Registration failed: All retries failed')
     const data = this.parseBody(resp.body)
     this.clientId = (data.clientId as string) || ''
     this.clientSecret = (data.clientSecret as string) || ''
-    if (!this.clientId) throw new Error(`OIDC 注册失败: ${resp.body.slice(0, 200)}`)
+    if (!this.clientId) throw new Error(`OIDC Registration failed: ${resp.body.slice(0, 200)}`)
   }
 
   private async step2Device(): Promise<void> {
     this.emitStep('device')
-    this.log('[2] 设备授权')
+    this.log('[2] Device authorization')
     const resp = await this.doPost(this.cfg.oidcBase + '/device_authorization', {
       clientId: this.clientId, clientSecret: this.clientSecret,
       startUrl: this.cfg.startURL
@@ -830,14 +830,14 @@ export class Registrar {
   }
 
   private async step3Email(): Promise<void> {
-    if (this.cfg.manualMode) return // 手动模式在外部设置
+    if (this.cfg.manualMode) return // Manual mode is set externally
 
     if (this.cfg.useOutlook && this.cfg.outlookData) {
-      this.log('[3] 使用 Outlook 邮箱')
+      this.log('[3] use Outlook Mail')
       const accounts = parseOutlookLines(this.cfg.outlookData)
-      if (accounts.length === 0) throw new Error('无可用的 Outlook 账号')
-      // 单行 → 直接用（批量并发时前端已为每个 task 切一行，避免并发抢占）
-      // 多行（单次注册）→ 随机挑一行
+      if (accounts.length === 0) throw new Error('None available Outlook account')
+      // single line → Use it directly (when batch concurrency occurs, the front end has already set the task Cut a row to avoid concurrent preemption)
+      // Multiple lines (single registration) → Pick a row at random
       const acc = accounts.length === 1
         ? accounts[0]
         : accounts[Math.floor(Math.random() * accounts.length)]
@@ -848,28 +848,15 @@ export class Registrar {
     }
 
     if (this.cfg.useTempMailPlus) {
-      this.log('[3] 使用自建域名邮箱 (TempMail.Plus)')
+      this.log('[3] Use self-built domain name mailbox (TempMail.Plus)')
       if (!this.cfg.tempMailPlusEmail || !this.cfg.tempMailPlusEpin || !this.cfg.tempMailPlusDomain) {
-        throw new Error('TempMail.Plus 配置不完整')
+        throw new Error('TempMail.Plus Incomplete configuration')
       }
       this.emailSvc = new TempMailPlusService(
         this.cfg.tempMailPlusEmail, this.cfg.tempMailPlusEpin, this.cfg.tempMailPlusDomain
       )
       this.email = await this.emailSvc.create()
-      if (!this.email) throw new Error('生成邮箱地址失败')
-      this.emitStep('email-created')
-      this.log(`email=${this.email}`)
-      return
-    }
-
-    if (this.cfg.useProton) {
-      this.log('[3] 使用 Proton 邮箱 (点号别名)')
-      if (!this.cfg.protonEmail) {
-        throw new Error('Proton 邮箱地址未配置')
-      }
-      this.emailSvc = new ProtonWebviewService(this.cfg.protonEmail, (m) => this.log(m))
-      this.email = await this.emailSvc.create()
-      if (!this.email) throw new Error('Proton 邮箱地址为空')
+      if (!this.email) throw new Error('Failed to generate email address')
       this.emitStep('email-created')
       this.log(`email=${this.email}`)
       return
@@ -877,44 +864,44 @@ export class Registrar {
 
     if (this.cfg.useGptMail) {
       const mode = this.cfg.gptMailInboxEmail
-        ? `CF 转发 → ${this.cfg.gptMailInboxEmail}`
-        : this.cfg.gptMailPrivatePassword ? '私有域名直收（带密码）' : '私有域名直收'
-      this.log(`[3] 使用 GPTmail (${mode}) → mail.chatgpt.org.uk`)
+        ? `CF Forward → ${this.cfg.gptMailInboxEmail}`
+        : this.cfg.gptMailPrivatePassword ? 'Private domain name direct transfer (with password)' : 'Direct transfer of private domain names'
+      this.log(`[3] use GPTmail (${mode}) → mail.chatgpt.org.uk`)
       if (!this.cfg.gptMailDomain) {
-        throw new Error('GPTmail 域名未配置')
+        throw new Error('GPTmail Domain name is not configured')
       }
-      // 复用注册流程已经初始化的 TLS SessionClient（伪装 Chrome 146 JA3 + 注入代理），
-      // 否则 GPTmail 后端通过 TLS 指纹校验会返回 401 "Browser session required"
-      if (!this.session) throw new Error('TLS SessionClient 未初始化，无法启动 GPTmail（请检查代理）')
+      // Reuse the registration process that has been initialized TLS SessionClient(camouflage Chrome 146 JA3 + injection agent),
+      // otherwise GPTmail Backend passes TLS Fingerprint verification will return 401 "Browser session required"
+      if (!this.session) throw new Error('TLS SessionClient Not initialized, unable to start GPTmail(please check the agent)')
       this.emailSvc = new GptMailService({
         baseURL: this.cfg.gptMailBaseURL,
         inboxEmail: this.cfg.gptMailInboxEmail,
         domain: this.cfg.gptMailDomain,
         prefix: this.cfg.gptMailPrefix,
         privatePassword: this.cfg.gptMailPrivatePassword,
-        // 传 getter 而非快照：Registrar 后续 rebuildTlsClient() 会换 session 实例，
-        // GptMailService 每次请求都读这里的最新引用，避免用到已 destroyed 的旧 session
+        // pass getter Instead of a snapshot:Registrar Follow-up rebuildTlsClient() Will change session instance,
+        // GptMailService Read the latest reference here on every request to avoid using existing destroyed old session
         getSession: () => this.session
       })
       this.email = await this.emailSvc.create()
-      if (!this.email) throw new Error('生成 GPTmail 注册邮箱失败')
+      if (!this.email) throw new Error('generate GPTmail Failed to register email')
       this.emitStep('email-created')
       this.log(`email=${this.email}`)
       return
     }
 
-    this.log('[3] 创建临时邮箱')
-    if (!this.cfg.moEmailBaseURL) throw new Error('MoEmail 未配置')
+    this.log('[3] Create temporary mailbox')
+    if (!this.cfg.moEmailBaseURL) throw new Error('MoEmail Not configured')
     this.emailSvc = new MoEmailService(this.cfg.moEmailBaseURL, this.cfg.moEmailAPIKey)
     this.email = await this.emailSvc.create()
-    if (!this.email) throw new Error('创建临时邮箱失败')
+    if (!this.email) throw new Error('Failed to create temporary mailbox')
     this.emitStep('email-created')
     this.log(`email=${this.email}`)
   }
 
   private async step4Portal(): Promise<void> {
     this.emitStep('portal')
-    this.log('[4] Portal 初始化')
+    this.log('[4] Portal initialization')
     this.cookies.set('awsccc', awsccc())
     const redirect = `${this.cfg.viewBase}/start/#/device?user_code=${this.userCode}`
     const url = `${this.cfg.portalBase}/login?directory_id=view&redirect_url=${redirect}`
@@ -935,7 +922,7 @@ export class Registrar {
       this.workflowHandle = splitAfter(rurl, 'workflowStateHandle=')
     }
     if (data.csrfToken) this.cookies.set('loginCsrfToken', data.csrfToken as string)
-    if (!this.workflowHandle) throw new Error('Portal 未返回 workflow handle')
+    if (!this.workflowHandle) throw new Error('Portal Not returned workflow handle')
 
     const loginURL = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/login?workflowStateHandle=${this.workflowHandle}`
     await this.fetchD2CToken(this.cfg.signinBase, loginURL)
@@ -943,7 +930,7 @@ export class Registrar {
 
   private async step5WorkflowInit(): Promise<void> {
     this.emitStep('workflow-init')
-    this.log('[5] 工作流初始化')
+    this.log('[5] Workflow initialization')
     const api = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/api/execute`
     const ref = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/login?workflowStateHandle=${this.workflowHandle}`
 
@@ -980,7 +967,7 @@ export class Registrar {
 
   private async step6SubmitEmail(): Promise<'signup' | 'login'> {
     this.emitStep('submit-email')
-    this.log(`[6] 提交邮箱 ${this.email}`)
+    this.log(`[6] Submit email ${this.email}`)
     const api = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/api/execute`
     const ref = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/login?workflowStateHandle=${this.workflowHandle}`
     const fp = this.genFP('signin', 'PageSubmit', this.email.length, this.email)
@@ -1009,12 +996,12 @@ export class Registrar {
 
     if (resp.status === 400) return 'signup'
     if (resp.status === 200) return 'login'
-    throw new Error(`提交邮箱失败: ${resp.status} - ${resp.body.slice(0, 200)}`)
+    throw new Error(`Failed to submit email: ${resp.status} - ${resp.body.slice(0, 200)}`)
   }
 
   private async step7Signup(): Promise<void> {
     this.emitStep('signup')
-    this.log('[7] 注册 (SIGNUP)')
+    this.log('[7] register (SIGNUP)')
     const api = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/api/execute`
     const ref = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/login?workflowStateHandle=${this.workflowHandle}`
     const fp = this.genFP('signup', 'PageSubmit', 0, '')
@@ -1041,7 +1028,7 @@ export class Registrar {
   }
 
   private async step7_5SignupInit(): Promise<void> {
-    this.log('[7.5] Signup API 初始化')
+    this.log('[7.5] Signup API initialization')
     const api = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/signup/api/execute`
     const ref = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/signup?workflowStateHandle=${this.workflowHandle}`
 
@@ -1061,7 +1048,7 @@ export class Registrar {
     saveCookies(this.cookies, resp.headers as Record<string, string | string[] | undefined>)
     let data = this.parseBody(resp.body)
     if (data.workflowStateHandle) this.workflowHandle = data.workflowStateHandle as string
-    if (data.stepId !== 'start') throw new Error(`Signup init 失败: ${this.formatErrorBody(resp.body, resp.status)}`)
+    if (data.stepId !== 'start') throw new Error(`Signup init fail: ${this.formatErrorBody(resp.body, resp.status)}`)
 
     fp = this.genFP('signup', 'PageLoad', 0, '')
     rid = newUUID()
@@ -1087,11 +1074,11 @@ export class Registrar {
       if (hashIdx >= 0) wid = wid.slice(0, hashIdx)
       this.workflowId = wid
     }
-    if (!this.workflowId) throw new Error('Signup init 未返回 workflowID')
+    if (!this.workflowId) throw new Error('Signup init Not returned workflowID')
   }
 
   private async step7_8ProfileInit(): Promise<void> {
-    this.log('[7.8] Profile 页面初始化')
+    this.log('[7.8] Profile Page initialization')
     this.ubid = ubidGen()
     this.cookies.set('aws-user-profile-ubid', this.ubid)
     this.cookies.set('i18next', 'zh-CN')
@@ -1109,7 +1096,7 @@ export class Registrar {
   }
 
   private async step8ProfileStart(): Promise<void> {
-    this.log('[8] Profile 启动')
+    this.log('[8] Profile start up')
     const ref = `${this.cfg.profileBase}/?workflowID=${this.workflowId}`
     const fp = this.genFP('profile', 'PageLoad', 0, '')
 
@@ -1127,12 +1114,12 @@ export class Registrar {
     }, this.buildProfileHeaders(ref))
     const data = this.parseBody(resp.body)
     this.workflowState = (data.workflowState as string) || ''
-    if (!this.workflowState) throw new Error(`Profile start 未返回 workflowState: ${resp.body.slice(0, 200)}`)
+    if (!this.workflowState) throw new Error(`Profile start Not returned workflowState: ${resp.body.slice(0, 200)}`)
   }
 
   private async step9SendOTP(): Promise<void> {
     this.emitStep('send-otp')
-    this.log('[9] 发送验证码')
+    this.log('[9] Send verification code')
 
     if (this.cfg.useOutlook && this.cfg.outlookData) {
       const accounts = parseOutlookLines(this.cfg.outlookData)
@@ -1140,15 +1127,20 @@ export class Registrar {
       if (acc) {
         try {
           this.outlookMailCount = await getInboxCount(acc)
-          this.log(`发送前邮件数: ${this.outlookMailCount}`)
+          this.log(`Number of emails before sending: ${this.outlookMailCount}`)
         } catch (err) {
-          this.log(`获取邮件数量失败: ${err}, 默认为0`)
+          this.log(`Failed to get the number of emails: ${err}, Default is0`)
         }
       }
     }
 
+    // Human-like delay: users spend 8-20 seconds reading the email form before submitting
+    // CRITICAL: Must actually wait this time, not just claim it in fingerprint
+    const timeOnPage = 8000 + Math.floor(Math.random() * 12001) // 8-20 seconds
+    this.log(`[9] Simulating human behavior: waiting ${Math.round(timeOnPage / 1000)}s before submitting email...`)
+    await this.abortableSleep(timeOnPage)
+
     const ref = `${this.cfg.profileBase}/?workflowID=${this.workflowId}`
-    const timeOnPage = 5000 + Math.floor(Math.random() * 3001)
     const fp = this.genFPWithTime('profile', 'PageSubmit', timeOnPage, this.email.length, this.email)
     const tsp = String(timeOnPage)
 
@@ -1167,30 +1159,30 @@ export class Registrar {
     }
 
     const resp = await this.doPost(this.cfg.profileBase + '/api/send-otp', payload, this.buildProfileHeaders(ref))
-    if (resp.status !== 200) throw new Error(`send-otp 失败 (${resp.status}), body: ${resp.body.substring(0, 300)}`)
-    this.log('验证码已发送')
+    if (resp.status !== 200) throw new Error(`send-otp fail (${resp.status}), body: ${resp.body.substring(0, 300)}`)
+    this.log('Verification code sent')
   }
 
   private async step10GetOTP(): Promise<string> {
-    if (this.cfg.manualMode) throw new Error('手动模式需外部提供验证码')
+    if (this.cfg.manualMode) throw new Error('Manual mode requires external verification code')
 
     this.emitStep('waiting-otp')
-    this.log('[10] 等待验证码')
+    this.log('[10] Wait for verification code')
     const signal = this.abortController.signal
     if (this.cfg.useOutlook && this.cfg.outlookData) {
       const accounts = parseOutlookLines(this.cfg.outlookData)
       const acc = accounts.find((a) => a.email === this.email)
-      if (!acc) throw new Error('未找到对应 Outlook 账号')
+      if (!acc) throw new Error('No correspondence found Outlook account')
       return await waitForOTP(acc, this.outlookMailCount, 120, 5, signal)
     }
-    if (!this.emailSvc) throw new Error('邮箱服务未初始化')
+    if (!this.emailSvc) throw new Error('Mailbox service not initialized')
     return await this.emailSvc.waitForCode(120, 3, signal)
   }
 
   private async step11CreateIdentity(otp: string): Promise<void> {
     this.emitStep('otp-received')
     this.emitStep('create-identity')
-    this.log('[11] 创建身份')
+    this.log('[11] Create an identity')
     const ref = `${this.cfg.profileBase}/?workflowID=${this.workflowId}`
     const fp = this.genFP('profile', 'EmailVerification', 0, '')
 
@@ -1211,17 +1203,17 @@ export class Registrar {
     const data = this.parseBody(resp.body)
     this.regCode = (data.registrationCode as string) || ''
     this.signState = (data.signInState as string) || ''
-    if (!this.regCode) throw new Error(`create-identity 未返回 registrationCode: ${resp.body.slice(0, 200)}`)
+    if (!this.regCode) throw new Error(`create-identity Not returned registrationCode: ${resp.body.slice(0, 200)}`)
   }
 
   private async step12SetPassword(): Promise<void> {
     this.emitStep('set-password')
-    this.log('[12] 设置密码')
+    this.log('[12] Set password')
     const api = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/signup/api/execute`
     const ref = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/signup?registrationCode=${this.regCode}&state=${this.signState}`
     let fp = this.genFP('signup', 'PageSubmit', 0, '')
 
-    // 12a: 获取加密公钥
+    // 12a: Get the encryption public key
     let rid = newUUID()
     let h = this.buildHeaders(ref, this.cfg.signinBase)
     h['x-amzn-requestid'] = rid; h['x-amz-date'] = gmtDate(); h['priority'] = 'u=1, i'
@@ -1240,7 +1232,7 @@ export class Registrar {
 
     const encCtx = getNestedMap(data as Record<string, unknown>, 'workflowResponseData', 'encryptionContextResponse')
     const pubKeyMap = encCtx ? getNestedStringMap(encCtx, 'publicKey') : null
-    if (!pubKeyMap?.n) throw new Error(`未获取到加密公钥: ${this.formatErrorBody(resp.body, resp.status)}`)
+    if (!pubKeyMap?.n) throw new Error(`The encryption public key was not obtained: ${this.formatErrorBody(resp.body, resp.status)}`)
 
     const issuer = (encCtx?.issuer as string) || 'signin'
     const audience = (encCtx?.audience as string) || 'AWSPasswordService'
@@ -1248,7 +1240,7 @@ export class Registrar {
 
     const encrypted = encryptPassword(this.cfg.password, pubKeyMap, issuer, audience, region)
 
-    // 12b: 提交密码
+    // 12b: Submit password
     fp = this.genFP('signup', 'PageSubmit', 0, '')
     rid = newUUID()
     h = this.buildHeaders(ref, this.cfg.signinBase)
@@ -1269,7 +1261,7 @@ export class Registrar {
 
     const redir = data.redirect as Record<string, unknown> | undefined
     const rurl = redir?.url as string
-    if (!rurl) throw new Error(`密码设置未返回 redirect: ${resp.body.slice(0, 200)}`)
+    if (!rurl) throw new Error(`Password setting not returned redirect: ${resp.body.slice(0, 200)}`)
 
     const wh = extractParam(rurl, 'workflowStateHandle')
     const st = extractParam(rurl, 'state')
@@ -1278,7 +1270,7 @@ export class Registrar {
   }
 
   private async completeSignup(wh: string, state: string, rh: string): Promise<void> {
-    this.log('[12.5] 完成注册工作流')
+    this.log('[12.5] Complete the registration workflow')
     const api = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/api/execute`
     const ref = `${this.cfg.signinBase}/platform/${this.cfg.directoryId}/login?workflowStateHandle=${wh}&state=${state}&workflowResultHandle=${rh}`
     const fp = this.genFP('signin', 'PageLoad', 0, '')
@@ -1297,7 +1289,7 @@ export class Registrar {
     }, h)
     saveCookies(this.cookies, resp.headers as Record<string, string | string[] | undefined>)
     const data = this.parseBody(resp.body)
-    if (data.stepId !== 'end-of-workflow-success') throw new Error(`完成工作流失败: ${data.stepId || 'undefined'} ${this.formatErrorBody(resp.body, resp.status)}`)
+    if (data.stepId !== 'end-of-workflow-success') throw new Error(`Failed to complete workflow: ${data.stepId || 'undefined'} ${this.formatErrorBody(resp.body, resp.status)}`)
 
     const redir = data.redirect as Record<string, unknown> | undefined
     const rurl = redir?.url as string
@@ -1308,11 +1300,11 @@ export class Registrar {
     }
   }
 
-  // ============ SSO 授权 (Step12.8-13) ============
+  // ============ SSO Authorize (Step12.8-13) ============
 
   private async step12_8SSOWorkflow(): Promise<void> {
     this.emitStep('sso-workflow')
-    this.log('[12.8] SSO 工作流')
+    this.log('[12.8] SSO Workflow')
     const redirectURL = encodeURIComponent(this.cfg.viewBase + '/start/#/')
     const loginURL = `${this.cfg.portalBase}/login?directory_id=view&redirect_url=${redirectURL}`
 
@@ -1335,7 +1327,7 @@ export class Registrar {
     if (rurl.includes('workflowStateHandle=')) {
       wh = splitAfter(rurl, 'workflowStateHandle=')
     }
-    if (!wh) throw new Error('SSO 无法获取 workflowStateHandle')
+    if (!wh) throw new Error('SSO Unable to obtain workflowStateHandle')
 
     await this.completeSSOWorkflow(wh)
   }
@@ -1382,7 +1374,7 @@ export class Registrar {
       }
     }
 
-    // 访问 start 页面
+    // access start page
     const params = new URLSearchParams()
     if (this.ssoState) params.set('state', this.ssoState)
     params.set('workflowResultHandle', this.authCode)
@@ -1404,9 +1396,9 @@ export class Registrar {
 
   private async step13SSOToken(): Promise<Record<string, unknown>> {
     this.emitStep('sso-token')
-    this.log('[13] 获取 SSO Token')
+    this.log('[13] get SSO Token')
     const csrf = this.cookies.get('loginCsrfToken')
-    if (!csrf) throw new Error('缺少 loginCsrfToken')
+    if (!csrf) throw new Error('Lack loginCsrfToken')
 
     const h: Record<string, string> = {
       'Accept': 'application/json, text/plain, */*',
@@ -1420,7 +1412,7 @@ export class Registrar {
     }
     const formData = `authCode=${encodeURIComponent(this.authCode)}&state=${encodeURIComponent(this.ssoState)}&orgId=view`
 
-    // 使用新客户端轮询 SSO Token
+    // Polling with new client SSO Token
     const ssoSession = new SessionClient(this.moduleClient!, this.sessionOpts)
 
     try {
@@ -1437,13 +1429,13 @@ export class Registrar {
           await this.abortableSleep(3000)
           continue
         }
-        throw new Error(`SSO Token 失败: ${resp.body?.slice(0, 200)}`)
+        throw new Error(`SSO Token fail: ${resp.body?.slice(0, 200)}`)
       }
     } finally {
       try { await ssoSession.destroySession() } catch { /* ignore */ }
     }
 
-    if (!this.ssoToken) throw new Error('SSO Token 重试 5 次仍失败')
+    if (!this.ssoToken) throw new Error('SSO Token Try again 5 Still failed')
 
     // Accept device + Associate token
     let resp = await this.doPost(this.cfg.oidcBase + '/device_authorization/accept_user_code', {
@@ -1456,8 +1448,8 @@ export class Registrar {
       deviceContext: dc, userSessionId: this.ssoToken
     }, { 'Content-Type': 'application/json' })
 
-    // 轮询 token
-    for (let i = 0; i < 30; i++) {
+    // polling token
+    for (let i = 0; i < 120; i++) {
       resp = await this.doPost(this.cfg.oidcBase + '/token', {
         clientId: this.clientId, clientSecret: this.clientSecret,
         deviceCode: this.deviceCode,
@@ -1465,15 +1457,15 @@ export class Registrar {
       }, { 'Content-Type': 'application/json' })
 
       if (resp.status === 200) return this.parseBody(resp.body)
-      await this.abortableSleep(2000)
+      await this.abortableSleep(3000)
     }
-    throw new Error('Token 轮询超时')
+    throw new Error('Token Poll timeout (Wait timeout)')
   }
 
-  // ============ 验活 ============
+  // ============ Live test ============
 
   private async verifyAlive(awsToken: Record<string, unknown>): Promise<Record<string, unknown>> {
-    this.log('[验活] 刷新 Token + 查用量')
+    this.log('[Live test] refresh Token + Check dosage')
     const refreshToken = (awsToken.refreshToken as string) || ''
 
     const resp = await this.doPost('https://oidc.us-east-1.amazonaws.com/token', {
@@ -1482,7 +1474,7 @@ export class Registrar {
     }, { 'Content-Type': 'application/json' })
 
     if (resp.status !== 200) {
-      this.log(`Token 刷新失败: ${resp.status}`)
+      this.log(`Token Refresh failed: ${resp.status}`)
       return { alive: false, error: `refresh failed: ${resp.status}` }
     }
 
@@ -1536,13 +1528,13 @@ export class Registrar {
       }
     }
 
-    this.log(`验活成功! 邮箱=${emailAddr} 订阅=${sub} Credit=${totalUsed}/${totalLimit}`)
+    this.log(`Live test successful! Mail=${emailAddr} subscription=${sub} Credit=${totalUsed}/${totalLimit}`)
     return { alive: true, email: emailAddr, subscription: sub, credit_used: totalUsed, credit_limit: totalLimit }
   }
 
-  // ============ 主流程 ============
+  // ============ Main process ============
 
-  /** 执行完整注册流程（自动模式） */
+  /** Perform full registration process (automatic mode) */
   async run(): Promise<RegistrationResult> {
     this.emitStep('init')
     try {
@@ -1554,8 +1546,8 @@ export class Registrar {
       await refreshAppJSConfig((url, init) => this.fetchAppJS(url, init))
       await this.rebuildTlsClient()
 
-      // 幂等只读步骤：retry 次数 + 整体超时看门狗 + 失败换出口 IP。
-      // OIDC 为首步（失败即废号）保留自带 3 次重试不快速超时；Email 创建有副作用不重试。
+      // Idempotent read-only steps:retry frequency + Overall timeout watchdog + Failed to change the exit IP。
+      // OIDC Keep it for the first step (if it fails, the account will be discarded) 3 Retries do not time out quickly;Email Create side effects are not retried.
       const initSteps: Array<{ name: string; fn: StepFn; retry?: number; timeoutMs?: number; refreshSession?: boolean }> = [
         { name: 'OIDC', fn: () => this.step1OIDC() },
         { name: 'Device', fn: () => this.step2Device(), retry: 2, timeoutMs: 30000, refreshSession: true },
@@ -1575,7 +1567,7 @@ export class Registrar {
       }
 
       this.checkAborted()
-      // 非幂等步骤统一加整体超时看门狗（默认 55s）：卡住时快速失败释放并发槽，不死等 3×25s
+      // Non-idempotent steps uniformly add an overall timeout watchdog (default 55s): Quickly fail to release the concurrency slot when stuck, and do not die, etc. 3×25s
       const STEP_TIMEOUT = 55000
       const emailStatus = await this.withTimeout(this.step6SubmitEmail(), STEP_TIMEOUT, 'SubmitEmail')
 
@@ -1612,32 +1604,32 @@ export class Registrar {
           await this.humanDelay()
         }
       } else {
-        return { status: 'failed', email: this.email, error: '该邮箱已注册过' }
+        return { status: 'failed', email: this.email, error: 'This email address has already been registered' }
       }
 
-      // ====== 后期步骤（SSO + Token）======
-      // 到这里账号已创建（Step 11-12 成功），后续只是获取登录凭证。
-      // 如果因网络波动失败，在同一个 Registrar 内重试（复用已有注册状态），
-      // 避免让外层从头开始白白浪费已完成的注册流程。
+      // ====== Later steps (SSO + Token）======
+      // The account has been created here (Step 11-12 Success), and then just get the login credentials.
+      // If it fails due to network fluctuations, on the same Registrar Retry within (reuse existing registration status),
+      // Avoid wasting a completed registration process by having the outer layer start over from scratch.
       this.checkAborted()
       let awsToken: Record<string, unknown> | null = null
       const SSO_MAX_RETRIES = 2
       for (let ssoAttempt = 0; ssoAttempt <= SSO_MAX_RETRIES; ssoAttempt++) {
         try {
-          // SSO 含 token 轮询，单次尝试加整体超时（卡死时切断进入下一次重试）
+          // SSO Contains token Polling, single attempt plus overall timeout (cut off and enter the next retry when stuck)
           await this.withTimeout(this.step12_8SSOWorkflow(), 60000, 'SSOWorkflow')
           await this.abortableSleep(2000)
           this.checkAborted()
           awsToken = await this.withTimeout(this.step13SSOToken(), 90000, 'SSOToken')
-          break // SSO 成功
+          break // SSO success
         } catch (err) {
           const errMsg = (err as Error).message
           if (ssoAttempt < SSO_MAX_RETRIES) {
-            this.log(`[SSO] 后期步骤失败，内部重试 (${ssoAttempt + 1}/${SSO_MAX_RETRIES}): ${errMsg}`)
+            this.log(`[SSO] Post step failed, internal retry (${ssoAttempt + 1}/${SSO_MAX_RETRIES}): ${errMsg}`)
             await this.abortableSleep(3000 + Math.floor(Math.random() * 2000))
           } else {
-            // 最终失败：账号已创建但拿不到 Token
-            return { status: 'failed', email: this.email, error: `[SSOToken] ${errMsg} (账号已创建，可手动导入刷新)` }
+            // Final failure: The account has been created but cannot be obtained Token
+            return { status: 'failed', email: this.email, error: `[SSOToken] ${errMsg} (The account has been created and can be manually imported and refreshed.)` }
           }
         }
       }
@@ -1669,11 +1661,11 @@ export class Registrar {
   }
 
   /**
-   * 返回本次注册实际生效的代理 URL（按 sessionOpts 同样的优先级解析），
-   * 用于在指纹摘要里准确显示是直连还是走代理。
+   * Returns the actual effective agent for this registration URL(according to sessionOpts Same priority parsing),
+   * Used to accurately display in the fingerprint summary whether it is directly connected or through a proxy.
    */
   private resolvedProxyUrl(): string | undefined {
-    // 代理链启用时 cfg.proxy 是本地中继地址，审计应显示真正的目标代理
+    // When proxy chaining is enabled cfg.proxy is the local relay address, auditing should show the real destination proxy
     return (this.chainTargetProxy && this.chainTargetProxy.trim())
       || (this.cfg.proxy && this.cfg.proxy.trim())
       || process.env.HTTPS_PROXY || process.env.https_proxy
@@ -1681,7 +1673,7 @@ export class Registrar {
       || getSystemProxy() || undefined
   }
 
-  /** 输出本次注册使用的指纹摘要（用于审计与后续复用） */
+  /** Output the fingerprint summary used for this registration (for auditing and subsequent reuse) */
   private fingerprintSnapshot(): FingerprintSnapshot {
     const resolved = this.resolvedProxyUrl()
     return {
@@ -1691,13 +1683,13 @@ export class Registrar {
       gpuModel: this.identity.gpuModel,
       canvasHash: this.identity.canvasHash,
       screen: { width: this.identity.screen.width, height: this.identity.screen.height },
-      // 脱敏后保存（隐藏密码部分），同时确保系统/环境变量代理也被捕获
+      // Desensitize and save (hide the password part) while ensuring that the system/Environment variable proxies are also captured
       proxyUrl: resolved ? resolved.replace(/:([^:@/]+)@/, ':***@') : undefined,
       exitIP: this.exitIP || undefined
     }
   }
 
-  /** 手动模式注册 - Step1-2 自动，Step3 等待外部设置邮箱，Step4-9 自动，Step10 等待外部 OTP */
+  /** Manual mode registration - Step1-2 automatic,Step3 Waiting for the external mailbox to be set up,Step4-9 automatic,Step10 Wait for external OTP */
   async runManualPhase1(): Promise<{ success: boolean; error?: string }> {
     try {
       await this.setupProxyChain()
@@ -1714,19 +1706,19 @@ export class Registrar {
     }
   }
 
-  /** 手动模式 - 设置邮箱后继续注册流程到发送 OTP */
+  /** manual mode - After setting up your email address, continue the registration process to send OTP */
   async runManualPhase2(email: string, fullName?: string): Promise<{ success: boolean; error?: string }> {
     this.email = email
     if (fullName) this.cfg.fullName = fullName
 
     try {
-      // 幂等只读步骤：retry + 超时看门狗 + 失败换出口 IP；后续非幂等步骤仅加超时快速失败
+      // Idempotent read-only steps:retry + timeout watchdog + Failed to change the exit IP;Subsequent non-idempotent steps only add timeout and fail quickly.
       const STEP_TIMEOUT = 55000
       await this.retryStep('Portal', () => this.step4Portal(), 3, { timeoutMs: 35000, refreshSession: true })
       await this.retryStep('WorkflowInit', () => this.step5WorkflowInit(), 2, { timeoutMs: 35000, refreshSession: true })
 
       const status = await this.withTimeout(this.step6SubmitEmail(), STEP_TIMEOUT, 'SubmitEmail')
-      if (status !== 'signup') return { success: false, error: '该邮箱已注册过' }
+      if (status !== 'signup') return { success: false, error: 'This email address has already been registered' }
 
       await this.withTimeout(this.step7Signup(), STEP_TIMEOUT, 'Signup')
       await this.withTimeout(this.step7_5SignupInit(), STEP_TIMEOUT, 'SignupInit')
@@ -1739,14 +1731,14 @@ export class Registrar {
     }
   }
 
-  /** 手动模式 - 输入 OTP 后完成注册 */
+  /** manual mode - enter OTP Complete registration after */
   async runManualPhase3(otp: string): Promise<RegistrationResult> {
     try {
-      // 非幂等步骤加整体超时看门狗，卡住时快速失败
+      // Non-idempotent steps plus an overall timeout watchdog to fail quickly when stuck
       await this.withTimeout(this.step11CreateIdentity(otp), 55000, 'CreateIdentity')
       await this.withTimeout(this.step12SetPassword(), 55000, 'SetPassword')
 
-      // SSO + Token：账号已创建，网络波动时在同一 Registrar 内重试（复用已有注册状态），避免白费已完成的注册
+      // SSO + Token: The account has been created, and it will be on the same page when the network fluctuates. Registrar Retry (reuse existing registration status) to avoid wasting completed registration
       let awsToken: Record<string, unknown> | null = null
       const SSO_MAX_RETRIES = 2
       for (let ssoAttempt = 0; ssoAttempt <= SSO_MAX_RETRIES; ssoAttempt++) {
@@ -1759,10 +1751,10 @@ export class Registrar {
         } catch (err) {
           const errMsg = (err as Error).message
           if (ssoAttempt < SSO_MAX_RETRIES) {
-            this.log(`[SSO] 后期步骤失败，内部重试 (${ssoAttempt + 1}/${SSO_MAX_RETRIES}): ${errMsg}`)
+            this.log(`[SSO] Post step failed, internal retry (${ssoAttempt + 1}/${SSO_MAX_RETRIES}): ${errMsg}`)
             await this.abortableSleep(3000 + Math.floor(Math.random() * 2000))
           } else {
-            return { status: 'failed', email: this.email, error: `[SSOToken] ${errMsg} (账号已创建，可手动导入刷新)` }
+            return { status: 'failed', email: this.email, error: `[SSOToken] ${errMsg} (The account has been created and can be manually imported and refreshed.)` }
           }
         }
       }

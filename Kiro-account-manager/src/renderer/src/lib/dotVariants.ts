@@ -1,29 +1,29 @@
 /**
- * 点号变体邮箱生成器（Dot Alias Generator）
+ * Dot variant mailbox generator (Dot Alias Generator）
  *
- * 原理：Gmail 等邮箱服务忽略 local 部分的 `.`，所以 `john.doe@gmail.com` 与
- *      `johndoe@gmail.com` 实际上是同一个邮箱。利用这个特性，从一个母邮箱可以
- *      生成大量"看起来不同但实际收件相同"的变体，用于注册多个账号。
+ * principle:Gmail Wait for the email service to ignore local partial `.`,so `john.doe@gmail.com` and
+ *      `johndoe@gmail.com` It's actually the same email address. Using this feature, from a parent mailbox you can
+ *      generate a large number of"Looks different but actually receives the same"A variation of , used to register multiple accounts.
  *
- * 注意：此特性仅对部分邮箱服务有效（Gmail / Outlook / iCloud / Yandex 等），
- *      ProtonMail / Yahoo / 自建邮箱通常不支持点号别名。是否启用由用户决定。
+ * Note: This feature is only valid for some email services (Gmail / Outlook / iCloud / Yandex wait),
+ *      ProtonMail / Yahoo / Self-created mailboxes usually do not support dot aliases. Whether to enable it or not is up to the user.
  *
- * 算法：
- *  1. 规范化母邮箱（去除 local 部分所有 `.`）
- *  2. 按 dotCount = 1, 2, 3, ... 升序遍历
- *  3. 每个 dotCount 内枚举所有可能的点号位置组合（C(n, k)）
- *  4. 过滤掉已在 usedEmails 黑名单里的变体
- *  5. 从剩余候选里随机选一个返回
- *  6. 全部用完返回 null
+ * algorithm:
+ *  1. Normalize parent mailbox (remove local Partially owned `.`）
+ *  2. according to dotCount = 1, 2, 3, ... Traverse in ascending order
+ *  3. each dotCount Enumerate all possible dot position combinations (C(n, k)）
+ *  4. filter out already in usedEmails Variants in the blacklist
+ *  5. Randomly select one from the remaining candidates and return
+ *  6. Return after all is used null
  */
 
-/** 生成 [0, n) 中选 k 个不重复元素的所有组合（递增序） */
+/** generate [0, n) selected k All combinations of non-repeating elements (in ascending order) */
 function* combinations(n: number, k: number, start = 0, prefix: number[] = []): Generator<number[]> {
   if (prefix.length === k) {
     yield [...prefix]
     return
   }
-  // 剪枝：剩余位置不够填满 k 时直接退出
+  // Pruning: the remaining space is not enough to fill k Exit directly when
   if (n - start < k - prefix.length) return
   for (let i = start; i < n; i++) {
     prefix.push(i)
@@ -33,9 +33,9 @@ function* combinations(n: number, k: number, start = 0, prefix: number[] = []): 
 }
 
 /**
- * 在 local 字符串的指定位置后插入点号
- * @param positions 字符 index 列表（递增），含义：在 local[idx] 字符之后插入一个 `.`
- *                  取值范围 0 ≤ idx ≤ local.length - 2
+ * exist local Insert a period after the specified position in the string
+ * @param positions character index List (increasing), meaning: in local[idx] Insert a character after `.`
+ *                  Value range 0 ≤ idx ≤ local.length - 2
  */
 function insertDots(local: string, positions: number[]): string {
   const positionSet = new Set(positions)
@@ -47,7 +47,7 @@ function insertDots(local: string, positions: number[]): string {
   return result
 }
 
-/** 拆分邮箱为 [local, domain]，无效邮箱返回 null */
+/** Split the mailbox into [local, domain], invalid email is returned null */
 export function splitEmail(email: string): [string, string] | null {
   const trimmed = email.trim()
   const atIndex = trimmed.indexOf('@')
@@ -59,8 +59,8 @@ export function splitEmail(email: string): [string, string] | null {
 }
 
 /**
- * 规范化邮箱：去除 local 的所有 `.`，整体转小写
- * 用于：判定多个邮箱"是否实际上是同一个母号"
+ * Normalized mailbox: removed local of all `.`, converted to lowercase as a whole
+ * Used for: Determining multiple mailboxes"Is it actually the same mother number?"
  */
 export function normalizeEmail(email: string): string {
   const split = splitEmail(email)
@@ -69,7 +69,7 @@ export function normalizeEmail(email: string): string {
   return `${local.replace(/\./g, '').toLowerCase()}@${domain.toLowerCase()}`
 }
 
-/** 计算二项式系数 C(n, k)，避免大数溢出（用于估算总变体数）*/
+/** Calculate binomial coefficients C(n, k), to avoid large number overflow (used to estimate the total number of variants)*/
 export function binomial(n: number, k: number): number {
   if (k < 0 || k > n) return 0
   if (k === 0 || k === n) return 1
@@ -81,7 +81,7 @@ export function binomial(n: number, k: number): number {
   return Math.round(result)
 }
 
-/** 计算给定 local 长度下，所有 dotCount=1..maxDot 的总变体数 */
+/** Calculate given local length, all dotCount=1..maxDot The total number of variants */
 export function totalVariantCount(localLength: number, maxDot = Number.POSITIVE_INFINITY): number {
   const positions = localLength - 1
   if (positions <= 0) return 0
@@ -93,8 +93,8 @@ export function totalVariantCount(localLength: number, maxDot = Number.POSITIVE_
 }
 
 /**
- * 统计 usedEmails 中有多少个属于「同一母邮箱」的变体
- * 即：local 去点后相同 + domain 相同
+ * statistics usedEmails How many of them are variations of "the same parent mailbox"?
+ * Right now:local Same after going to point + domain same
  */
 export function countSameRootVariants(parentEmail: string, usedEmails: Iterable<string>): number {
   const parentSplit = splitEmail(parentEmail)
@@ -114,23 +114,23 @@ export function countSameRootVariants(parentEmail: string, usedEmails: Iterable<
 }
 
 export interface DotVariantResult {
-  /** 选中的下一个变体邮箱，全部用完返回 null */
+  /** The next variant mailbox selected will be returned after all is used up. null */
   variant: string | null
-  /** 当前使用的点号数（1..n）；返回 null 时为 0 */
+  /** The number of points currently in use (1..n);return null time is 0 */
   dotCount: number
-  /** 同 dotCount 下还剩多少未使用候选 */
+  /** same dotCount How many unused candidates are left? */
   remainingInBucket: number
-  /** 母邮箱去点规范化后的 local 长度，用于上层估算总容量 */
+  /** The parent email address is standardized. local Length, used to estimate the total capacity of the upper layer */
   localLength: number
 }
 
 /**
- * 生成下一个未使用的点号变体
+ * Generate the next unused dot variant
  *
- * @param parentEmail 母邮箱（可带可不带原始点号）
- * @param usedEmails  已使用邮箱集合（不分大小写、保留点号原样比较）
- *                    通常包含：本地账号库存中的所有 email + 注册历史中的 email
- * @returns DotVariantResult；若所有变体都已用过，variant=null
+ * @param parentEmail Parent mailbox (with or without original dot number)
+ * @param usedEmails  Used mailbox collection (case-insensitive, keeping dot numbers intact for comparison)
+ *                    Usually includes: everything in the local account inventory email + in registration history email
+ * @returns DotVariantResult; if all variants have been used,variant=null
  */
 export function generateNextDotVariant(
   parentEmail: string,
@@ -148,17 +148,17 @@ export function generateNextDotVariant(
     return { variant: null, dotCount: 0, remainingInBucket: 0, localLength }
   }
 
-  // 黑名单：保留点号原样 + 全小写
+  // Blacklist: Keep the point numbers as they are + all lowercase
   const used = new Set<string>()
   for (const e of usedEmails) {
     const t = e.trim().toLowerCase()
     if (t) used.add(t)
   }
-  // 母邮箱本身（原样 + 去点版本）也排除：避免把验证码发到母号占用方
+  // The parent mailbox itself (as is + Go to the click version) and also exclude: avoid sending the verification code to the original account occupier
   used.add(parentEmail.trim().toLowerCase())
   used.add(`${local.toLowerCase()}@${domain}`)
 
-  // 按 dotCount 升序优先：1 个点 → 2 个点 → ...
+  // according to dotCount Ascending order first:1 point → 2 point → ...
   for (let k = 1; k <= positions; k++) {
     const candidates: string[] = []
     for (const combo of combinations(positions, k)) {
@@ -168,7 +168,7 @@ export function generateNextDotVariant(
       }
     }
     if (candidates.length > 0) {
-      // 同一 dotCount 内随机选取一个，避免每次都从字典序最小开始
+      // same dotCount Randomly select one within the list to avoid starting from the smallest lexicographic order every time
       const variant = candidates[Math.floor(Math.random() * candidates.length)]
       return {
         variant,

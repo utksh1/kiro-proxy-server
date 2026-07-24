@@ -56,23 +56,23 @@ export function MachineIdPage() {
   const [accountSearchQuery, setAccountSearchQuery] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // 初始化
+  // initialization
   useEffect(() => {
     const init = async () => {
       setIsLoading(true)
       try {
-        // 获取操作系统类型
+        // Get operating system type
         const os = await window.api.machineIdGetOSType()
         setOsType(os)
         
-        // 检查管理员权限
+        // Check admin rights
         const admin = await window.api.machineIdCheckAdmin()
         setHasAdmin(admin)
         
-        // 刷新当前机器码
+        // Refresh current machine code
         await refreshCurrentMachineId()
       } catch (error) {
-        console.error('初始化失败:', error)
+        console.error('Initialization failed:', error)
       } finally {
         setIsLoading(false)
       }
@@ -80,14 +80,14 @@ export function MachineIdPage() {
     init()
   }, [refreshCurrentMachineId])
 
-  // 复制机器码到剪贴板
+  // Copy machine code to clipboard
   const copyToClipboard = (text: string, id: string = 'default') => {
     navigator.clipboard.writeText(text)
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 1500)
   }
 
-  // 随机生成并应用新机器码
+  // Randomly generate and apply new machine code
   const handleRandomChange = async () => {
     setIsLoading(true)
     try {
@@ -98,7 +98,7 @@ export function MachineIdPage() {
     }
   }
 
-  // 应用自定义机器码
+  // Apply custom machine code
   const handleCustomChange = async () => {
     if (!customMachineId.trim()) return
     setIsLoading(true)
@@ -111,7 +111,7 @@ export function MachineIdPage() {
     }
   }
 
-  // 恢复原始机器码
+  // Restore original machine code
   const handleRestore = async () => {
     setIsLoading(true)
     try {
@@ -122,13 +122,13 @@ export function MachineIdPage() {
     }
   }
 
-  // 备份机器码到文件
+  // Backup machine code to file
   const handleBackupToFile = async () => {
     if (!currentMachineId) return
     await window.api.machineIdBackupToFile(currentMachineId)
   }
 
-  // 从文件恢复机器码
+  // Recover machine code from file
   const handleRestoreFromFile = async () => {
     setIsLoading(true)
     try {
@@ -142,12 +142,12 @@ export function MachineIdPage() {
     }
   }
 
-  // 请求管理员权限
+  // Request administrator permissions
   const handleRequestAdmin = async () => {
     await window.api.machineIdRequestAdminRestart()
   }
 
-  // 生成随机 UUID
+  // Generate random UUID
   const generateRandomUUID = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0
@@ -156,13 +156,13 @@ export function MachineIdPage() {
     })
   }
 
-  // 开始编辑账户机器码
+  // Start editing account machine code
   const startEditAccountMachineId = (accountId: string) => {
     setEditingAccountId(accountId)
     setEditingMachineId(accountMachineIds[accountId] || '')
   }
 
-  // 保存账户机器码
+  // Save account machine code
   const saveAccountMachineId = (accountId: string) => {
     if (editingMachineId.trim()) {
       bindMachineIdToAccount(accountId, editingMachineId.trim())
@@ -171,13 +171,13 @@ export function MachineIdPage() {
     setEditingMachineId('')
   }
 
-  // 取消编辑
+  // Cancel edit
   const cancelEditAccountMachineId = () => {
     setEditingAccountId(null)
     setEditingMachineId('')
   }
 
-  // 为账户生成随机机器码
+  // Generate random machine code for account
   const randomizeAccountMachineId = (accountId: string) => {
     const newMachineId = generateRandomUUID()
     bindMachineIdToAccount(accountId, newMachineId)
@@ -186,7 +186,7 @@ export function MachineIdPage() {
     }
   }
 
-  // 删除账户机器码绑定
+  // Delete account machine code binding
   const removeAccountMachineId = (accountId: string) => {
     const { accountMachineIds: currentBindings } = useAccountsStore.getState()
     const newBindings = { ...currentBindings }
@@ -195,22 +195,22 @@ export function MachineIdPage() {
     useAccountsStore.getState().saveToStorage()
   }
 
-  // 格式化时间
+  // Format time
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('zh-CN')
   }
 
-  // 获取操作系统显示名称
+  // Get operating system display name
   const getOSName = () => {
     switch (osType) {
       case 'windows': return 'Windows'
       case 'macos': return 'macOS'
       case 'linux': return 'Linux'
-      default: return isEn ? 'Unknown' : '未知'
+      default: return isEn ? 'Unknown' : 'unknown'
     }
   }
 
-  // 获取账户绑定数量
+  // Get the number of account bindings
   const boundAccountCount = Object.keys(accountMachineIds).length
 
   return (
@@ -229,10 +229,10 @@ export function MachineIdPage() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-primary">
-                  {isEn ? 'Machine ID' : '机器码管理'}
+                  {isEn ? 'Machine ID' : 'Machine code management'}
                 </h1>
                 <p className="text-muted-foreground mt-1">
-                  {isEn ? 'Manage device identifier to prevent account bans' : '管理设备标识符，防止账号关联和封禁'}
+                  {isEn ? 'Manage device identifier to prevent account bans' : 'Manage device identifiers to prevent account association and bans'}
                 </p>
               </div>
             </div>
@@ -242,7 +242,7 @@ export function MachineIdPage() {
             </Badge>
           </div>
 
-          {/* 统计卡片 */}
+          {/* Statistics cards */}
           <div className="grid grid-cols-3 gap-4 mt-6">
             <div className="p-4 rounded-xl bg-background/60 backdrop-blur-sm border border-white/10">
               <div className="flex items-center gap-3">
@@ -251,7 +251,7 @@ export function MachineIdPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{machineIdHistory.length}</p>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'History' : '变更记录'}</p>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'History' : 'Change history'}</p>
                 </div>
               </div>
             </div>
@@ -262,7 +262,7 @@ export function MachineIdPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{boundAccountCount}</p>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'Bound Accounts' : '已绑定账户'}</p>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'Bound Accounts' : 'Account bound'}</p>
                 </div>
               </div>
             </div>
@@ -272,8 +272,8 @@ export function MachineIdPage() {
                   <Shield className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{originalMachineId ? (isEn ? 'Backed' : '已备份') : (isEn ? 'None' : '未备份')}</p>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'Original ID' : '原始机器码'}</p>
+                  <p className="text-2xl font-bold">{originalMachineId ? (isEn ? 'Backed' : 'Backed up') : (isEn ? 'None' : 'Not backed up')}</p>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'Original ID' : 'original machine code'}</p>
                 </div>
               </div>
             </div>
@@ -281,7 +281,7 @@ export function MachineIdPage() {
         </div>
       </div>
 
-      {/* 权限警告 */}
+      {/* permission warning */}
       {hasAdmin === false && (
         <Card className="border-warning/50 bg-gradient-to-r from-warning/10 to-warning/5 overflow-hidden">
           <CardContent className="py-4">
@@ -291,13 +291,13 @@ export function MachineIdPage() {
                   <AlertTriangle className="h-5 w-5 text-warning" />
                 </div>
                 <div>
-                  <p className="font-medium text-warning">{isEn ? 'Admin Required' : '需要管理员权限'}</p>
-                  <p className="text-sm text-warning/80">{isEn ? 'Run as administrator to modify machine ID' : '修改机器码需要以管理员身份运行应用'}</p>
+                  <p className="font-medium text-warning">{isEn ? 'Admin Required' : 'Requires administrator rights'}</p>
+                  <p className="text-sm text-warning/80">{isEn ? 'Run as administrator to modify machine ID' : 'Modifying the machine code requires running the application as an administrator'}</p>
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={handleRequestAdmin} className="border-warning/50 hover:bg-warning/10">
                 <Shield className="h-4 w-4 mr-1" />
-                {isEn ? 'Restart as Admin' : '以管理员重启'}
+                {isEn ? 'Restart as Admin' : 'Restart as administrator'}
               </Button>
             </div>
           </CardContent>
@@ -305,7 +305,7 @@ export function MachineIdPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 当前机器码 */}
+        {/* Current machine code */}
         <Card className="group relative overflow-hidden hover:shadow-lg transition-all duration-300">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           <CardHeader className="pb-3 relative z-10">
@@ -313,10 +313,10 @@ export function MachineIdPage() {
               <div className="p-1.5 rounded-lg bg-primary/10">
                 <Monitor className="h-4 w-4 text-primary" />
               </div>
-              {isEn ? 'Current Machine ID' : '当前机器码'}
+              {isEn ? 'Current Machine ID' : 'Current machine code'}
               {currentMachineId && currentMachineId !== originalMachineId && (
                 <Badge className="ml-auto bg-primary/10 text-primary border-primary/20">
-                  {isEn ? 'Modified' : '已修改'}
+                  {isEn ? 'Modified' : 'Modified'}
                 </Badge>
               )}
             </CardTitle>
@@ -327,17 +327,17 @@ export function MachineIdPage() {
                 {isLoading ? (
                   <span className="text-muted-foreground flex items-center gap-2">
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    {isEn ? 'Loading...' : '加载中...'}
+                    {isEn ? 'Loading...' : 'loading...'}
                   </span>
                 ) : currentMachineId || (
-                  <span className="text-muted-foreground">{isEn ? 'Unable to get' : '无法获取'}</span>
+                  <span className="text-muted-foreground">{isEn ? 'Unable to get' : 'Unable to obtain'}</span>
                 )}
               </div>
             </div>
             {machineIdHistory.length > 0 && (
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <History className="h-3 w-3" />
-                {isEn ? 'Last modified:' : '最后修改:'} {formatTime(machineIdHistory[machineIdHistory.length - 1].timestamp)}
+                {isEn ? 'Last modified:' : 'last modified:'} {formatTime(machineIdHistory[machineIdHistory.length - 1].timestamp)}
               </p>
             )}
             <div className="flex gap-2">
@@ -349,7 +349,7 @@ export function MachineIdPage() {
                 className="flex-1"
               >
                 {copiedId === 'current' ? <Check className="h-4 w-4 mr-1 text-success" /> : <Copy className="h-4 w-4 mr-1" />}
-                {copiedId === 'current' ? (isEn ? 'Copied!' : '已复制') : (isEn ? 'Copy' : '复制')}
+                {copiedId === 'current' ? (isEn ? 'Copied!' : 'Copied') : (isEn ? 'Copy' : 'copy')}
               </Button>
               <Button 
                 variant="outline" 
@@ -366,13 +366,13 @@ export function MachineIdPage() {
                 className="flex-1"
               >
                 <RefreshCw className={cn("h-4 w-4 mr-1", isLoading && "animate-spin")} />
-                {isEn ? 'Refresh' : '刷新'}
+                {isEn ? 'Refresh' : 'refresh'}
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* 原始机器码备份 */}
+        {/* Original machine code backup */}
         <Card className="group relative overflow-hidden hover:shadow-lg transition-all duration-300">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
           <CardHeader className="pb-3 relative z-10">
@@ -380,11 +380,11 @@ export function MachineIdPage() {
               <div className="p-1.5 rounded-lg bg-primary/10">
                 <Shield className="h-4 w-4 text-primary" />
               </div>
-              {isEn ? 'Original Machine ID Backup' : '原始机器码备份'}
+              {isEn ? 'Original Machine ID Backup' : 'Original machine code backup'}
               {originalMachineId && (
                 <Badge className="ml-auto bg-primary/10 text-primary border-primary/20">
                   <CheckCircle className="h-3 w-3 mr-1" />
-                  {isEn ? 'Backed Up' : '已备份'}
+                  {isEn ? 'Backed Up' : 'Backed up'}
                 </Badge>
               )}
             </CardTitle>
@@ -397,7 +397,7 @@ export function MachineIdPage() {
                 </div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <CheckCircle className="h-3 w-3 text-primary" />
-                  {isEn ? 'Backup time:' : '备份时间:'} {originalBackupTime ? formatTime(originalBackupTime) : (isEn ? 'Unknown' : '未知')}
+                  {isEn ? 'Backup time:' : 'Backup time:'} {originalBackupTime ? formatTime(originalBackupTime) : (isEn ? 'Unknown' : 'unknown')}
                 </p>
                 <div className="flex gap-2">
                   <Button 
@@ -407,7 +407,7 @@ export function MachineIdPage() {
                     className="flex-1"
                   >
                     {copiedId === 'original' ? <Check className="h-4 w-4 mr-1 text-success" /> : <Copy className="h-4 w-4 mr-1" />}
-                    {copiedId === 'original' ? (isEn ? 'Copied!' : '已复制') : (isEn ? 'Copy' : '复制')}
+                    {copiedId === 'original' ? (isEn ? 'Copied!' : 'Copied') : (isEn ? 'Copy' : 'copy')}
                   </Button>
                   <Button 
                     variant="outline" 
@@ -417,7 +417,7 @@ export function MachineIdPage() {
                     className="flex-1 border-primary/50 hover:bg-primary/10 hover:text-primary"
                   >
                     <RotateCcw className="h-4 w-4 mr-1" />
-                    {isEn ? 'Restore' : '恢复原始'}
+                    {isEn ? 'Restore' : 'restore original'}
                   </Button>
                 </div>
               </>
@@ -425,7 +425,7 @@ export function MachineIdPage() {
               <div className="p-6 text-center rounded-xl border-2 border-dashed border-muted">
                 <Shield className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
                 <p className="text-muted-foreground text-sm">
-                  {isEn ? 'Original ID will be backed up on first change' : '首次修改机器码时将自动备份原始值'}
+                  {isEn ? 'Original ID will be backed up on first change' : 'The original value will be automatically backed up when the machine code is modified for the first time.'}
                 </p>
               </div>
             )}
@@ -433,27 +433,27 @@ export function MachineIdPage() {
         </Card>
       </div>
 
-      {/* 机器码操作 */}
+      {/* Machine code operations */}
       <Card className="overflow-hidden">
         <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
           <CardTitle className="text-base flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-primary/10">
               <Shuffle className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Operations' : '机器码操作'}
+            {isEn ? 'Operations' : 'Machine code operations'}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 随机生成 */}
+            {/* randomly generated */}
             <div className="group p-5 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all space-y-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-gradient-to-br from-primary to-primary/80 text-white">
                   <Shuffle className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-semibold">{isEn ? 'Random Generate' : '随机生成'}</h4>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'Generate UUID format machine ID' : '一键生成 UUID 格式机器码'}</p>
+                  <h4 className="font-semibold">{isEn ? 'Random Generate' : 'randomly generated'}</h4>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'Generate UUID format machine ID' : 'One-click generation UUID format machine code'}</p>
                 </div>
               </div>
               <Button 
@@ -462,24 +462,24 @@ export function MachineIdPage() {
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25"
               >
                 <Shuffle className="h-4 w-4 mr-2" />
-                {isEn ? 'Generate & Apply' : '随机生成并应用'}
+                {isEn ? 'Generate & Apply' : 'Randomly generate and apply'}
               </Button>
             </div>
 
-            {/* 自定义机器码 */}
+            {/* Custom machine code */}
             <div className="group p-5 rounded-xl border-2 border-dashed hover:border-primary/50 hover:bg-primary/5 transition-all space-y-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-gradient-to-br from-primary/80 to-primary text-white">
                   <Edit3 className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-semibold">{isEn ? 'Custom Input' : '自定义输入'}</h4>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'Enter a specific machine ID' : '输入指定的机器码'}</p>
+                  <h4 className="font-semibold">{isEn ? 'Custom Input' : 'custom input'}</h4>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'Enter a specific machine ID' : 'Enter the specified machine code'}</p>
                 </div>
               </div>
               <input
                 type="text"
-                placeholder={isEn ? 'Enter UUID format machine ID...' : '输入 UUID 格式机器码...'}
+                placeholder={isEn ? 'Enter UUID format machine ID...' : 'enter UUID format machine code...'}
                 value={customMachineId}
                 onChange={(e) => setCustomMachineId(e.target.value)}
                 className="w-full px-4 py-2.5 text-sm border-2 rounded-xl bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
@@ -490,12 +490,12 @@ export function MachineIdPage() {
                 variant="outline"
                 className="w-full border-2 hover:bg-primary/10 hover:border-primary/50"
               >
-                {isEn ? 'Apply Custom ID' : '应用自定义机器码'}
+                {isEn ? 'Apply Custom ID' : 'Apply custom machine code'}
               </Button>
             </div>
           </div>
 
-          {/* 文件操作 */}
+          {/* File operations */}
           <div className="flex gap-3 pt-4 border-t">
             <Button 
               variant="outline" 
@@ -505,7 +505,7 @@ export function MachineIdPage() {
               className="flex-1 h-10"
             >
               <Download className="h-4 w-4 mr-2" />
-              {isEn ? 'Export to File' : '导出到文件'}
+              {isEn ? 'Export to File' : 'export to file'}
             </Button>
             <Button 
               variant="outline" 
@@ -515,24 +515,24 @@ export function MachineIdPage() {
               className="flex-1 h-10"
             >
               <Upload className="h-4 w-4 mr-2" />
-              {isEn ? 'Import from File' : '从文件导入'}
+              {isEn ? 'Import from File' : 'import from file'}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* 自动化设置 */}
+      {/* Automation settings */}
       <Card className="overflow-hidden">
         <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
           <CardTitle className="text-base flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-primary/10">
               <Link2 className="h-4 w-4 text-primary" />
             </div>
-            {isEn ? 'Automation' : '自动化设置'}
+            {isEn ? 'Automation' : 'Automation settings'}
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0 divide-y">
-          {/* 切号时自动更换 */}
+          {/* Automatically change when switching numbers */}
           <div className="flex items-center justify-between p-5 hover:bg-muted/50 transition-colors">
             <div className="flex items-center gap-4">
               <div className={cn(
@@ -545,9 +545,9 @@ export function MachineIdPage() {
                 )} />
               </div>
               <div>
-                <p className="font-medium">{isEn ? 'Auto Change on Switch' : '切换账号时自动更换机器码'}</p>
+                <p className="font-medium">{isEn ? 'Auto Change on Switch' : 'Automatically change the machine code when switching accounts'}</p>
                 <p className="text-sm text-muted-foreground">
-                  {isEn ? 'Auto generate new ID when switching accounts' : '每次切换账号时自动生成并应用新的机器码'}
+                  {isEn ? 'Auto generate new ID when switching accounts' : 'Automatically generate and apply new machine code every time you switch accounts'}
                 </p>
               </div>
             </div>
@@ -560,11 +560,11 @@ export function MachineIdPage() {
                 machineIdConfig.autoSwitchOnAccountChange && "bg-primary hover:bg-primary/90"
               )}
             >
-              {machineIdConfig.autoSwitchOnAccountChange ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {machineIdConfig.autoSwitchOnAccountChange ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
 
-          {/* 账户绑定 */}
+          {/* Account binding */}
           <div className="flex items-center justify-between p-5 hover:bg-muted/50 transition-colors">
             <div className="flex items-center gap-4">
               <div className={cn(
@@ -578,15 +578,15 @@ export function MachineIdPage() {
               </div>
               <div>
                 <p className="font-medium flex items-center gap-2">
-                  {isEn ? 'Account ID Binding' : '账户机器码绑定'}
+                  {isEn ? 'Account ID Binding' : 'Account machine code binding'}
                   {boundAccountCount > 0 && (
                     <Badge className="bg-primary/10 text-primary border-primary/20">
-                      {isEn ? `${boundAccountCount} accounts` : `${boundAccountCount} 个账户`}
+                      {isEn ? `${boundAccountCount} accounts` : `${boundAccountCount} accounts`}
                     </Badge>
                   )}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {isEn ? 'Assign unique ID per account, auto-apply on switch' : '为每个账户分配唯一的机器码，切换时自动使用'}
+                  {isEn ? 'Assign unique ID per account, auto-apply on switch' : 'Assign a unique machine code to each account and use it automatically when switching'}
                 </p>
               </div>
             </div>
@@ -599,11 +599,11 @@ export function MachineIdPage() {
                 machineIdConfig.bindMachineIdToAccount && "bg-primary hover:bg-primary/90"
               )}
             >
-              {machineIdConfig.bindMachineIdToAccount ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+              {machineIdConfig.bindMachineIdToAccount ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
             </Button>
           </div>
 
-          {/* 使用绑定的机器码 */}
+          {/* Use bound machine code */}
           {machineIdConfig.bindMachineIdToAccount && (
             <div className="flex items-center justify-between p-5 pl-16 bg-muted/30 hover:bg-muted/50 transition-colors">
               <div className="flex items-center gap-4">
@@ -617,9 +617,9 @@ export function MachineIdPage() {
                   )} />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">{isEn ? 'Use bound machine ID' : '使用绑定的唯一机器码'}</p>
+                  <p className="font-medium text-sm">{isEn ? 'Use bound machine ID' : 'Use the unique machine code of the binding'}</p>
                   <p className="text-xs text-muted-foreground">
-                    {isEn ? 'When off, generates new ID on each switch' : '关闭时每次切换将随机生成新机器码'}
+                    {isEn ? 'When off, generates new ID on each switch' : 'When turned off, new machine code will be randomly generated each time it is switched.'}
                   </p>
                 </div>
               </div>
@@ -632,16 +632,16 @@ export function MachineIdPage() {
                   machineIdConfig.useBindedMachineId && "bg-primary hover:bg-primary/90"
                 )}
               >
-                {machineIdConfig.useBindedMachineId ? (isEn ? 'On' : '已开启') : (isEn ? 'Off' : '已关闭')}
+                {machineIdConfig.useBindedMachineId ? (isEn ? 'On' : 'Already turned on') : (isEn ? 'Off' : 'Closed')}
               </Button>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* 快捷操作 */}
+      {/* Quick operation */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* 账户机器码管理按钮 */}
+        {/* Account machine code management button */}
         <Card className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:border-primary/50" onClick={() => setShowAccountBindings(true)}>
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
@@ -649,9 +649,9 @@ export function MachineIdPage() {
                 <Users className="h-6 w-6 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold group-hover:text-primary transition-colors">{isEn ? 'Account Machine ID' : '账户机器码管理'}</p>
+                <p className="font-semibold group-hover:text-primary transition-colors">{isEn ? 'Account Machine ID' : 'Account machine code management'}</p>
                 <p className="text-sm text-muted-foreground">
-                  {isEn ? 'View and manage bound machine IDs' : '查看和管理每个账户绑定的机器码'}
+                  {isEn ? 'View and manage bound machine IDs' : 'View and manage machine codes bound to each account'}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-muted group-hover:bg-primary/10 transition-colors">
@@ -661,7 +661,7 @@ export function MachineIdPage() {
           </CardContent>
         </Card>
 
-        {/* 历史记录按钮 */}
+        {/* History button */}
         <Card className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:border-primary/50" onClick={() => setShowHistory(true)}>
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
@@ -669,9 +669,9 @@ export function MachineIdPage() {
                 <History className="h-6 w-6 text-primary" />
               </div>
               <div className="flex-1">
-                <p className="font-semibold group-hover:text-primary transition-colors">{isEn ? 'Change History' : '变更历史记录'}</p>
+                <p className="font-semibold group-hover:text-primary transition-colors">{isEn ? 'Change History' : 'Change history'}</p>
                 <p className="text-sm text-muted-foreground">
-                  {isEn ? `${machineIdHistory.length} records` : `共 ${machineIdHistory.length} 条历史记录`}
+                  {isEn ? `${machineIdHistory.length} records` : `common ${machineIdHistory.length} history records`}
                 </p>
               </div>
               <div className="p-2 rounded-lg bg-muted group-hover:bg-primary/10 transition-colors">
@@ -682,23 +682,23 @@ export function MachineIdPage() {
         </Card>
       </div>
 
-      {/* 账户机器码管理对话框 */}
+      {/* Account machine code management dialog box */}
       {showAccountBindings && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* 背景遮罩 */}
+          {/* background mask */}
           <div 
             className="absolute inset-0 bg-black/50"
             onClick={() => setShowAccountBindings(false)}
           />
           
-          {/* 对话框内容 */}
+          {/* Dialog content */}
           <div className="relative bg-background rounded-xl shadow-2xl w-[600px] max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            {/* 标题栏 */}
+            {/* title bar */}
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                <h2 className="text-lg font-semibold">{isEn ? 'Account Machine ID' : '账户机器码管理'}</h2>
-                <Badge variant="secondary">{accounts.size} {isEn ? 'accounts' : '个账户'}</Badge>
+                <h2 className="text-lg font-semibold">{isEn ? 'Account Machine ID' : 'Account machine code management'}</h2>
+                <Badge variant="secondary">{accounts.size} {isEn ? 'accounts' : 'accounts'}</Badge>
               </div>
               <Button 
                 variant="ghost" 
@@ -710,7 +710,7 @@ export function MachineIdPage() {
               </Button>
             </div>
             
-            {/* 搜索框 */}
+            {/* search box */}
             <div className="px-4 pt-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -718,7 +718,7 @@ export function MachineIdPage() {
                   type="text"
                   value={accountSearchQuery}
                   onChange={(e) => setAccountSearchQuery(e.target.value)}
-                  placeholder={isEn ? 'Search accounts...' : '搜索账户...'}
+                  placeholder={isEn ? 'Search accounts...' : 'Search account...'}
                   className="w-full pl-9 pr-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 {accountSearchQuery && (
@@ -734,7 +734,7 @@ export function MachineIdPage() {
               </div>
             </div>
             
-            {/* 账户列表 */}
+            {/* Account list */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {Array.from(accounts.values())
                 .filter((account) => {
@@ -752,7 +752,7 @@ export function MachineIdPage() {
                 
                 return (
                   <div key={account.id} className="p-3 bg-muted rounded-lg">
-                    {/* 账户信息行 */}
+                    {/* Account Information Line */}
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-sm font-medium">
@@ -770,7 +770,7 @@ export function MachineIdPage() {
                         </div>
                         {boundMachineId && (
                           <Badge variant="secondary" className="text-xs bg-success/10 text-success">
-                            {isEn ? 'Bound' : '已绑定'}
+                            {isEn ? 'Bound' : 'Bound'}
                           </Badge>
                         )}
                       </div>
@@ -782,7 +782,7 @@ export function MachineIdPage() {
                               size="sm"
                               className="h-7 w-7 p-0"
                               onClick={() => startEditAccountMachineId(account.id)}
-                              title={isEn ? 'Edit' : '编辑'}
+                              title={isEn ? 'Edit' : 'edit'}
                             >
                               <Edit3 className="h-3.5 w-3.5" />
                             </Button>
@@ -791,7 +791,7 @@ export function MachineIdPage() {
                               size="sm"
                               className="h-7 w-7 p-0"
                               onClick={() => randomizeAccountMachineId(account.id)}
-                              title={isEn ? 'Random' : '随机'}
+                              title={isEn ? 'Random' : 'random'}
                             >
                               <Shuffle className="h-3.5 w-3.5" />
                             </Button>
@@ -802,7 +802,7 @@ export function MachineIdPage() {
                                   size="sm"
                                   className="h-7 w-7 p-0"
                                   onClick={() => copyToClipboard(boundMachineId)}
-                                  title={isEn ? 'Copy' : '复制'}
+                                  title={isEn ? 'Copy' : 'copy'}
                                 >
                                   <Copy className="h-3.5 w-3.5" />
                                 </Button>
@@ -811,7 +811,7 @@ export function MachineIdPage() {
                                   size="sm"
                                   className="h-7 w-7 p-0 text-destructive hover:text-destructive"
                                   onClick={() => removeAccountMachineId(account.id)}
-                                  title={isEn ? 'Delete' : '删除'}
+                                  title={isEn ? 'Delete' : 'delete'}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
@@ -827,7 +827,7 @@ export function MachineIdPage() {
                               onClick={() => saveAccountMachineId(account.id)}
                             >
                               <Check className="h-3.5 w-3.5 mr-1" />
-                              {isEn ? 'Save' : '保存'}
+                              {isEn ? 'Save' : 'save'}
                             </Button>
                             <Button
                               variant="ghost"
@@ -835,14 +835,14 @@ export function MachineIdPage() {
                               className="h-7 px-2 text-xs"
                               onClick={cancelEditAccountMachineId}
                             >
-                              {isEn ? 'Cancel' : '取消'}
+                              {isEn ? 'Cancel' : 'Cancel'}
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-7 w-7 p-0"
                               onClick={() => randomizeAccountMachineId(account.id)}
-                              title={isEn ? 'Random' : '随机'}
+                              title={isEn ? 'Random' : 'random'}
                             >
                               <Shuffle className="h-3.5 w-3.5" />
                             </Button>
@@ -851,13 +851,13 @@ export function MachineIdPage() {
                       </div>
                     </div>
                     
-                    {/* 机器码显示/编辑 */}
+                    {/* Machine code display/edit */}
                     {isEditing ? (
                       <input
                         type="text"
                         value={editingMachineId}
                         onChange={(e) => setEditingMachineId(e.target.value)}
-                        placeholder={isEn ? 'Enter UUID format machine ID' : '输入 UUID 格式机器码'}
+                        placeholder={isEn ? 'Enter UUID format machine ID' : 'enter UUID format machine code'}
                         className="w-full px-2 py-1.5 text-xs font-mono bg-background border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                         autoFocus
                       />
@@ -867,7 +867,7 @@ export function MachineIdPage() {
                       </div>
                     ) : (
                       <div className="px-2 py-1.5 bg-background/50 rounded border border-dashed text-center">
-                        <span className="text-xs text-muted-foreground">{isEn ? 'Not bound' : '未绑定'}</span>
+                        <span className="text-xs text-muted-foreground">{isEn ? 'Not bound' : 'Not bound'}</span>
                       </div>
                     )}
                   </div>
@@ -877,8 +877,8 @@ export function MachineIdPage() {
               {accounts.size === 0 && (
                 <div className="text-center py-12">
                   <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground">{isEn ? 'No accounts' : '暂无账户'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Please add accounts first' : '请先添加账户'}</p>
+                  <p className="text-muted-foreground">{isEn ? 'No accounts' : 'No account yet'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Please add accounts first' : 'Please add account first'}</p>
                 </div>
               )}
               
@@ -893,38 +893,38 @@ export function MachineIdPage() {
                 }).length === 0 && (
                 <div className="text-center py-8">
                   <Search className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-                  <p className="text-muted-foreground">{isEn ? 'No matches found' : '未找到匹配的账户'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Try other keywords' : '尝试其他关键词'}</p>
+                  <p className="text-muted-foreground">{isEn ? 'No matches found' : 'No matching account found'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Try other keywords' : 'Try other keywords'}</p>
                 </div>
               )}
             </div>
             
-            {/* 底部提示 */}
+            {/* Bottom tip */}
             <div className="px-6 py-3 border-t bg-muted/50 text-xs text-muted-foreground">
-              {isEn ? '💡 Tip: After binding, switching to this account will auto-apply the bound machine ID' : '💡 提示：绑定机器码后，切换到该账户时会自动应用对应的机器码'}
+              {isEn ? '💡 Tip: After binding, switching to this account will auto-apply the bound machine ID' : '💡 Tip: After binding the machine code, the corresponding machine code will be automatically applied when switching to the account.'}
             </div>
           </div>
         </div>,
         document.body
       )}
 
-      {/* 历史记录对话框 */}
+      {/* History dialog box */}
       {showHistory && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* 背景遮罩 */}
+          {/* background mask */}
           <div 
             className="absolute inset-0 bg-black/50"
             onClick={() => setShowHistory(false)}
           />
           
-          {/* 对话框内容 */}
+          {/* Dialog content */}
           <div className="relative bg-background rounded-xl shadow-2xl w-[550px] max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-            {/* 标题栏 */}
+            {/* title bar */}
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5" />
-                <h2 className="text-lg font-semibold">{isEn ? 'Change History' : '变更历史'}</h2>
-                <Badge variant="secondary">{machineIdHistory.length} {isEn ? 'records' : '条'}</Badge>
+                <h2 className="text-lg font-semibold">{isEn ? 'Change History' : 'Change history'}</h2>
+                <Badge variant="secondary">{machineIdHistory.length} {isEn ? 'records' : 'strip'}</Badge>
               </div>
               <div className="flex items-center gap-2">
                 {machineIdHistory.length > 0 && (
@@ -935,7 +935,7 @@ export function MachineIdPage() {
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-1" />
-                    {isEn ? 'Clear' : '清空'}
+                    {isEn ? 'Clear' : 'Clear'}
                   </Button>
                 )}
                 <Button 
@@ -949,7 +949,7 @@ export function MachineIdPage() {
               </div>
             </div>
             
-            {/* 历史列表 */}
+            {/* History list */}
             <div className="flex-1 overflow-y-auto p-4">
               {machineIdHistory.length > 0 ? (
                 <div className="space-y-2">
@@ -969,11 +969,11 @@ export function MachineIdPage() {
                               entry.action === 'bind' && "bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300"
                             )}
                           >
-                            {entry.action === 'initial' && (isEn ? 'Init' : '初始')}
-                            {entry.action === 'manual' && (isEn ? 'Manual' : '手动')}
-                            {entry.action === 'auto_switch' && (isEn ? 'Auto' : '自动')}
-                            {entry.action === 'restore' && (isEn ? 'Restore' : '恢复')}
-                            {entry.action === 'bind' && (isEn ? 'Bind' : '绑定')}
+                            {entry.action === 'initial' && (isEn ? 'Init' : 'initial')}
+                            {entry.action === 'manual' && (isEn ? 'Manual' : 'Manual')}
+                            {entry.action === 'auto_switch' && (isEn ? 'Auto' : 'automatic')}
+                            {entry.action === 'restore' && (isEn ? 'Restore' : 'recover')}
+                            {entry.action === 'bind' && (isEn ? 'Bind' : 'binding')}
                           </Badge>
                         </div>
                         <span className="text-xs text-muted-foreground">
@@ -987,14 +987,14 @@ export function MachineIdPage() {
                           size="sm"
                           className="h-6 w-6 p-0 shrink-0"
                           onClick={() => copyToClipboard(entry.machineId)}
-                          title={isEn ? 'Copy' : '复制'}
+                          title={isEn ? 'Copy' : 'copy'}
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
                       </div>
                       {entry.accountId && (
                         <p className="text-xs text-muted-foreground mt-2">
-                          {isEn ? 'Account: ' : '关联账户: '}{accounts.get(entry.accountId)?.nickname || accounts.get(entry.accountId)?.email || entry.accountId}
+                          {isEn ? 'Account: ' : 'Linked accounts: '}{accounts.get(entry.accountId)?.nickname || accounts.get(entry.accountId)?.email || entry.accountId}
                         </p>
                       )}
                     </div>
@@ -1003,8 +1003,8 @@ export function MachineIdPage() {
               ) : (
                 <div className="text-center py-12">
                   <History className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground">{isEn ? 'No change records' : '暂无变更记录'}</p>
-                  <p className="text-sm text-muted-foreground">{isEn ? 'Changes will be recorded automatically' : '机器码变更后将自动记录'}</p>
+                  <p className="text-muted-foreground">{isEn ? 'No change records' : 'No change record yet'}</p>
+                  <p className="text-sm text-muted-foreground">{isEn ? 'Changes will be recorded automatically' : 'Changes to the machine code will be automatically recorded'}</p>
                 </div>
               )}
             </div>
@@ -1013,7 +1013,7 @@ export function MachineIdPage() {
         document.body
       )}
 
-      {/* 平台说明 */}
+      {/* Platform description */}
       <Card className="overflow-hidden bg-gradient-to-br from-muted/50 to-muted/30">
         <CardContent className="p-5">
           <div className="flex items-start gap-4">
@@ -1021,34 +1021,34 @@ export function MachineIdPage() {
               <Shield className="h-5 w-5 text-primary" />
             </div>
             <div className="space-y-3">
-              <p className="font-semibold">{isEn ? 'Platform Notes' : '平台说明'}</p>
+              <p className="font-semibold">{isEn ? 'Platform Notes' : 'Platform description'}</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
                   <div className="flex items-center gap-2 mb-1">
                     <Monitor className="h-4 w-4 text-primary" />
                     <span className="font-medium text-sm">Windows</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'Modifies registry MachineGuid, requires admin' : '修改注册表 MachineGuid，需要管理员权限'}</p>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'Modifies registry MachineGuid, requires admin' : 'Modify registry MachineGuid, requires administrator rights'}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
                   <div className="flex items-center gap-2 mb-1">
                     <Monitor className="h-4 w-4 text-primary" />
                     <span className="font-medium text-sm">macOS</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'App-level override, hardware UUID unchanged' : '应用层覆盖方式，原生硬件 UUID 无法修改'}</p>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'App-level override, hardware UUID unchanged' : 'Application layer coverage method, native hardware UUID Cannot modify'}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
                   <div className="flex items-center gap-2 mb-1">
                     <Monitor className="h-4 w-4 text-primary" />
                     <span className="font-medium text-sm">Linux</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">{isEn ? 'Modifies /etc/machine-id, requires root' : '修改 /etc/machine-id，需要 root 权限'}</p>
+                  <p className="text-xs text-muted-foreground">{isEn ? 'Modifies /etc/machine-id, requires root' : 'Revise /etc/machine-id,need root Permissions'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20">
                 <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
                 <p className="text-xs text-warning">
-                  {isEn ? 'Changing machine ID may affect some software licenses, proceed with caution' : '修改机器码可能影响部分软件的授权，请谨慎操作'}
+                  {isEn ? 'Changing machine ID may affect some software licenses, proceed with caution' : 'Modifying the machine code may affect the authorization of some software, please operate with caution'}
                 </p>
               </div>
             </div>

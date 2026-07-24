@@ -76,27 +76,28 @@ export function resetPerfTiming(ctx: FingerprintContext): void {
 }
 
 function genPerfTiming(nowMs: number): Record<string, number> {
-  const loadEventEnd = nowMs - (500 + randInt(1001))
-  const loadDuration = 2000 + randInt(2001)
+  const loadEventEnd = nowMs - (500 + randInt(1501)) // Was 1001, now 1501 for more variance
+  const loadDuration = 1500 + randInt(3001) // Was 2000+2001, now 1500-4500 for wider range
   const base = loadEventEnd - loadDuration
 
-  const dnsOffset = 2 + randInt(8)
-  const connectEndOffset = 300 + randInt(300)
-  const responseOffset = connectEndOffset + 200 + randInt(400)
-  const domInteractiveOffset = loadDuration - (5 + randInt(11))
-  const domContentLoadedStart = domInteractiveOffset + randInt(3)
+  // More realistic network timing variations
+  const dnsOffset = 1 + randInt(15) // DNS lookup: 1-15ms (was 2-9ms)
+  const connectEndOffset = 200 + randInt(500) // Connection: 200-700ms (was 300-600ms)
+  const responseOffset = connectEndOffset + 150 + randInt(600) // Response: +150-750ms (was +200-600ms)
+  const domInteractiveOffset = loadDuration - (5 + randInt(21)) // Was 5-15ms, now 5-25ms
+  const domContentLoadedStart = domInteractiveOffset + randInt(5) // Was randInt(3), now randInt(5)
 
   return {
-    connectStart: base + dnsOffset + 1 + randInt(3),
-    secureConnectionStart: base + dnsOffset + 3 + randInt(5),
+    connectStart: base + dnsOffset + 1 + randInt(5), // Was randInt(3)
+    secureConnectionStart: base + dnsOffset + 3 + randInt(8), // Was randInt(5), now randInt(8)
     unloadEventEnd: 0,
     domainLookupStart: base + dnsOffset,
-    domainLookupEnd: base + dnsOffset + randInt(2),
+    domainLookupEnd: base + dnsOffset + randInt(3), // Was randInt(2)
     responseStart: base + responseOffset,
     connectEnd: base + connectEndOffset,
-    responseEnd: base + responseOffset + randInt(5),
+    responseEnd: base + responseOffset + randInt(8), // Was randInt(5)
     requestStart: base + connectEndOffset,
-    domLoading: base + responseOffset + 2 + randInt(5),
+    domLoading: base + responseOffset + 2 + randInt(8), // Was randInt(5)
     redirectStart: 0,
     loadEventEnd,
     domComplete: loadEventEnd,
@@ -178,16 +179,19 @@ function genInteraction(eventType: string): Record<string, unknown> {
       keyCycles: [], mouseCycles: [], touchCycles: []
     }
   }
-  const nClicks = 1 + randInt(3)
-  const nKeys = 3 + randInt(8)
+  // Add more realistic variation to avoid pattern detection
+  const nClicks = 1 + randInt(4) // 1-4 clicks instead of 1-3
+  const nKeys = 5 + randInt(15) // 5-19 keys instead of 3-10 for more variety
   const nIntervals = Math.max(1, Math.floor(nKeys / 3)) + randInt(Math.max(1, Math.floor(nKeys / 2) - Math.floor(nKeys / 3) + 1))
   const nCycles = Math.max(2, Math.floor(nKeys / 2)) + randInt(Math.max(1, Math.floor(nKeys * 2 / 3) - Math.floor(nKeys / 2) + 1))
 
   return {
     clicks: nClicks, touches: 0, keyPresses: nKeys,
     cuts: 0, copies: 0, pastes: 0,
-    keyPressTimeIntervals: Array.from({ length: nIntervals }, () => 80 + randInt(621)),
-    mouseClickPositions: Array.from({ length: nClicks }, () => `${400 + randInt(401)},${300 + randInt(201)}`),
+    // More realistic typing intervals: humans vary between fast (50ms) and slow (1000ms)
+    keyPressTimeIntervals: Array.from({ length: nIntervals }, () => 50 + randInt(951)),
+    // More varied mouse positions across the screen
+    mouseClickPositions: Array.from({ length: nClicks }, () => `${200 + randInt(800)},${100 + randInt(500)}`),
     keyCycles: Array.from({ length: nCycles }, () => 20 + randInt(281)),
     mouseCycles: Array.from({ length: nClicks }, () => 50 + randInt(101)),
     touchCycles: []
@@ -383,7 +387,7 @@ export function buildFingerprintData(
   return result
 }
 
-/** 生成加密后的浏览器指纹字符串 */
+/** Generate an encrypted browser fingerprint string */
 export function generateFingerprint(
   identity: BrowserIdentity,
   locationURL: string,

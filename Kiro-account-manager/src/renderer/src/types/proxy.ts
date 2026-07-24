@@ -1,75 +1,75 @@
 /**
- * 代理池数据模型
+ * Agent pool data model
  *
- * 用途：注册批量任务时为每个账号轮换不同的出口 IP，降低风控关联风险。
- * 与 `proxy/kproxy` 不同——那两个是"反代/客户端代理"，这里是"出口代理池"。
+ * Purpose: Rotate different exits for each account when registering batch tasks IP, reduce the risks associated with risk control.
+ * and `proxy/kproxy` Different - those two are"Anti-generational/client proxy",here it is"Export proxy pool"。
  */
 
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks4'
 
 export type ProxyStatus =
-  | 'untested'   // 未测试
-  | 'testing'    // 测试中
-  | 'alive'      // 可用
-  | 'dead'       // 不可用
-  | 'slow'       // 可用但延迟较高
+  | 'untested'   // Not tested
+  | 'testing'    // Under test
+  | 'alive'      // Available
+  | 'dead'       // Not available
+  | 'slow'       // Available but higher latency
 
-/** 代理池条目 */
+/** Agent pool entry */
 export interface ProxyEntry {
   id: string
-  url: string            // 规范化后的完整 URL，如 http://user:pass@host:port
+  url: string            // Complete after normalization URL,like http://user:pass@host:port
   protocol: ProxyProtocol
   host: string
   port: number
   username?: string
   password?: string
 
-  // 元数据
-  label?: string         // 用户标注的备注名
-  source?: string        // 来源标记（手动 / 文件 / 订阅）
+  // metadata
+  label?: string         // The remark name marked by the user
+  source?: string        // Source tag (manual / document / subscription)
   tags?: string[]
 
-  // 验活信息
+  // Vitality verification information
   status: ProxyStatus
-  latencyMs?: number     // 最近一次测试的延迟（毫秒）
-  lastTestedAt?: number  // 时间戳
-  lastError?: string     // 测试失败原因
+  latencyMs?: number     // Latency of the most recent test (milliseconds)
+  lastTestedAt?: number  // Timestamp
+  lastError?: string     // Reason for test failure
 
-  // 统计
-  usedCount: number      // 累计使用次数
-  failCount: number      // 累计失败次数
+  // statistics
+  usedCount: number      // Cumulative number of uses
+  failCount: number      // Cumulative number of failures
   lastUsedAt?: number
-  lastBoundEmail?: string // 最近一次绑定的邮箱（用于关联追溯）
+  lastBoundEmail?: string // The most recently bound email address (for association tracing)
 
-  // 配置
-  enabled: boolean       // 是否启用（停用的代理不参与轮询）
+  // Configuration
+  enabled: boolean       // Whether to enable (deactivated agents do not participate in polling)
 
   createdAt: number
 }
 
-/** 代理验活结果 */
+/** Agent live verification results */
 export interface ProxyValidationResult {
   success: boolean
   latencyMs?: number
-  externalIp?: string    // 通过代理出口看到的 IP
+  externalIp?: string    // Seen through proxy exit IP
   error?: string
 }
 
-/** 代理池调度策略 */
+/** Agent pool scheduling strategy */
 export type ProxyPoolStrategy =
-  | 'round_robin'  // 轮询
-  | 'random'       // 随机
-  | 'least_used'   // 最少使用优先
-  | 'fastest'      // 延迟最低优先
+  | 'round_robin'  // polling
+  | 'random'       // random
+  | 'least_used'   // least used first
+  | 'fastest'      // Latest lowest first
 
-/** 预设 IP 检测端点 */
+/** Default IP Detection endpoints */
 export interface IpDetectEndpoint {
   id: string
   label: string
   url: string
-  /** 响应格式：json 从字段提取 IP，text 用正则匹配 */
+  /** Response format:json Extract from field IP，text Use regular matching */
   format: 'json' | 'text'
-  /** JSON 响应中 IP 所在的字段路径（如 'ip' / 'query' / 'origin'）*/
+  /** JSON Responding IP The field path where the 'ip' / 'query' / 'origin'）*/
   ipField?: string
 }
 
@@ -84,20 +84,20 @@ export const IP_DETECT_ENDPOINTS: IpDetectEndpoint[] = [
   { id: 'ipapi-co',    label: 'ipapi.co',      url: 'https://ipapi.co/json',              format: 'json', ipField: 'ip' },
 ]
 
-/** 代理池配置 */
+/** Agent pool configuration */
 export interface ProxyPoolConfig {
-  enabled: boolean              // 是否启用代理池（注册时自动取用）
+  enabled: boolean              // Whether to enable the proxy pool (automatically accessed during registration)
   strategy: ProxyPoolStrategy
-  validateOnStartup: boolean    // 启动时自动验活
-  autoDisableDead: boolean      // 失败代理自动停用
-  failureThreshold: number      // 累计失败 N 次后停用
-  testUrl: string               // 验活测试 URL（默认 https://api.ipify.org）
-  testTimeoutMs: number         // 单次验活超时
-  /** 定时自动验活：分钟为单位，0 表示关闭 */
+  validateOnStartup: boolean    // Automatic verification at startup
+  autoDisableDead: boolean      // Failed agents are automatically deactivated
+  failureThreshold: number      // Cumulative failures N Disable after
+  testUrl: string               // Viability test URL(default https://api.ipify.org）
+  testTimeoutMs: number         // Single live verification timeout
+  /** Scheduled automatic verification: in minutes,0 means closed */
   autoValidateIntervalMin: number
-  /** 定时验活的并发数 */
+  /** Concurrency number of scheduled live verification */
   autoValidateConcurrency: number
-  /** 上游中转代理（可选）：配合"目标代理要求非大陆来源 IP"的场景串联代理链；支持 http/socks5 */
+  /** Upstream transfer agent (optional): cooperate"Target agent requires non-mainland source IP"Scenario series agent chain; support http/socks5 */
   upstreamProxy?: string
 }
 

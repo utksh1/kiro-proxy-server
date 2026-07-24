@@ -20,7 +20,7 @@ export function KProxyPage() {
             <p className="text-muted-foreground">
               {isEn 
                 ? 'MITM proxy for Machine ID replacement, reduces ban risk'
-                : 'MITM 代理，替换 Machine ID，降低封禁风险'
+                : 'MITM agent, replacement Machine ID, reduce the risk of bans'
               }
             </p>
           </div>

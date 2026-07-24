@@ -52,7 +52,7 @@ export function LogsPage() {
   const [levelFilter, setLevelFilter] = useState<LogLevel>('ALL')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [timeRange, setTimeRange] = useState('all')
-  // 显示数量默认 5K，用户改动后持久化到 localStorage（页面切换/重启后保留）
+  // Display quantity default 5K, persisted to after user changes localStorage(Page switch/retained after reboot)
   const [displayLimit, setDisplayLimit] = useState<string>(() => {
     return localStorage.getItem('systemLogs_displayLimit') || '5000'
   })
@@ -74,7 +74,7 @@ export function LogsPage() {
       const newLogs = allLogs as LogEntry[]
       setLogs(newLogs)
       setTotalCount(count)
-      // 如果用户不在底部，累计新日志数
+      // If the user is not at the bottom, the cumulative number of new logs
       if (!isAtBottom && newLogs.length > prevLogCount.current) {
         setNewLogCount(prev => prev + (newLogs.length - prevLogCount.current))
       }
@@ -93,19 +93,19 @@ export function LogsPage() {
     }
   }, [fetchLogs])
 
-  // 持久化 displayLimit
+  // persistence displayLimit
   useEffect(() => {
     localStorage.setItem('systemLogs_displayLimit', displayLimit)
   }, [displayLimit])
 
-  // 智能滚动：用户在底部时自动跟随
+  // Smart scrolling: automatically follows when user is at the bottom
   useEffect(() => {
     if (isAtBottom && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight
     }
   }, [logs, isAtBottom])
 
-  // 监听滚动位置
+  // Monitor scroll position
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
@@ -186,34 +186,34 @@ export function LogsPage() {
 
   return (
     <div className="h-full flex flex-col p-4 gap-2">
-      {/* 工具栏 */}
+      {/* Toolbar */}
       <div className="flex items-center gap-2 flex-shrink-0">
         <div className="flex items-center gap-2 flex-1">
           <div className="p-1.5 rounded-lg bg-primary/10">
             <Bug className="h-4 w-4 text-primary" />
           </div>
-          <span className="font-semibold text-sm">{isEn ? 'System Logs' : '系统日志'}</span>
+          <span className="font-semibold text-sm">{isEn ? 'System Logs' : 'System log'}</span>
           <Badge variant="secondary" className="text-[10px] font-mono">{totalCount.toLocaleString()}</Badge>
           {isLoading && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
         </div>
-        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={fetchLogs} title={isEn ? 'Refresh' : '刷新'}>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={fetchLogs} title={isEn ? 'Refresh' : 'refresh'}>
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleExport} title={isEn ? 'Export' : '导出'}>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleExport} title={isEn ? 'Export' : 'Export'}>
           <Download className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="sm" className="h-7 text-xs text-red-500 hover:text-red-600" onClick={handleClear} title={isEn ? 'Clear All' : '清空'}>
+        <Button variant="ghost" size="sm" className="h-7 text-xs text-red-500 hover:text-red-600" onClick={handleClear} title={isEn ? 'Clear All' : 'Clear'}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      {/* 搜索 + 筛选 */}
+      {/* search + filter */}
       <div className="flex items-center gap-2 flex-shrink-0">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             className="h-7 pl-8 pr-7 text-xs bg-muted/30 border-0 focus-visible:ring-1"
-            placeholder={isEn ? 'Filter by message, category...' : '按消息、分类搜索...'}
+            placeholder={isEn ? 'Filter by message, category...' : 'Search by message, category...'}
             value={filter}
             onChange={e => setFilter(e.target.value)}
           />
@@ -224,43 +224,43 @@ export function LogsPage() {
           )}
         </div>
 
-        {/* 时间范围 */}
+        {/* time range */}
         <select
           className="h-7 px-2 text-[10px] rounded-md border border-border bg-muted/30 text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
           value={timeRange}
           onChange={e => setTimeRange(e.target.value)}
         >
-          <option value="all">{isEn ? 'All Time' : '全部时间'}</option>
+          <option value="all">{isEn ? 'All Time' : 'all time'}</option>
           <option value="1h">1h</option>
           <option value="6h">6h</option>
           <option value="1d">1d</option>
           <option value="7d">7d</option>
         </select>
 
-        {/* 分类 */}
+        {/* Classification */}
         <select
           className="h-7 px-2 text-[10px] rounded-md border border-border bg-muted/30 text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring max-w-[120px]"
           value={categoryFilter}
           onChange={e => setCategoryFilter(e.target.value)}
         >
-          <option value="all">{isEn ? 'All Categories' : '全部分类'}</option>
+          <option value="all">{isEn ? 'All Categories' : 'All categories'}</option>
           {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
         </select>
 
-        {/* 显示条数 */}
+        {/* Display number */}
         <select
           className="h-7 px-2 text-[10px] rounded-md border border-border bg-muted/30 text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
           value={displayLimit}
           onChange={e => setDisplayLimit(e.target.value)}
         >
-          <option value="all">{isEn ? 'All' : '全部'}</option>
+          <option value="all">{isEn ? 'All' : 'all'}</option>
           <option value="5000">5K</option>
           <option value="10000">10K</option>
           <option value="50000">50K</option>
           <option value="100000">100K</option>
         </select>
 
-        {/* 级别筛选 */}
+        {/* Level filter */}
         <div className="flex items-center gap-0.5 bg-muted/30 rounded-lg p-0.5">
           {(['ALL', 'DEBUG', 'INFO', 'WARN', 'ERROR'] as LogLevel[]).map(level => (
             <button
@@ -272,20 +272,20 @@ export function LogsPage() {
               }`}
               onClick={() => setLevelFilter(level)}
             >
-              {level === 'ALL' ? (isEn ? 'All' : '全部') : level}
+              {level === 'ALL' ? (isEn ? 'All' : 'all') : level}
               <span className="ml-1 opacity-70">{String(levelCounts[level])}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* 日志列表（虚拟滚动） */}
+      {/* Log list (virtual scrolling) */}
       <div className="flex-1 min-h-0 relative rounded-lg border border-border/50 bg-card/50 overflow-hidden">
         {filteredLogs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
             <Filter className="h-8 w-8 opacity-20" />
-            <span className="text-sm">{isEn ? 'No logs to display' : '暂无日志'}</span>
-            {filter && <span className="text-xs">{isEn ? 'Try adjusting your filter' : '尝试调整搜索条件'}</span>}
+            <span className="text-sm">{isEn ? 'No logs to display' : 'No logs yet'}</span>
+            {filter && <span className="text-xs">{isEn ? 'Try adjusting your filter' : 'Try adjusting your search criteria'}</span>}
           </div>
         ) : (
           <VirtualLogList
@@ -299,7 +299,7 @@ export function LogsPage() {
           />
         )}
 
-        {/* 回到底部浮动按钮 */}
+        {/* Return to bottom floating button */}
         {!isAtBottom && (
           <button
             className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg hover:bg-primary/90 transition-all animate-in slide-in-from-bottom-2"
@@ -307,31 +307,31 @@ export function LogsPage() {
           >
             <ChevronsDown className="h-3.5 w-3.5" />
             {newLogCount > 0 ? (
-              <>{isEn ? `${newLogCount} new` : `${newLogCount} 条新日志`}</>
+              <>{isEn ? `${newLogCount} new` : `${newLogCount} new logs`}</>
             ) : (
-              <>{isEn ? 'Bottom' : '回到底部'}</>
+              <>{isEn ? 'Bottom' : 'back to bottom'}</>
             )}
           </button>
         )}
       </div>
 
-      {/* 底部状态栏 */}
+      {/* bottom status bar */}
       <div className="flex items-center justify-between text-[10px] text-muted-foreground flex-shrink-0 px-1">
         <div className="flex items-center gap-3">
-          <span>{isEn ? 'Showing' : '显示'} <span className="font-mono">{filteredLogs.length.toLocaleString()}</span> / <span className="font-mono">{logs.length.toLocaleString()}</span></span>
-          {levelCounts.ERROR > 0 && <span className="text-red-500">● {levelCounts.ERROR} {isEn ? 'errors' : '错误'}</span>}
-          {levelCounts.WARN > 0 && <span className="text-amber-500">● {levelCounts.WARN} {isEn ? 'warnings' : '警告'}</span>}
+          <span>{isEn ? 'Showing' : 'show'} <span className="font-mono">{filteredLogs.length.toLocaleString()}</span> / <span className="font-mono">{logs.length.toLocaleString()}</span></span>
+          {levelCounts.ERROR > 0 && <span className="text-red-500">● {levelCounts.ERROR} {isEn ? 'errors' : 'mistake'}</span>}
+          {levelCounts.WARN > 0 && <span className="text-amber-500">● {levelCounts.WARN} {isEn ? 'warnings' : 'warn'}</span>}
         </div>
         <div className="flex items-center gap-1">
           <ArrowDown className={`h-3 w-3 ${isAtBottom ? 'text-green-500' : 'text-muted-foreground/40'}`} />
-          <span>{isAtBottom ? (isEn ? 'Following' : '跟随中') : (isEn ? 'Scrolled up' : '已暂停跟随')}</span>
+          <span>{isAtBottom ? (isEn ? 'Following' : 'Following') : (isEn ? 'Scrolled up' : 'Following has been suspended')}</span>
         </div>
       </div>
     </div>
   )
 }
 
-// 虚拟滚动日志列表 — 只渲染可视区域内的行
+// Virtual rolling log list — Only render rows within the visible area
 function VirtualLogList({
   logs, expandedIdx, onToggleExpand, containerRef, onScroll, isAtBottom, formatTime
 }: {
@@ -350,7 +350,7 @@ function VirtualLogList({
     overscan: 20
   })
 
-  // 自动滚到底
+  // Automatically scroll to the bottom
   useEffect(() => {
     if (isAtBottom && logs.length > 0) {
       virtualizer.scrollToIndex(logs.length - 1, { align: 'end' })

@@ -74,7 +74,7 @@ export function Sidebar({ currentPage, onPageChange, collapsed, onToggleCollapse
                 className={cn('h-7 w-auto shrink-0', darkMode && 'invert brightness-0')}
               />
               <span className="font-semibold text-foreground whitespace-nowrap text-sm">
-                {isEn ? 'Account Manager' : '账户管理器'}
+                {isEn ? 'Account Manager' : 'Account manager'}
               </span>
             </motion.div>
           )}
@@ -100,7 +100,7 @@ export function Sidebar({ currentPage, onPageChange, collapsed, onToggleCollapse
               )}
               title={collapsed ? label : undefined}
             >
-              {/* 激活态：渐变背景（主题色随动） */}
+              {/* Active state: gradient background (theme color follows) */}
               {isActive && (
                 <motion.span
                   layoutId="sidebar-active-pill"
@@ -136,7 +136,7 @@ export function Sidebar({ currentPage, onPageChange, collapsed, onToggleCollapse
         <button
           onClick={onToggleCollapse}
           className="group w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-primary hover:bg-white/40 dark:hover:bg-white/5 transition-all overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-          title={collapsed ? (isEn ? 'Expand' : '展开侧边栏') : (isEn ? 'Collapse' : '收起侧边栏')}
+          title={collapsed ? (isEn ? 'Expand' : 'Expand sidebar') : (isEn ? 'Collapse' : 'Collapse sidebar')}
         >
           <motion.div
             animate={{ rotate: collapsed ? 0 : 180 }}
@@ -155,7 +155,7 @@ export function Sidebar({ currentPage, onPageChange, collapsed, onToggleCollapse
                 transition={{ duration: 0.15 }}
                 className="whitespace-nowrap overflow-hidden"
               >
-                {isEn ? 'Collapse' : '收起'}
+                {isEn ? 'Collapse' : 'close'}
               </motion.span>
             )}
           </AnimatePresence>

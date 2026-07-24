@@ -1,8 +1,8 @@
-// UI 组件
+// UI components
 export * from './ui'
 
-// 账号管理组件
+// Account management component
 export * from './accounts'
 
-// 其他组件
+// Other components
 export { default as Versions } from './Versions'

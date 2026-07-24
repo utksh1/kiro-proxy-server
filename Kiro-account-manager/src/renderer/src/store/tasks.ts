@@ -1,24 +1,24 @@
 import { create } from 'zustand'
 
 /**
- * 全局任务中心
+ * Global task center
  *
- * 设计目标：把分散在各页面的"批量任务"（注册、订阅、Token 刷新、代理验活...）
- * 统一汇总到一个 store，由 TitleBar 显示总进度，侧栏抽屉显示明细。
+ * Design goal: put the content scattered on each page"Batch tasks"(Register, subscribe,Token Refresh, agent verification...）
+ * unified into one store,Depend on TitleBar Shows the total progress, and the sidebar drawer shows details.
  *
- * 任何长耗时任务调用方式：
+ * Any long time-consuming task calling method:
  *   const id = useTaskStore.getState().createTask({...})
  *   useTaskStore.getState().updateTask(id, { progress: 50 })
  *   useTaskStore.getState().completeTask(id, { successCount: 95, failedCount: 5 })
  */
 
 export type TaskKind =
-  | 'register-batch'      // 批量注册
-  | 'subscription-batch'  // 批量订阅获取链接
-  | 'overage-batch'       // 批量开启超额
-  | 'proxy-validation'    // 代理池验活
-  | 'token-refresh'       // Token 批量刷新
-  | 'account-check'       // 账号状态批量检查
+  | 'register-batch'      // Batch registration
+  | 'subscription-batch'  // Batch subscription to get link
+  | 'overage-batch'       // Turn on excess quota in batches
+  | 'proxy-validation'    // Agent pool verification
+  | 'token-refresh'       // Token Batch refresh
+  | 'account-check'       // Batch check of account status
   | 'other'
 
 export type TaskStatus = 'running' | 'paused' | 'success' | 'failed' | 'cancelled'
@@ -26,30 +26,30 @@ export type TaskStatus = 'running' | 'paused' | 'success' | 'failed' | 'cancelle
 export interface TaskEntry {
   id: string
   kind: TaskKind
-  /** 用户可见的任务标题，例如 "注册 50 个账号" */
+  /** User-visible task title, e.g. "register 50 accounts" */
   title: string
-  /** 副标题，例如 "MoEmail 模式，并发 5" */
+  /** subtitle, e.g. "MoEmail mode, concurrency 5" */
   subtitle?: string
   status: TaskStatus
-  /** 0-100 进度百分比 */
+  /** 0-100 progress percentage */
   progress: number
-  /** 已完成数 */
+  /** Completed */
   done: number
-  /** 总数 */
+  /** total */
   total: number
-  /** 成功数 */
+  /** Number of successes */
   successCount: number
-  /** 失败数 */
+  /** Number of failures */
   failedCount: number
-  /** 最后一条日志/状态描述 */
+  /** last log/Status description */
   lastMessage?: string
-  /** 错误信息（失败时） */
+  /** Error message (on failure) */
   error?: string
-  /** 取消回调：调用方注册，UI 可点击取消按钮调用 */
+  /** Cancel callback: caller registration,UI Can be called by clicking the cancel button */
   onCancel?: () => void
-  /** 暂停回调（仅支持暂停的任务） */
+  /** Pause callback (only supported for paused tasks) */
   onPause?: () => void
-  /** 恢复回调 */
+  /** resume callback */
   onResume?: () => void
 
   createdAt: number
@@ -62,7 +62,7 @@ interface TasksState {
 }
 
 interface TasksActions {
-  /** 创建任务并返回 id；若 fixedId 提供则用该 id，便于调用方持有引用 */
+  /** Create task and return id;like fixedId If provided, use this id, convenient for the caller to hold the reference */
   createTask: (input: Omit<TaskEntry, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'progress' | 'done' | 'successCount' | 'failedCount'> & {
     fixedId?: string
     status?: TaskStatus
@@ -78,24 +78,24 @@ interface TasksActions {
   removeTask: (id: string) => void
   clearFinished: () => void
   clearAll: () => void
-  /** 返回当前进行中任务数（running + paused） */
+  /** Returns the current number of tasks in progress (running + paused） */
   getActiveCount: () => number
 }
 
 type TasksStore = TasksState & TasksActions
 
-// C7: 持久化键
+// C7: persistence key
 const STORAGE_KEY = 'kiro-task-history'
-const MAX_PERSISTED = 200  // 最多持久化最近 200 条已完成任务
+const MAX_PERSISTED = 200  // most persistent most recent 200 Completed tasks
 
-/** 持久化任务（仅完成的任务，运行中任务不存） */
+/** Persistent tasks (only completed tasks, running tasks do not exist) */
 function persistTasks(tasks: Map<string, TaskEntry>): void {
   try {
     const finished = Array.from(tasks.values())
       .filter((t) => t.status !== 'running' && t.status !== 'paused')
       .sort((a, b) => (b.updatedAt - a.updatedAt))
       .slice(0, MAX_PERSISTED)
-      // 不持久化回调（函数无法序列化）
+      // Callbacks are not persisted (function cannot be serialized)
       .map(({ onCancel, onPause, onResume, ...rest }) => {
         void onCancel; void onPause; void onResume
         return rest
@@ -111,7 +111,7 @@ function loadPersistedTasks(): Map<string, TaskEntry> {
     const arr = JSON.parse(raw) as TaskEntry[]
     const map = new Map<string, TaskEntry>()
     for (const t of arr) {
-      // 启动时强制把"运行中"标记为"取消"（应用重启时已运行任务必然中断）
+      // Forced at startup"Running"marked as"Cancel"(Running tasks will inevitably be interrupted when the application is restarted)
       const status: TaskStatus = (t.status === 'running' || t.status === 'paused') ? 'cancelled' : t.status
       map.set(t.id, { ...t, status })
     }

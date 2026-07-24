@@ -1,6 +1,6 @@
 /**
- * 国际化 (i18n) 系统
- * 支持中英双语，可扩展本地翻译文件
+ * internationalization (i18n) system
+ * Supports Chinese and English bilingual, expandable local translation files
  */
 
 import { create } from 'zustand'
@@ -13,17 +13,17 @@ export interface Translations {
   [key: string]: string | Translations
 }
 
-// 内置翻译
+// Built-in translation
 const builtInLocales: Record<string, Translations> = {
   en,
   zh
 }
 
-// 自定义翻译（从本地文件加载）
+// Custom translation (loaded from local file)
 let customLocales: Record<string, Translations> = {}
 
 /**
- * 获取嵌套对象的值
+ * Get the value of a nested object
  */
 function getNestedValue(obj: Translations, path: string): string {
   const keys = path.split('.')
@@ -39,7 +39,7 @@ function getNestedValue(obj: Translations, path: string): string {
 }
 
 /**
- * 检测系统语言
+ * Detection system language
  */
 export function detectSystemLanguage(): 'en' | 'zh' {
   const lang = navigator.language.toLowerCase()
@@ -48,7 +48,7 @@ export function detectSystemLanguage(): 'en' | 'zh' {
 }
 
 /**
- * 获取实际使用的语言
+ * Get the actual language used
  */
 export function getActualLanguage(language: Language): 'en' | 'zh' {
   if (language === 'auto') {
@@ -58,18 +58,18 @@ export function getActualLanguage(language: Language): 'en' | 'zh' {
 }
 
 /**
- * 翻译函数
+ * translation function
  */
 export function translate(key: string, language: 'en' | 'zh', params?: Record<string, string | number>): string {
-  // 优先使用自定义翻译
+  // Prioritize custom translations
   let text = getNestedValue(customLocales[language] || {}, key)
   
-  // 如果自定义翻译没有，使用内置翻译
+  // If custom translation is not available, use built-in translation
   if (text === key) {
     text = getNestedValue(builtInLocales[language] || builtInLocales.en, key)
   }
   
-  // 替换参数
+  // Replace parameters
   if (params && text !== key) {
     Object.entries(params).forEach(([paramKey, value]) => {
       text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(value))
@@ -80,14 +80,14 @@ export function translate(key: string, language: 'en' | 'zh', params?: Record<st
 }
 
 /**
- * 加载自定义翻译文件
+ * Load custom translation files
  */
 export async function loadCustomLocale(language: string, translations: Translations): Promise<void> {
   customLocales[language] = translations
 }
 
 /**
- * 清除自定义翻译
+ * Clear custom translation
  */
 export function clearCustomLocales(): void {
   customLocales = {}

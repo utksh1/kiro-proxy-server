@@ -28,8 +28,8 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/useTranslation'
 
 /**
- * 订阅升级前预检：从一个账号视角判断它是否可参与批量升级
- * 返回 { eligible: bool, reason?: string }
+ * Pre-check before subscription upgrade: Determine whether an account can participate in batch upgrade from the perspective of an account
+ * return { eligible: bool, reason?: string }
  */
 type EligibilityReason = 'ok' | 'no-token' | 'already-pro' | 'banned' | 'cant-upgrade' | 'unknown-status'
 function checkUpgradeEligibility(account: ReturnType<typeof useAccountsStore.getState>['accounts'] extends Map<string, infer T> ? T : never): { eligible: boolean; reason: EligibilityReason; detail?: string } {
@@ -45,19 +45,19 @@ function checkUpgradeEligibility(account: ReturnType<typeof useAccountsStore.get
     return { eligible: false, reason: 'already-pro', detail: account.subscription?.title || account.subscription?.type }
   }
   if (!isFreeTier) {
-    return { eligible: false, reason: 'unknown-status', detail: account.subscription?.title || account.subscription?.type || '未检测' }
+    return { eligible: false, reason: 'unknown-status', detail: account.subscription?.title || account.subscription?.type || 'Not detected' }
   }
 
-  // 封禁检测
+  // Ban detection
   const lastError = (account.lastError || '').toLowerCase()
   const isBanned = account.status === 'error' && (
-    lastError.includes('suspended') || lastError.includes('封禁') || lastError.includes('temporarily')
+    lastError.includes('suspended') || lastError.includes('ban') || lastError.includes('temporarily')
   )
   if (isBanned) {
     return { eligible: false, reason: 'banned', detail: account.lastError }
   }
 
-  // upgradeCapability 检查（API 明确表示不可升级时）
+  // upgradeCapability examine(API When it is clearly stated that upgrade is not possible)
   const upgradeCap = account.subscription?.upgradeCapability
   if (upgradeCap && upgradeCap.toUpperCase().includes('NOT')) {
     return { eligible: false, reason: 'cant-upgrade', detail: upgradeCap }
@@ -81,9 +81,9 @@ interface SubscriptionLink {
   status: 'pending' | 'loading' | 'success' | 'error' | 'expired'
   url?: string
   error?: string
-  /** 链接生成时间（用于估算有效期） */
+  /** Link generation time (used to estimate validity period) */
   generatedAt?: number
-  /** 链接是否经过本地有效性探测且通过 */
+  /** Whether the link has been tested for local validity and passed */
   validated?: boolean
 }
 
@@ -94,7 +94,7 @@ interface OverageItem {
   error?: string
 }
 
-// 模块级状态：组件卸载后仍保留（同一会话内）
+// Module-level state: retained after component uninstallation (within the same session)
 let _links: SubscriptionLink[] = []
 let _linksNotify: ((links: SubscriptionLink[]) => void) | null = null
 
@@ -115,8 +115,8 @@ let _overageItems: OverageItem[] = []
 let _quickPickCount = 10
 
 /**
- * 解析批量导入的链接文本：每行一条，支持纯 URL 或「邮箱<分隔符>URL」
- * 分隔符兼容空格 / 逗号 / Tab / 竖线 / ----，URL 自动从行内提取
+ * Parse the link text imported in batches: one per line, support pure URL or "email<delimiter>URL」
+ * Delimiters are compatible with spaces / comma / Tab / vertical line / ----，URL Automatically extract from rows
  */
 function parseImportedLinks(text: string): Array<{ email: string; url: string }> {
   const out: Array<{ email: string; url: string }> = []
@@ -144,24 +144,24 @@ export function SubscriptionPage() {
   const [links, setLinksState] = useState<SubscriptionLink[]>(_links)
   const [isFetching, setIsFetching] = useState(false)
   const [selectedLinkIds, setSelectedLinkIdsState] = useState<Set<string>>(_selectedLinkIds)
-  // 批量导入链接对话框
+  // Batch import link dialog box
   const [showImportDialog, setShowImportDialog] = useState(false)
-  // 快选：从顶部按设定数量分批选择可用链接（默认 10，跨页面记忆）
+  // Quick selection: Select available links in batches by a set number from the top (default 10, cross-page memory)
   const [quickPickCount, setQuickPickCountState] = useState(_quickPickCount)
   const [quickPickCursor, setQuickPickCursor] = useState(0)
   const setQuickPickCount = (n: number) => { _quickPickCount = n; setQuickPickCountState(n) }
   
-  // 计划选择相关
+  // Plan selection related
   const [availablePlans, setAvailablePlansState] = useState<SubscriptionPlan[]>(_availablePlans)
   const [selectedPlanType, setSelectedPlanTypeState] = useState<string>(_selectedPlanType)
   const [isLoadingPlans, setIsLoadingPlans] = useState(false)
 
-  // 超额相关
+  // excess correlation
   const [overageItems, setOverageItemsState] = useState<OverageItem[]>(_overageItems)
   const [isSettingOverage, setIsSettingOverage] = useState(false)
   const overageListRef = useRef<HTMLDivElement>(null)
 
-  // 包装 setter，同步更新模块级变量
+  // Package setter, update module-level variables synchronously
   const setLinks = (val: SubscriptionLink[] | ((prev: SubscriptionLink[]) => SubscriptionLink[])) => {
     setLinksState(prev => {
       const next = typeof val === 'function' ? val(prev) : val
@@ -192,19 +192,19 @@ export function SubscriptionPage() {
     })
   }
 
-  // 注册外部写入回调（让 appendSubscriptionLink/updateSubscriptionLink 同步 React state）
+  // Register an external write callback (let appendSubscriptionLink/updateSubscriptionLink synchronous React state）
   useEffect(() => {
     _linksNotify = setLinksState
     return () => { _linksNotify = null }
   }, [])
 
-  // 超额列表自动滚动到底部
+  // Excess list automatically scrolls to bottom
   useEffect(() => {
     const el = overageListRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [overageItems])
 
-  // 获取可升级的 FREE 账户（从选中或全部）
+  // Get upgradeable FREE Accounts (from selected or all)
   const getUpgradeableAccounts = useCallback(() => {
     const source = selectedIds.size > 0 
       ? Array.from(selectedIds).map(id => accounts.get(id)).filter(Boolean)
@@ -220,7 +220,7 @@ export function SubscriptionPage() {
     })
   }, [accounts, selectedIds])
 
-  // 订阅升级前预检：基于"选中账号或全部账号"做完整检查，列出可升级 / 不可升级原因
+  // Subscription pre-upgrade preflight: based on"Select an account or all accounts"Do a complete check and list upgradeable / Reason for not upgrading
   const preflightReport = useMemo(() => {
     const source = selectedIds.size > 0
       ? Array.from(selectedIds).map(id => accounts.get(id)).filter(Boolean)
@@ -233,7 +233,7 @@ export function SubscriptionPage() {
       if (r.eligible) eligible.push(acc)
       else blocked.push({ account: acc, reason: r.reason, detail: r.detail })
     }
-    // 按 reason 分桶
+    // according to reason bucket
     const reasonBuckets: Record<EligibilityReason, number> = {
       'ok': eligible.length,
       'no-token': 0, 'already-pro': 0, 'banned': 0, 'cant-upgrade': 0, 'unknown-status': 0
@@ -242,7 +242,7 @@ export function SubscriptionPage() {
     return { eligible, blocked, reasonBuckets, totalScanned: source.length }
   }, [accounts, selectedIds])
 
-  // 加载可用订阅计划（用任一可用账户调用）
+  // Load available subscription plans (call with any available account)
   const handleLoadPlans = async () => {
     const upgradeableAccounts = getUpgradeableAccounts()
     if (upgradeableAccounts.length === 0) return
@@ -262,7 +262,7 @@ export function SubscriptionPage() {
       )
       if (result.success && result.plans && result.plans.length > 0) {
         setAvailablePlans(result.plans)
-        // 默认选择第一个 PRO 计划
+        // The first one is selected by default PRO plan
         const defaultPlan = result.plans.find(p => 
           p.qSubscriptionType?.toUpperCase().includes('PRO') && !p.qSubscriptionType?.toUpperCase().includes('PLUS')
         ) || result.plans[0]
@@ -274,20 +274,20 @@ export function SubscriptionPage() {
     setIsLoadingPlans(false)
   }
 
-  // 并发数
+  // Number of concurrencies
   const [concurrency, setConcurrency] = useState(5)
 
-  // 删除失败链接时是否同时删除账号本身（封号账号清理）
+  // Whether to delete the account itself when deleting the failed link (clearance of banned accounts)
   const [deleteAlsoAccount, setDeleteAlsoAccount] = useState(false)
 
-  // 批量并发获取订阅链接
+  // Get subscription links in batches concurrently
   const handleBatchFetch = async () => {
     const upgradeableAccounts = getUpgradeableAccounts()
     if (upgradeableAccounts.length === 0 || !selectedPlanType) return
 
     setIsFetching(true)
     
-    // 初始化状态
+    // initialization state
     const initialLinks: SubscriptionLink[] = upgradeableAccounts.map(acc => ({
       accountId: acc!.id,
       email: acc!.email || 'Unknown',
@@ -296,7 +296,7 @@ export function SubscriptionPage() {
     setLinks(initialLinks)
     setSelectedLinkIds(new Set())
 
-    // 单个账号获取任务
+    // Obtain tasks for a single account
     const fetchOne = async (idx: number) => {
       const acc = upgradeableAccounts[idx]!
       setLinks(prev => prev.map((link, i) => 
@@ -331,7 +331,7 @@ export function SubscriptionPage() {
       }
     }
 
-    // 并发池执行
+    // Concurrency pool execution
     const indices = Array.from({ length: upgradeableAccounts.length }, (_, i) => i)
     let cursor = 0
     const runNext = async (): Promise<void> => {
@@ -346,7 +346,7 @@ export function SubscriptionPage() {
     setIsFetching(false)
   }
 
-  // 选择/取消选择链接（允许任意状态）
+  // choose/Deselect link (allow any status)
   const toggleLinkSelection = (accountId: string) => {
     setSelectedLinkIds(prev => {
       const next = new Set(prev)
@@ -359,7 +359,7 @@ export function SubscriptionPage() {
     })
   }
 
-  // 全选 / 取消全选当前列表所有链接（不再限制只能选 success）
+  // Select all / Unselect all links in the current list (no longer limited to success）
   const toggleSelectAll = () => {
     if (selectedLinkIds.size === links.length && links.length > 0) {
       setSelectedLinkIds(new Set())
@@ -368,7 +368,7 @@ export function SubscriptionPage() {
     }
   }
 
-  // 反选
+  // Counter-election
   const invertSelection = () => {
     setSelectedLinkIds(prev => {
       const next = new Set<string>()
@@ -379,12 +379,12 @@ export function SubscriptionPage() {
     })
   }
 
-  // 取消多选（清空选择）
+  // Cancel multiple selections (clear selection)
   const clearSelection = () => {
     setSelectedLinkIds(new Set())
   }
 
-  // 按状态选择：把指定状态的链接加入到当前选择集（保留已有选择）
+  // Select by status: Add links with specified status to the current selection set (retain existing selections)
   const selectByStatus = (status: SubscriptionLink['status']) => {
     setSelectedLinkIds(prev => {
       const next = new Set(prev)
@@ -395,7 +395,7 @@ export function SubscriptionPage() {
     })
   }
 
-  // 快选：从顶部开始选中前 N 个可用（success）链接，便于分批打开
+  // Quick selection: start from the top before selecting N available (success) link to facilitate opening in batches
   const quickPickTop = () => {
     const successList = links.filter(l => l.status === 'success' && l.url)
     const n = Math.max(1, quickPickCount)
@@ -404,7 +404,7 @@ export function SubscriptionPage() {
     setQuickPickCursor(picked.length)
   }
 
-  // 快选下一批：从上次游标继续选 N 个可用链接，到末尾后循环回到开头
+  // Quickly select the next batch: continue selecting from the last cursor N available links, then loop back to the beginning after reaching the end
   const quickPickNext = () => {
     const successList = links.filter(l => l.status === 'success' && l.url)
     if (successList.length === 0) return
@@ -416,7 +416,7 @@ export function SubscriptionPage() {
     setQuickPickCursor(start + picked.length)
   }
 
-  // 批量导入外部链接：解析后以 success 状态追加进列表（按 url 去重），即可与现有链接一样多选/打开/导出
+  // Import external links in batches: after parsing, use success Status is appended to the list (press url Remove duplicates), you can select as many as existing links/Open/Export
   const handleImportLinks = (text: string): number => {
     const parsed = parseImportedLinks(text)
     if (parsed.length === 0) return 0
@@ -430,7 +430,7 @@ export function SubscriptionPage() {
       seq++
       added.push({
         accountId: `import-${crypto.randomUUID()}`,
-        email: email || (isEn ? `(Imported #${seq})` : `(导入 #${seq})`),
+        email: email || (isEn ? `(Imported #${seq})` : `(import #${seq})`),
         status: 'success',
         url,
         generatedAt: now,
@@ -441,18 +441,18 @@ export function SubscriptionPage() {
     return added.length
   }
 
-  // 批量删除选中的链接（从结果列表中移除，不会调用任何 API）
+  // Delete selected links in batches (remove from the results list, no call will be made) API）
   const handleBatchDelete = () => {
     if (selectedLinkIds.size === 0) return
     if (!confirm(isEn
       ? `Remove ${selectedLinkIds.size} selected links from the list?`
-      : `从列表移除选中的 ${selectedLinkIds.size} 个链接？`
+      : `Remove selected from list ${selectedLinkIds.size} A link?`
     )) return
     setLinks(prev => prev.filter(l => !selectedLinkIds.has(l.accountId)))
     setSelectedLinkIds(new Set())
   }
 
-  // 批量删除"失败 + 过期"：清理无效项，保留可用链接；勾选 deleteAlsoAccount 时连带删除账号
+  // Batch delete"fail + Expired": Clean up invalid items and keep available links; check deleteAlsoAccount Delete the account simultaneously
   const handleDeleteFailed = () => {
     const failedLinks = links.filter(l => l.status === 'error' || l.status === 'expired')
     const count = failedLinks.length
@@ -460,15 +460,15 @@ export function SubscriptionPage() {
     const confirmMsg = deleteAlsoAccount
       ? (isEn
         ? `Remove ${count} failed/expired links AND delete their accounts permanently?`
-        : `移除 ${count} 个失败/过期的链接，并永久删除这些账号？`)
+        : `Remove ${count} a failure/Expired links and permanently delete these accounts?`)
       : (isEn
         ? `Remove ${count} failed/expired links?`
-        : `移除 ${count} 个失败/过期的链接？`)
+        : `Remove ${count} a failure/Expired link?`)
     if (!confirm(confirmMsg)) return
 
     const removedIds = failedLinks.map(l => l.accountId)
 
-    // 连带删除账号（封号账号清理）
+    // Delete the account together (clean up the banned account)
     if (deleteAlsoAccount && removedIds.length > 0) {
       for (const id of removedIds) {
         removeAccount(id)
@@ -488,7 +488,7 @@ export function SubscriptionPage() {
     })
   }
 
-  // 获取目标链接列表（选中的或全部成功的）
+  // Get list of target links (selected or all successful)
   const getTargetLinks = (mode: 'selected' | 'all'): SubscriptionLink[] => {
     const successLinks = links.filter(l => l.status === 'success' && l.url)
     if (mode === 'selected') {
@@ -497,15 +497,15 @@ export function SubscriptionPage() {
     return successLinks
   }
 
-  // 打开单个链接
+  // Open a single link
   const handleOpenLink = async (url: string) => {
     await window.api.openSubscriptionWindow(url)
   }
 
-  // 重新生成单个链接（链接过期时调用）
+  // Regenerate a single link (called when the link expires)
   const handleRegenerateLink = async (accountId: string): Promise<void> => {
     if (!selectedPlanType) {
-      alert(isEn ? 'Please select a plan first' : '请先选择计划')
+      alert(isEn ? 'Please select a plan first' : 'Please select a plan first')
       return
     }
     const acc = accounts.get(accountId)
@@ -540,7 +540,7 @@ export function SubscriptionPage() {
     }
   }
 
-  // 检测所有链接有效性：基于生成时间 + 真实 HTTP HEAD 探测（C5）
+  // Check all link validity: based on generation time + reality HTTP HEAD probe(C5）
   const [isValidatingLinks, setIsValidatingLinks] = useState(false)
   const handleValidateLinks = async (): Promise<void> => {
     setIsValidatingLinks(true)
@@ -549,7 +549,7 @@ export function SubscriptionPage() {
       const STALE_AFTER_MS = 15 * 60 * 1000
       const now = Date.now()
 
-      // 先按时间标记 expired，剩下的并发用 HTTP 探测真实可达性
+      // Mark by time first expired, the remaining concurrency is used HTTP Detect true reachability
       const checkResults: Record<string, 'success' | 'expired'> = {}
       const realProbe = targets.filter((l) => {
         const age = l.generatedAt ? now - l.generatedAt : Number.POSITIVE_INFINITY
@@ -560,7 +560,7 @@ export function SubscriptionPage() {
         return true
       })
 
-      // 并发探测剩余链接（限制并发以免 DDoS 自己 / 触发风控）
+      // Concurrently probe remaining links (limit concurrency to avoid DDoS Own / Trigger risk control)
       let cursor = 0
       const worker = async (): Promise<void> => {
         while (cursor < realProbe.length) {
@@ -569,7 +569,7 @@ export function SubscriptionPage() {
           if (!l.url) continue
           try {
             const r = await window.api.diagnoseHttpProbe({ url: l.url, method: 'HEAD', timeoutMs: 6000 })
-            // 4xx/5xx 视为失效，2xx/3xx 视为有效
+            // 4xx/5xx deemed invalid,2xx/3xx considered valid
             checkResults[l.accountId] = r.success || (r.status !== undefined && r.status < 400)
               ? 'success'
               : 'expired'
@@ -585,7 +585,7 @@ export function SubscriptionPage() {
         const result = checkResults[l.accountId]
         if (!result) return l
         if (result === 'expired') {
-          return { ...l, status: 'expired' as const, error: '链接已失效（HTTP 探测失败或超过 15 分钟）' }
+          return { ...l, status: 'expired' as const, error: 'The link has expired (HTTP Detection failed or exceeded 15 minute)' }
         }
         return { ...l, validated: true }
       })
@@ -593,17 +593,17 @@ export function SubscriptionPage() {
 
       const expired = next.filter((l) => l.status === 'expired').length
       const valid = next.filter((l) => l.status === 'success' && l.validated).length
-      addLog(`[Validate] 检测完成：${valid} 个有效，${expired} 个失效`)
+      addLog(`[Validate] Test completed:${valid} valid,${expired} failure`)
     } finally {
       setIsValidatingLinks(false)
     }
   }
-  // 简易日志（订阅页没有 addLog，仅 console）
+  // Simple log (not available on the subscription page addLog,only console）
   function addLog(msg: string): void {
     console.log(`[SubscriptionPage] ${msg}`)
   }
 
-  // 批量打开链接（全部同时打开）
+  // Open links in batches (all at the same time)
   const handleBatchOpen = async (mode: 'selected' | 'all') => {
     const targetLinks = getTargetLinks(mode)
     await Promise.all(
@@ -613,25 +613,25 @@ export function SubscriptionPage() {
     )
   }
 
-  // 复制单个链接
+  // Copy a single link
   const handleCopyLink = async (url: string) => {
     await navigator.clipboard.writeText(url)
   }
 
-  // 导出链接
+  // Export link
   const handleExport = async (mode: 'selected' | 'all') => {
     const targetLinks = getTargetLinks(mode)
     const text = targetLinks.map(l => l.url).join('\n')
     await navigator.clipboard.writeText(text)
   }
 
-  // ===== 一键超额功能 =====
-  // 获取可设置超额的账号（仅未开启）：已订阅（非 Free）、有 token、超额能力可用、超额未开启
+  // ===== One-click overage function =====
+  // Get the account that can set the overage (only not opened): subscribed (not Free),have token, excess capacity is available, excess capacity is not enabled
   const getOverageableAccounts = useCallback(() => {
     return getAllSubscribedAccounts().filter(acc => acc && acc.subscription?.overageCapability === 'OVERAGE_CAPABLE' && acc.usage?.resourceDetail?.overageEnabled !== true)
   }, [accounts, selectedIds])
 
-  // 获取所有已订阅账号（不限制超额能力，不限制是否已开启）
+  // Get all subscribed accounts (no limit on excess capacity, no limit on whether they are enabled)
   const getAllSubscribedAccounts = useCallback(() => {
     const source = selectedIds.size > 0
       ? Array.from(selectedIds).map(id => accounts.get(id)).filter(Boolean)
@@ -653,7 +653,7 @@ export function SubscriptionPage() {
 
     setIsSettingOverage(true)
 
-    // 初始化列表
+    // initialization list
     const initialItems: OverageItem[] = targets.map(acc => ({
       accountId: acc!.id,
       email: acc!.email || 'Unknown',
@@ -682,7 +682,7 @@ export function SubscriptionPage() {
           setOverageItems(prev => prev.map((item, i) =>
             i === idx ? { ...item, status: 'success' } : item
           ))
-          // 更新 store 中账号的超额状态，使 UI 即时反映
+          // renew store The overage status of the account in the UI Immediate response
           const existing = accounts.get(acc.id)
           if (existing) {
             updateAccount(acc.id, {
@@ -707,7 +707,7 @@ export function SubscriptionPage() {
       }
     }
 
-    // 并发池
+    // Concurrency pool
     let cursor = 0
     const runNext = async (): Promise<void> => {
       while (cursor < targets.length) {
@@ -742,18 +742,18 @@ export function SubscriptionPage() {
             <CreditCard className="h-7 w-7 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-primary">{isEn ? 'Batch Subscription' : '批量订阅'}</h1>
+            <h1 className="text-2xl font-bold text-primary">{isEn ? 'Batch Subscription' : 'Bulk subscription'}</h1>
             <p className="text-sm text-muted-foreground">
               {selectedIds.size > 0
-                ? (isEn ? `Using ${selectedIds.size} selected accounts` : `使用已选中的 ${selectedIds.size} 个账户`)
-                : (isEn ? 'Using all accounts' : '使用全部账户')
+                ? (isEn ? `Using ${selectedIds.size} selected accounts` : `Use selected ${selectedIds.size} accounts`)
+                : (isEn ? 'Using all accounts' : 'Use all accounts')
               }
             </p>
           </div>
         </div>
       </div>
 
-      {/* 内部 Tab 切换 */}
+      {/* internal Tab switch */}
       <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
         <button
           onClick={() => setActiveTab('overage')}
@@ -765,7 +765,7 @@ export function SubscriptionPage() {
           )}
         >
           <Zap className="h-4 w-4" />
-          {isEn ? 'Overage Settings' : '超额设置'}
+          {isEn ? 'Overage Settings' : 'Overage setting'}
         </button>
         <button
           onClick={() => setActiveTab('links')}
@@ -777,7 +777,7 @@ export function SubscriptionPage() {
           )}
         >
           <CreditCard className="h-4 w-4" />
-          {isEn ? 'Subscription Links' : '获取链接'}
+          {isEn ? 'Subscription Links' : 'Get link'}
         </button>
         <button
           onClick={() => setActiveTab('manage')}
@@ -789,14 +789,14 @@ export function SubscriptionPage() {
           )}
         >
           <ShieldCheck className="h-4 w-4" />
-          {isEn ? 'Manage Subscriptions' : '订阅管理'}
+          {isEn ? 'Manage Subscriptions' : 'Subscription management'}
         </button>
       </div>
 
-      {/* ===== 超额设置 Tab ===== */}
+      {/* ===== Overage setting Tab ===== */}
       {activeTab === 'overage' && (
         <>
-          {/* 操作栏 */}
+          {/* Action bar */}
           <Card>
             <CardContent className="py-3 flex items-center gap-2 flex-wrap">
               <Button
@@ -811,7 +811,7 @@ export function SubscriptionPage() {
                 )}
                 {isEn
                   ? `Enable Overage (${overageableCount})`
-                  : `一键超额 (${overageableCount})`
+                  : `One-click overage (${overageableCount})`
                 }
               </Button>
 
@@ -828,7 +828,7 @@ export function SubscriptionPage() {
                 )}
                 {isEn
                   ? `Set All (${allSubscribedCount})`
-                  : `全部设置 (${allSubscribedCount})`
+                  : `All settings (${allSubscribedCount})`
                 }
               </Button>
 
@@ -839,24 +839,24 @@ export function SubscriptionPage() {
                 disabled={isSettingOverage || overageItems.length === 0}
               >
                 <Trash2 className="h-4 w-4 mr-1" />
-                {isEn ? 'Clear' : '清空'}
+                {isEn ? 'Clear' : 'Clear'}
               </Button>
 
-              {/* 仅删除失败项（保留成功结果便于审计） */}
+              {/* Only delete failed items (keep successful results for auditing purposes) */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setOverageItems(prev => prev.filter(it => it.status !== 'error'))}
                 disabled={isSettingOverage || overageErrorCount === 0}
-                title={isEn ? 'Remove failed items only' : '仅移除失败项'}
+                title={isEn ? 'Remove failed items only' : 'Remove only failed items'}
               >
                 <XCircle className="h-4 w-4 mr-1" />
-                {isEn ? `Clear Failed (${overageErrorCount})` : `清失败 (${overageErrorCount})`}
+                {isEn ? `Clear Failed (${overageErrorCount})` : `Clear failed (${overageErrorCount})`}
               </Button>
 
-              {/* 并发数控制 */}
+              {/* Concurrency control */}
               <div className="flex items-center gap-1 text-xs">
-                <span className="text-muted-foreground">{isEn ? 'Concurrency:' : '并发:'}</span>
+                <span className="text-muted-foreground">{isEn ? 'Concurrency:' : 'concurrent:'}</span>
                 <input
                   type="number"
                   min={1}
@@ -873,12 +873,12 @@ export function SubscriptionPage() {
 
               <span className="text-xs text-muted-foreground ml-2">
                 {overageableCount > 0
-                  ? (isEn ? `${overageableCount} subscribed accounts without overage enabled` : `${overageableCount} 个已订阅账号未开启超额`)
-                  : (isEn ? 'No accounts need overage enablement' : '没有需要开启超额的账号')
+                  ? (isEn ? `${overageableCount} subscribed accounts without overage enabled` : `${overageableCount} Subscribed accounts have not been exceeded`)
+                  : (isEn ? 'No accounts need overage enablement' : 'There is no need to open an excess account')
                 }
               </span>
 
-              {/* 统计 */}
+              {/* statistics */}
               {overageItems.length > 0 && (
                 <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
                   {overageSuccessCount > 0 && (
@@ -902,19 +902,19 @@ export function SubscriptionPage() {
             </CardContent>
           </Card>
 
-          {/* 超额结果列表 */}
+          {/* Excess result list */}
           {overageItems.length > 0 && (
             <Card>
               <CardContent className="py-2">
-                {/* 表头 */}
+                {/* Header */}
                 <div className="flex items-center gap-3 py-2 px-2 border-b text-xs font-medium text-muted-foreground">
                   <span className="w-8 text-center">#</span>
-                  <span className="flex-1">{isEn ? 'Email' : '邮箱'}</span>
-                  <span className="w-20 text-center">{isEn ? 'Status' : '状态'}</span>
-                  <span className="flex-1 text-right">{isEn ? 'Details' : '详情'}</span>
+                  <span className="flex-1">{isEn ? 'Email' : 'Mail'}</span>
+                  <span className="w-20 text-center">{isEn ? 'Status' : 'state'}</span>
+                  <span className="flex-1 text-right">{isEn ? 'Details' : 'Details'}</span>
                 </div>
 
-                {/* 列表 */}
+                {/* list */}
                 <div ref={overageListRef} className="max-h-[60vh] overflow-y-auto">
                   {overageItems.map((item, idx) => (
                     <div
@@ -925,7 +925,7 @@ export function SubscriptionPage() {
                       <span className="flex-1 text-sm truncate" title={item.email}>{item.email}</span>
                       <span className="w-20 flex justify-center">
                         {item.status === 'pending' && (
-                          <span className="text-xs text-muted-foreground">{isEn ? 'Pending' : '等待中'}</span>
+                          <span className="text-xs text-muted-foreground">{isEn ? 'Pending' : 'Waiting'}</span>
                         )}
                         {item.status === 'loading' && (
                           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -937,12 +937,12 @@ export function SubscriptionPage() {
                           <XCircle className="h-4 w-4 text-red-500" />
                         )}
                         {item.status === 'skipped' && (
-                          <span className="text-xs text-muted-foreground">{isEn ? 'Skipped' : '跳过'}</span>
+                          <span className="text-xs text-muted-foreground">{isEn ? 'Skipped' : 'jump over'}</span>
                         )}
                       </span>
                       <span className="flex-1 text-right text-xs truncate">
                         {item.status === 'success' && (
-                          <span className="text-green-600">{isEn ? 'Overage enabled' : '超额已开启'}</span>
+                          <span className="text-green-600">{isEn ? 'Overage enabled' : 'Overage is enabled'}</span>
                         )}
                         {item.status === 'error' && (
                           <span className="text-red-500" title={item.error}>{item.error}</span>
@@ -955,16 +955,16 @@ export function SubscriptionPage() {
             </Card>
           )}
 
-          {/* 账号超额状态总览（未执行批量操作时显示） */}
+          {/* Overview of account overage status (displayed when batch operations are not performed) */}
           {overageItems.length === 0 && (
             <Card>
               <CardContent className="py-2">
                 <div className="flex items-center gap-3 py-2 px-2 border-b text-xs font-medium text-muted-foreground">
                   <span className="w-8 text-center">#</span>
-                  <span className="flex-1">{isEn ? 'Email' : '邮箱'}</span>
-                  <span className="w-24 text-center">{isEn ? 'Subscription' : '订阅类型'}</span>
-                  <span className="w-24 text-center">{isEn ? 'Overage Capable' : '超额能力'}</span>
-                  <span className="w-24 text-center">{isEn ? 'Overage Status' : '超额状态'}</span>
+                  <span className="flex-1">{isEn ? 'Email' : 'Mail'}</span>
+                  <span className="w-24 text-center">{isEn ? 'Subscription' : 'Subscription type'}</span>
+                  <span className="w-24 text-center">{isEn ? 'Overage Capable' : 'excess capacity'}</span>
+                  <span className="w-24 text-center">{isEn ? 'Overage Status' : 'excess status'}</span>
                 </div>
                 {allSubscribedCount > 0 ? (
                   <div className="max-h-[60vh] overflow-y-auto">
@@ -991,9 +991,9 @@ export function SubscriptionPage() {
                           </span>
                           <span className="w-24 flex justify-center">
                             {enabled ? (
-                              <span className="text-xs text-green-600 font-medium">{isEn ? 'ENABLED' : '已开启'}</span>
+                              <span className="text-xs text-green-600 font-medium">{isEn ? 'ENABLED' : 'Already turned on'}</span>
                             ) : capable ? (
-                              <span className="text-xs text-amber-500 font-medium">{isEn ? 'DISABLED' : '未开启'}</span>
+                              <span className="text-xs text-amber-500 font-medium">{isEn ? 'DISABLED' : 'Not turned on'}</span>
                             ) : (
                               <span className="text-xs text-muted-foreground">-</span>
                             )}
@@ -1008,7 +1008,7 @@ export function SubscriptionPage() {
                     <p className="text-sm">
                       {isEn
                         ? 'No subscribed accounts found. Ensure accounts are checked first.'
-                        : '未找到已订阅账号。请先检测账号状态。'}
+                        : 'Subscribed account not found. Please check the account status first.'}
                     </p>
                   </div>
                 )}
@@ -1018,7 +1018,7 @@ export function SubscriptionPage() {
         </>
       )}
 
-      {/* ===== 订阅管理 Tab ===== */}
+      {/* ===== Subscription management Tab ===== */}
       {activeTab === 'manage' && (
         <ManageSubscriptionsTab
           getAllSubscribed={getAllSubscribedAccounts}
@@ -1030,33 +1030,33 @@ export function SubscriptionPage() {
 
       {false && false && (
         <>
-          {/* 说明（被新的 ManageSubscriptionsTab 替代，保留作为 dead code 防止意外删除 - eslint 已忽略） */}
+          {/* Description (replaced by new ManageSubscriptionsTab alternative, reserved as dead code Prevent accidental deletion - eslint ignored) */}
           <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/10">
             <CardContent className="py-3 space-y-2">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-blue-600" />
                 <span className="text-sm font-medium">
-                  {isEn ? 'Subscription Lifecycle Management' : '订阅生命周期管理'}
+                  {isEn ? 'Subscription Lifecycle Management' : 'Subscription lifecycle management'}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
                 {isEn
                   ? 'Cancel or downgrade subscriptions. Kiro/AWS does not provide a direct cancel API for OIDC accounts — clicking "Get cancel URL" generates the same subscription portal link used for upgrade, where you can manage/cancel via AWS billing console.'
-                  : '取消或降级订阅。Kiro/AWS 对 OIDC 账号未公开取消订阅的直接 API，点击"获取取消链接"会生成订阅门户链接，可在 AWS 计费控制台手动管理/取消订阅。'
+                  : 'Cancel or downgrade your subscription.Kiro/AWS right OIDC If the account is not public, you can cancel the subscription directly. API, click"Get cancel link"A link to the subscription portal will be generated, available at AWS Billing console manual management/Unsubscribe.'
                 }
               </p>
             </CardContent>
           </Card>
 
-          {/* 已订阅账号列表 */}
+          {/* Subscribed account list */}
           <Card>
             <CardContent className="py-0 px-0">
               <div className="flex items-center gap-3 py-2 px-3 border-b text-xs font-medium text-muted-foreground bg-muted/30">
                 <span className="w-8 text-center">#</span>
-                <span className="flex-1">{isEn ? 'Email' : '邮箱'}</span>
-                <span className="w-32 text-center">{isEn ? 'Plan' : '订阅类型'}</span>
-                <span className="w-32 text-center">{isEn ? 'Expires' : '到期'}</span>
-                <span className="w-40 text-center">{isEn ? 'Actions' : '操作'}</span>
+                <span className="flex-1">{isEn ? 'Email' : 'Mail'}</span>
+                <span className="w-32 text-center">{isEn ? 'Plan' : 'Subscription type'}</span>
+                <span className="w-32 text-center">{isEn ? 'Expires' : 'maturity'}</span>
+                <span className="w-40 text-center">{isEn ? 'Actions' : 'operate'}</span>
               </div>
 
               {(() => {
@@ -1068,7 +1068,7 @@ export function SubscriptionPage() {
                       <p className="text-sm">
                         {isEn
                           ? 'No subscribed accounts found. Run "Check Accounts" first to refresh status.'
-                          : '未发现已订阅账号。请先在账户页"批量检查"刷新状态。'
+                          : 'No subscribed account found. Please first go to the account page"Batch inspection"Refresh status.'
                         }
                       </p>
                     </div>
@@ -1106,7 +1106,7 @@ export function SubscriptionPage() {
                             {expiresAt
                               ? new Date(expiresAt).toLocaleDateString('zh-CN')
                               : (daysLeft != null
-                                ? (isEn ? `${daysLeft}d` : `${daysLeft} 天`)
+                                ? (isEn ? `${daysLeft}d` : `${daysLeft} sky`)
                                 : '-'
                               )
                             }
@@ -1114,7 +1114,7 @@ export function SubscriptionPage() {
                           <span className="w-40 flex justify-center gap-1">
                             <button
                               onClick={async () => {
-                                // 复用 fetchSubscriptionToken 获取门户链接，在浏览器无痕中打开
+                                // Reuse fetchSubscriptionToken Get the portal link and open it in an incognito browser
                                 const r = await window.api.accountGetSubscriptionUrl(
                                   acc.credentials.accessToken,
                                   undefined,
@@ -1128,14 +1128,14 @@ export function SubscriptionPage() {
                                 if (r.success && r.url) {
                                   await window.api.openSubscriptionWindow(r.url)
                                 } else {
-                                  alert(isEn ? `Failed: ${r.error}` : `失败: ${r.error}`)
+                                  alert(isEn ? `Failed: ${r.error}` : `fail: ${r.error}`)
                                 }
                               }}
                               className="px-2 py-1 rounded text-[10px] bg-primary/10 text-primary hover:bg-primary/20"
-                              title={isEn ? 'Open subscription portal to cancel/manage' : '打开订阅门户取消/管理'}
+                              title={isEn ? 'Open subscription portal to cancel/manage' : 'Open subscription portal to cancel/manage'}
                             >
                               <ExternalLink className="h-3 w-3 inline mr-1" />
-                              {isEn ? 'Manage' : '管理'}
+                              {isEn ? 'Manage' : 'manage'}
                             </button>
 
                             {acc.usage?.resourceDetail?.overageEnabled && (
@@ -1143,7 +1143,7 @@ export function SubscriptionPage() {
                                 onClick={async () => {
                                   if (!confirm(isEn
                                     ? `Disable overage for ${acc.email}?`
-                                    : `关闭 ${acc.email} 的超额？`
+                                    : `closure ${acc.email} of excess?`
                                   )) return
                                   const r = await window.api.accountSetOverage(
                                     acc.credentials.accessToken,
@@ -1163,14 +1163,14 @@ export function SubscriptionPage() {
                                       }
                                     })
                                   } else {
-                                    alert(isEn ? `Failed: ${r.error}` : `失败: ${r.error}`)
+                                    alert(isEn ? `Failed: ${r.error}` : `fail: ${r.error}`)
                                   }
                                 }}
                                 className="px-2 py-1 rounded text-[10px] bg-amber-500/15 text-amber-700 hover:bg-amber-500/25"
-                                title={isEn ? 'Disable overage' : '关闭超额'}
+                                title={isEn ? 'Disable overage' : 'Close overage'}
                               >
                                 <Ban className="h-3 w-3 inline mr-0.5" />
-                                {isEn ? 'No-Overage' : '关超额'}
+                                {isEn ? 'No-Overage' : 'Close excess'}
                               </button>
                             )}
                           </span>
@@ -1185,10 +1185,10 @@ export function SubscriptionPage() {
         </>
       )}
 
-      {/* ===== 获取链接 Tab ===== */}
+      {/* ===== Get link Tab ===== */}
       {activeTab === 'links' && (
         <>
-          {/* 预检面板：展示可升级 / 阻塞原因 */}
+          {/* Preflight Panel: Display Upgradeable / Cause of blocking */}
           {preflightReport.totalScanned > 0 && (
             <Card className={cn(
               preflightReport.eligible.length === 0 && 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/10'
@@ -1197,47 +1197,47 @@ export function SubscriptionPage() {
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">
-                    {isEn ? 'Pre-flight Check' : '升级预检'}
+                    {isEn ? 'Pre-flight Check' : 'Upgrade preflight'}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {isEn
                       ? `Scanned ${preflightReport.totalScanned} accounts: ${preflightReport.eligible.length} eligible, ${preflightReport.blocked.length} blocked`
-                      : `扫描 ${preflightReport.totalScanned} 个账号：${preflightReport.eligible.length} 可升级，${preflightReport.blocked.length} 不可升级`
+                      : `scanning ${preflightReport.totalScanned} accounts:${preflightReport.eligible.length} Upgradeable,${preflightReport.blocked.length} Not upgradeable`
                     }
                   </span>
                 </div>
 
-                {/* 阻塞分类徽章 */}
+                {/* Blocked Classification Badge */}
                 {preflightReport.blocked.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 text-[10px]">
                     {preflightReport.reasonBuckets['already-pro'] > 0 && (
                       <span className="px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 inline-flex items-center gap-1">
                         <CheckCircle className="h-2.5 w-2.5" />
-                        {isEn ? `Already subscribed: ${preflightReport.reasonBuckets['already-pro']}` : `已订阅 ${preflightReport.reasonBuckets['already-pro']}`}
+                        {isEn ? `Already subscribed: ${preflightReport.reasonBuckets['already-pro']}` : `Subscribed ${preflightReport.reasonBuckets['already-pro']}`}
                       </span>
                     )}
                     {preflightReport.reasonBuckets['no-token'] > 0 && (
                       <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground inline-flex items-center gap-1">
                         <XCircle className="h-2.5 w-2.5" />
-                        {isEn ? `No token: ${preflightReport.reasonBuckets['no-token']}` : `无 Token ${preflightReport.reasonBuckets['no-token']}`}
+                        {isEn ? `No token: ${preflightReport.reasonBuckets['no-token']}` : `none Token ${preflightReport.reasonBuckets['no-token']}`}
                       </span>
                     )}
                     {preflightReport.reasonBuckets['banned'] > 0 && (
                       <span className="px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 inline-flex items-center gap-1">
                         <Ban className="h-2.5 w-2.5" />
-                        {isEn ? `Banned: ${preflightReport.reasonBuckets['banned']}` : `已封禁 ${preflightReport.reasonBuckets['banned']}`}
+                        {isEn ? `Banned: ${preflightReport.reasonBuckets['banned']}` : `Banned ${preflightReport.reasonBuckets['banned']}`}
                       </span>
                     )}
                     {preflightReport.reasonBuckets['cant-upgrade'] > 0 && (
                       <span className="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 inline-flex items-center gap-1">
                         <AlertTriangle className="h-2.5 w-2.5" />
-                        {isEn ? `Can't upgrade: ${preflightReport.reasonBuckets['cant-upgrade']}` : `不可升级 ${preflightReport.reasonBuckets['cant-upgrade']}`}
+                        {isEn ? `Can't upgrade: ${preflightReport.reasonBuckets['cant-upgrade']}` : `Not upgradeable ${preflightReport.reasonBuckets['cant-upgrade']}`}
                       </span>
                     )}
                     {preflightReport.reasonBuckets['unknown-status'] > 0 && (
                       <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 inline-flex items-center gap-1">
                         <AlertTriangle className="h-2.5 w-2.5" />
-                        {isEn ? `Unknown status: ${preflightReport.reasonBuckets['unknown-status']}` : `状态未知 ${preflightReport.reasonBuckets['unknown-status']}`}
+                        {isEn ? `Unknown status: ${preflightReport.reasonBuckets['unknown-status']}` : `Status unknown ${preflightReport.reasonBuckets['unknown-status']}`}
                       </span>
                     )}
                   </div>
@@ -1247,7 +1247,7 @@ export function SubscriptionPage() {
                   <p className="text-xs text-amber-600 dark:text-amber-400">
                     {isEn
                       ? 'No eligible accounts. Run "Check Accounts" on the accounts page first to get latest status.'
-                      : '无可升级账号。建议先在账户管理页"批量检查"获取最新状态。'
+                      : 'There is no way to upgrade your account. It is recommended to first go to the account management page"Batch inspection"Get the latest status.'
                     }
                   </p>
                 )}
@@ -1255,7 +1255,7 @@ export function SubscriptionPage() {
             </Card>
           )}
 
-          {/* 计划选择 */}
+          {/* Plan selection */}
           <Card>
             <CardContent className="py-3 space-y-3">
               <div className="flex items-center gap-2">
@@ -1270,12 +1270,12 @@ export function SubscriptionPage() {
                   ) : (
                     <RefreshCw className="h-4 w-4 mr-1" />
                   )}
-                  {isEn ? 'Load Plans' : '加载计划'}
+                  {isEn ? 'Load Plans' : 'Load plan'}
                 </Button>
                 <span className="text-xs text-muted-foreground">
                   {availablePlans.length > 0
-                    ? (isEn ? `${availablePlans.length} plans available` : `已加载 ${availablePlans.length} 个计划`)
-                    : (isEn ? 'Click to load available subscription plans' : '点击加载可用订阅计划')
+                    ? (isEn ? `${availablePlans.length} plans available` : `Loaded ${availablePlans.length} plan`)
+                    : (isEn ? 'Click to load available subscription plans' : 'Click to load available subscription plans')
                   }
                 </span>
               </div>
@@ -1304,7 +1304,7 @@ export function SubscriptionPage() {
             </CardContent>
           </Card>
 
-          {/* 操作栏 */}
+          {/* Action bar */}
           <Card>
             <CardContent className="py-3 flex items-center gap-2 flex-wrap">
               <Button
@@ -1319,7 +1319,7 @@ export function SubscriptionPage() {
                 )}
                 {isEn
                   ? `Fetch Links (${upgradeableCount})`
-                  : `获取链接 (${upgradeableCount})`
+                  : `Get link (${upgradeableCount})`
                 }
               </Button>
 
@@ -1328,61 +1328,61 @@ export function SubscriptionPage() {
                 size="sm"
                 onClick={() => { setLinks([]); setSelectedLinkIds(new Set()) }}
                 disabled={isFetching || links.length === 0}
-                title={isEn ? 'Clear results' : '清空结果'}
+                title={isEn ? 'Clear results' : 'Clear results'}
               >
                 <Trash2 className="h-4 w-4 mr-1" />
-                {isEn ? 'Clear' : '清空'}
+                {isEn ? 'Clear' : 'Clear'}
               </Button>
 
-              {/* 批量导入外部链接 */}
+              {/* Import external links in batches */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowImportDialog(true)}
                 disabled={isFetching}
-                title={isEn ? 'Import links from text (one per line)' : '从文本批量导入链接（每行一个）'}
+                title={isEn ? 'Import links from text (one per line)' : 'Batch import links from text (one per line)'}
               >
                 <Upload className="h-4 w-4 mr-1" />
-                {isEn ? 'Import' : '导入链接'}
+                {isEn ? 'Import' : 'Import link'}
               </Button>
 
-              {/* 检测链接有效性 */}
+              {/* Check link validity */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleValidateLinks}
                 disabled={isFetching || isValidatingLinks || links.filter(l => l.status === 'success').length === 0}
-                title={isEn ? 'Detect expired links (>15min old)' : '检测过期链接（生成超过 15 分钟）'}
+                title={isEn ? 'Detect expired links (>15min old)' : 'Detect expired links (generating more than 15 minute)'}
               >
                 {isValidatingLinks ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-                {isEn ? 'Validate' : '检测有效性'}
+                {isEn ? 'Validate' : 'Test effectiveness'}
               </Button>
 
-              {/* 删除失败/过期 — 始终显示 */}
+              {/* Delete failed/Expired — always show */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleDeleteFailed}
                 disabled={isFetching || links.filter(l => l.status === 'error' || l.status === 'expired').length === 0}
-                title={isEn ? 'Remove failed and expired links' : '移除失败和过期的链接'}
+                title={isEn ? 'Remove failed and expired links' : 'Remove failed and expired links'}
                 className={deleteAlsoAccount ? 'text-destructive hover:text-destructive hover:bg-destructive/10' : ''}
               >
                 <Trash2 className="h-4 w-4 mr-1" />
-                {isEn ? 'Remove Failed' : '清失败'}
+                {isEn ? 'Remove Failed' : 'Clear failed'}
                 {' '}({links.filter(l => l.status === 'error' || l.status === 'expired').length})
               </Button>
-              {/* 勾选：清失败时同时删除账号 */}
-              <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none" title={isEn ? 'Also permanently delete the accounts (for banned accounts cleanup)' : '同时永久删除这些账号（用于清理封号账号）'}>
+              {/* Check: Delete the account at the same time if the cleanup fails. */}
+              <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer select-none" title={isEn ? 'Also permanently delete the accounts (for banned accounts cleanup)' : 'At the same time, these accounts will be permanently deleted (used to clean up banned accounts)'}>
                 <input
                   type="checkbox"
                   checked={deleteAlsoAccount}
                   onChange={(e) => setDeleteAlsoAccount(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-border"
                 />
-                {isEn ? 'Delete accounts' : '连删账号'}
+                {isEn ? 'Delete accounts' : 'Delete account continuously'}
               </label>
 
-              {/* 多选辅助操作（仅有结果时显示） */}
+              {/* Multi-select auxiliary operation (displayed when only results are available) */}
               {links.length > 0 && (
                 <>
                   <div className="w-px h-6 bg-border" />
@@ -1391,26 +1391,26 @@ export function SubscriptionPage() {
                     size="sm"
                     onClick={invertSelection}
                     disabled={isFetching}
-                    title={isEn ? 'Invert selection' : '反选'}
+                    title={isEn ? 'Invert selection' : 'Counter-election'}
                   >
                     <Minus className="h-4 w-4 mr-1" />
-                    {isEn ? 'Invert' : '反选'}
+                    {isEn ? 'Invert' : 'Counter-election'}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={clearSelection}
                     disabled={isFetching || selectedLinkIds.size === 0}
-                    title={isEn ? 'Clear selection' : '取消多选'}
+                    title={isEn ? 'Clear selection' : 'Cancel multiple selections'}
                   >
                     <Square className="h-4 w-4 mr-1" />
-                    {isEn ? 'Deselect' : '取消多选'}
+                    {isEn ? 'Deselect' : 'Cancel multiple selections'}
                   </Button>
 
-                  {/* 快选：从顶部按数量分批选择可用链接 */}
+                  {/* Quick Selection: Select available links in batches by quantity from the top */}
                   <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-dashed">
                     <ListChecks className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground">{isEn ? 'Quick pick' : '快选'}</span>
+                    <span className="text-[10px] text-muted-foreground">{isEn ? 'Quick pick' : 'Quick selection'}</span>
                     <input
                       type="number"
                       min={1}
@@ -1421,74 +1421,74 @@ export function SubscriptionPage() {
                       }}
                       disabled={isFetching}
                       className="h-6 w-12 px-1 rounded border border-border bg-background text-[11px] text-center"
-                      title={isEn ? 'Number of links to pick' : '快选数量'}
+                      title={isEn ? 'Number of links to pick' : 'Quick selection quantity'}
                     />
                     <button
                       onClick={quickPickTop}
                       disabled={isFetching || successCount === 0}
                       className="text-[10px] px-1.5 py-0.5 rounded hover:bg-primary/15 text-primary disabled:opacity-40"
-                      title={isEn ? `Select top ${quickPickCount} available links` : `从顶部选中前 ${quickPickCount} 个可用链接`}
+                      title={isEn ? `Select top ${quickPickCount} available links` : `Before selecting from the top ${quickPickCount} available links`}
                     >
-                      {isEn ? 'Top' : '前N个'}
+                      {isEn ? 'Top' : 'forwardNindivual'}
                     </button>
                     <button
                       onClick={quickPickNext}
                       disabled={isFetching || successCount === 0}
                       className="text-[10px] px-1.5 py-0.5 rounded hover:bg-primary/15 text-primary disabled:opacity-40"
-                      title={isEn ? 'Select next batch (continue from last pick)' : '选中下一批（从上次位置继续）'}
+                      title={isEn ? 'Select next batch (continue from last pick)' : 'Select next batch (continue from last position)'}
                     >
-                      {isEn ? 'Next' : '下一批'}
+                      {isEn ? 'Next' : 'next batch'}
                     </button>
                   </div>
 
-                  {/* 按状态快速选择 */}
+                  {/* Quick selection by status */}
                   <div className="relative inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-dashed">
-                    <span className="text-[10px] text-muted-foreground">{isEn ? 'Pick:' : '选择:'}</span>
+                    <span className="text-[10px] text-muted-foreground">{isEn ? 'Pick:' : 'choose:'}</span>
                     <button
                       className="text-[10px] px-1.5 py-0.5 rounded hover:bg-green-500/15 text-green-700 dark:text-green-300"
                       onClick={() => selectByStatus('success')}
                       disabled={isFetching}
-                      title={isEn ? 'Add all "Success" to selection' : '把"成功"项加入选择'}
+                      title={isEn ? 'Add all "Success" to selection' : 'Bundle"success"Items added to the selection'}
                     >
-                      ✓ {isEn ? 'Success' : '成功'} ({links.filter(l => l.status === 'success').length})
+                      ✓ {isEn ? 'Success' : 'success'} ({links.filter(l => l.status === 'success').length})
                     </button>
                     <button
                       className="text-[10px] px-1.5 py-0.5 rounded hover:bg-amber-500/15 text-amber-700 dark:text-amber-300"
                       onClick={() => selectByStatus('expired')}
                       disabled={isFetching}
-                      title={isEn ? 'Add all "Expired" to selection' : '把"过期"项加入选择'}
+                      title={isEn ? 'Add all "Expired" to selection' : 'Bundle"Expired"Items added to the selection'}
                     >
-                      ⚠ {isEn ? 'Expired' : '过期'} ({links.filter(l => l.status === 'expired').length})
+                      ⚠ {isEn ? 'Expired' : 'Expired'} ({links.filter(l => l.status === 'expired').length})
                     </button>
                     <button
                       className="text-[10px] px-1.5 py-0.5 rounded hover:bg-red-500/15 text-red-700 dark:text-red-300"
                       onClick={() => selectByStatus('error')}
                       disabled={isFetching}
-                      title={isEn ? 'Add all "Error" to selection' : '把"失败"项加入选择'}
+                      title={isEn ? 'Add all "Error" to selection' : 'Bundle"fail"Items added to the selection'}
                     >
-                      ✗ {isEn ? 'Error' : '失败'} ({links.filter(l => l.status === 'error').length})
+                      ✗ {isEn ? 'Error' : 'fail'} ({links.filter(l => l.status === 'error').length})
                     </button>
                   </div>
 
-                  {/* 批量删除选中 */}
+                  {/* Batch delete selected */}
                   {selectedLinkIds.size > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleBatchDelete}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      title={isEn ? `Delete ${selectedLinkIds.size} selected links` : `删除选中的 ${selectedLinkIds.size} 个链接`}
+                      title={isEn ? `Delete ${selectedLinkIds.size} selected links` : `Delete selected ${selectedLinkIds.size} links`}
                     >
                       <Trash2 className="h-4 w-4 mr-1" />
-                      {isEn ? `Delete Selected (${selectedLinkIds.size})` : `删除选中 (${selectedLinkIds.size})`}
+                      {isEn ? `Delete Selected (${selectedLinkIds.size})` : `Remove selected (${selectedLinkIds.size})`}
                     </Button>
                   )}
                 </>
               )}
 
-              {/* 并发数控制 */}
+              {/* Concurrency control */}
               <div className="flex items-center gap-1 text-xs">
-                <span className="text-muted-foreground">{isEn ? 'Concurrency:' : '并发:'}</span>
+                <span className="text-muted-foreground">{isEn ? 'Concurrency:' : 'concurrent:'}</span>
                 <input
                   type="number"
                   min={1}
@@ -1512,20 +1512,20 @@ export function SubscriptionPage() {
                     size="sm"
                     onClick={() => handleBatchOpen('selected')}
                     disabled={selectedCount === 0}
-                    title={isEn ? 'Open selected in incognito' : '无痕打开选中链接'}
+                    title={isEn ? 'Open selected in incognito' : 'Open selected link incognito'}
                   >
                     <ExternalLink className="h-4 w-4 mr-1" />
-                    {isEn ? `Open Selected (${selectedCount})` : `打开选中 (${selectedCount})`}
+                    {isEn ? `Open Selected (${selectedCount})` : `open selected (${selectedCount})`}
                   </Button>
 
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleBatchOpen('all')}
-                    title={isEn ? 'Open all in incognito' : '无痕打开全部链接'}
+                    title={isEn ? 'Open all in incognito' : 'Open all links without trace'}
                   >
                     <ExternalLink className="h-4 w-4 mr-1" />
-                    {isEn ? `Open All (${successCount})` : `全部打开 (${successCount})`}
+                    {isEn ? `Open All (${successCount})` : `open all (${successCount})`}
                   </Button>
 
                   <div className="w-px h-6 bg-border" />
@@ -1535,25 +1535,25 @@ export function SubscriptionPage() {
                     size="sm"
                     onClick={() => handleExport('selected')}
                     disabled={selectedCount === 0}
-                    title={isEn ? 'Copy selected links' : '复制选中链接'}
+                    title={isEn ? 'Copy selected links' : 'Copy selected link'}
                   >
                     <Copy className="h-4 w-4 mr-1" />
-                    {isEn ? `Export Selected (${selectedCount})` : `导出选中 (${selectedCount})`}
+                    {isEn ? `Export Selected (${selectedCount})` : `Export selected (${selectedCount})`}
                   </Button>
 
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleExport('all')}
-                    title={isEn ? 'Copy all links' : '复制全部链接'}
+                    title={isEn ? 'Copy all links' : 'Copy all links'}
                   >
                     <Download className="h-4 w-4 mr-1" />
-                    {isEn ? `Export All (${successCount})` : `全部导出 (${successCount})`}
+                    {isEn ? `Export All (${successCount})` : `Export all (${successCount})`}
                   </Button>
                 </>
               )}
 
-              {/* 统计 */}
+              {/* statistics */}
               {links.length > 0 && (
                 <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
                   {successCount > 0 && (
@@ -1577,11 +1577,11 @@ export function SubscriptionPage() {
             </CardContent>
           </Card>
 
-          {/* 链接列表 */}
+          {/* Linked list */}
           {links.length > 0 && (
             <Card>
               <CardContent className="py-2">
-                {/* 表头 */}
+                {/* Header */}
                 <div className="flex items-center gap-3 py-2 px-2 border-b text-xs font-medium text-muted-foreground">
                   <button
                     onClick={toggleSelectAll}
@@ -1589,8 +1589,8 @@ export function SubscriptionPage() {
                     disabled={links.length === 0}
                     title={
                       selectedLinkIds.size === links.length && links.length > 0
-                        ? (isEn ? 'Deselect all' : '取消全选')
-                        : (isEn ? 'Select all' : '全选')
+                        ? (isEn ? 'Deselect all' : 'Deselect all')
+                        : (isEn ? 'Select all' : 'Select all')
                     }
                   >
                     {selectedLinkIds.size === links.length && links.length > 0 ? (
@@ -1602,12 +1602,12 @@ export function SubscriptionPage() {
                     )}
                   </button>
                   <span className="w-8 text-center">#</span>
-                  <span className="flex-1">{isEn ? 'Email' : '邮箱'}</span>
-                  <span className="w-20 text-center">{isEn ? 'Status' : '状态'}</span>
-                  <span className="w-24 text-center">{isEn ? 'Actions' : '操作'}</span>
+                  <span className="flex-1">{isEn ? 'Email' : 'Mail'}</span>
+                  <span className="w-20 text-center">{isEn ? 'Status' : 'state'}</span>
+                  <span className="w-24 text-center">{isEn ? 'Actions' : 'operate'}</span>
                 </div>
 
-                {/* 列表 */}
+                {/* list */}
                 <div className="max-h-[60vh] overflow-y-auto">
                   {links.map((link, idx) => (
                     <div
@@ -1617,7 +1617,7 @@ export function SubscriptionPage() {
                         selectedLinkIds.has(link.accountId) && 'bg-primary/5'
                       )}
                     >
-                      {/* 选择框 — 任何状态都可选（便于批量删除/重试失败项） */}
+                      {/* selection box — Any status is optional (facilitates batch deletion)/Retry failed items) */}
                       <button
                         onClick={() => toggleLinkSelection(link.accountId)}
                         className="flex-shrink-0"
@@ -1629,18 +1629,18 @@ export function SubscriptionPage() {
                         )}
                       </button>
 
-                      {/* 序号 */}
+                      {/* serial number */}
                       <span className="w-8 text-center text-xs text-muted-foreground">{idx + 1}</span>
 
-                      {/* 邮箱 */}
+                      {/* Mail */}
                       <span className="flex-1 text-sm truncate" title={link.email}>
                         {link.email}
                       </span>
 
-                      {/* 状态 */}
+                      {/* state */}
                       <span className="w-20 flex justify-center">
                         {link.status === 'pending' && (
-                          <span className="text-xs text-muted-foreground">{isEn ? 'Pending' : '等待中'}</span>
+                          <span className="text-xs text-muted-foreground">{isEn ? 'Pending' : 'Waiting'}</span>
                         )}
                         {link.status === 'loading' && (
                           <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
@@ -1649,16 +1649,16 @@ export function SubscriptionPage() {
                           <span className="inline-flex items-center gap-1">
                             <CheckCircle className="h-4 w-4 text-green-500" />
                             {link.generatedAt && (
-                              <span className="text-[9px] text-muted-foreground tabular-nums" title={isEn ? 'Minutes since generated' : '生成至今分钟数'}>
+                              <span className="text-[9px] text-muted-foreground tabular-nums" title={isEn ? 'Minutes since generated' : 'Number of minutes since creation'}>
                                 {Math.round((Date.now() - link.generatedAt) / 60000)}m
                               </span>
                             )}
                           </span>
                         )}
                         {link.status === 'expired' && (
-                          <span className="inline-flex items-center gap-1 text-amber-600" title={isEn ? 'May have expired' : '可能已过期'}>
+                          <span className="inline-flex items-center gap-1 text-amber-600" title={isEn ? 'May have expired' : 'may have expired'}>
                             <AlertTriangle className="h-4 w-4" />
-                            <span className="text-[9px]">{isEn ? 'Expired' : '过期'}</span>
+                            <span className="text-[9px]">{isEn ? 'Expired' : 'Expired'}</span>
                           </span>
                         )}
                         {link.status === 'error' && (
@@ -1668,21 +1668,21 @@ export function SubscriptionPage() {
                         )}
                       </span>
 
-                      {/* 操作 */}
+                      {/* operate */}
                       <span className="w-24 flex justify-center gap-1">
                         {(link.status === 'success' || link.status === 'expired') && link.url && (
                           <>
                             <button
                               onClick={() => handleOpenLink(link.url!)}
                               className="p-1 rounded hover:bg-muted"
-                              title={isEn ? 'Open in incognito' : '无痕打开'}
+                              title={isEn ? 'Open in incognito' : 'Open without trace'}
                             >
                               <ExternalLink className="h-3.5 w-3.5" />
                             </button>
                             <button
                               onClick={() => handleCopyLink(link.url!)}
                               className="p-1 rounded hover:bg-muted"
-                              title={isEn ? 'Copy link' : '复制链接'}
+                              title={isEn ? 'Copy link' : 'Copy link'}
                             >
                               <Copy className="h-3.5 w-3.5" />
                             </button>
@@ -1692,7 +1692,7 @@ export function SubscriptionPage() {
                           <button
                             onClick={() => void handleRegenerateLink(link.accountId)}
                             className="p-1 rounded hover:bg-primary/10 text-primary"
-                            title={isEn ? 'Regenerate' : '重新生成'}
+                            title={isEn ? 'Regenerate' : 'Regenerate'}
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
                           </button>
@@ -1710,7 +1710,7 @@ export function SubscriptionPage() {
             </Card>
           )}
 
-          {/* 空状态 */}
+          {/* Empty state */}
           {links.length === 0 && (
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
@@ -1719,17 +1719,17 @@ export function SubscriptionPage() {
                   {upgradeableCount > 0
                     ? (isEn
                         ? `${upgradeableCount} FREE accounts available for upgrade. Click "Fetch Links" to start.`
-                        : `有 ${upgradeableCount} 个 FREE 账户可升级。点击"获取链接"开始。`)
+                        : `have ${upgradeableCount} indivual FREE Accounts can be upgraded. Click"Get link"start.`)
                     : (isEn
                         ? 'No FREE tier accounts found. Select accounts in the Accounts page first.'
-                        : '未找到 FREE 账户。请先在账户管理页面选择账户。')
+                        : 'not found FREE account. Please select an account on the account management page first.')
                   }
                 </p>
               </CardContent>
             </Card>
           )}
 
-          {/* 批量导入链接对话框 */}
+          {/* Batch import link dialog box */}
           <ImportLinksDialog
             open={showImportDialog}
             onClose={() => setShowImportDialog(false)}
@@ -1742,7 +1742,7 @@ export function SubscriptionPage() {
   )
 }
 
-// ============ 批量导入链接对话框 ============
+// ============ Batch import link dialog box ============
 
 interface ImportLinksDialogProps {
   open: boolean
@@ -1760,30 +1760,30 @@ function ImportLinksDialog({ open, onClose, onImport, isEn }: ImportLinksDialogP
     const n = onImport(text)
     setText('')
     onClose()
-    setTimeout(() => alert(isEn ? `Imported ${n} link(s)` : `成功导入 ${n} 个链接`), 0)
+    setTimeout(() => alert(isEn ? `Imported ${n} link(s)` : `Imported successfully ${n} links`), 0)
   }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-background rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
-        {/* 标题栏 */}
+        {/* title bar */}
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <div className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-semibold">{isEn ? 'Import Links' : '批量导入链接'}</h2>
+            <h2 className="text-lg font-semibold">{isEn ? 'Import Links' : 'Batch import links'}</h2>
           </div>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-lg hover:bg-red-500 hover:text-white transition-colors" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
 
-        {/* 内容 */}
+        {/* content */}
         <div className="px-6 py-4 space-y-3 overflow-y-auto">
           <p className="text-xs text-muted-foreground">
             {isEn
               ? 'Paste links, one per line. Supports plain URLs or "email<sep>url" (sep = space / comma / tab / | / ----). URLs are auto-extracted; duplicates are skipped.'
-              : '每行一个链接。支持纯 URL，或「邮箱<分隔符>URL」（分隔符可为 空格 / 逗号 / Tab / | / ----）。自动识别 URL，重复链接会跳过。'}
+              : 'One link per line. Support pure URL, or "email<delimiter>URL” (The delimiter can be space / comma / Tab / | / ----). automatic recognition URL, duplicate links will be skipped.'}
           </p>
           <textarea
             value={text}
@@ -1795,16 +1795,16 @@ function ImportLinksDialog({ open, onClose, onImport, isEn }: ImportLinksDialogP
             className="w-full rounded-lg border border-foreground/15 bg-[var(--glass-bg)] backdrop-blur-md px-3 py-2 text-sm font-mono resize-y focus-visible:outline-none focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           <p className="text-xs text-muted-foreground">
-            {isEn ? `Detected ${detectedCount} valid link(s)` : `已识别 ${detectedCount} 个有效链接`}
+            {isEn ? `Detected ${detectedCount} valid link(s)` : `Recognized ${detectedCount} valid links`}
           </p>
         </div>
 
-        {/* 底部按钮 */}
+        {/* bottom button */}
         <div className="flex justify-end gap-3 px-6 py-4 border-t bg-muted/30">
-          <Button variant="outline" onClick={onClose}>{isEn ? 'Cancel' : '取消'}</Button>
+          <Button variant="outline" onClick={onClose}>{isEn ? 'Cancel' : 'Cancel'}</Button>
           <Button disabled={detectedCount === 0} onClick={handleConfirm}>
             <Upload className="h-4 w-4 mr-2" />
-            {isEn ? `Import (${detectedCount})` : `导入 (${detectedCount})`}
+            {isEn ? `Import (${detectedCount})` : `import (${detectedCount})`}
           </Button>
         </div>
       </div>
@@ -1813,7 +1813,7 @@ function ImportLinksDialog({ open, onClose, onImport, isEn }: ImportLinksDialogP
   )
 }
 
-// ============ 订阅管理 Tab：批量取消 + 批量关超额 ============
+// ============ Subscription management Tab: Batch cancellation + Bulk customs clearance for excess amount ============
 
 type AccountType = ReturnType<typeof useAccountsStore.getState>['accounts'] extends Map<string, infer T> ? T : never
 
@@ -1843,7 +1843,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
     else setSelectedIds(new Set(subscribed.map((a) => a!.id)))
   }
 
-  /** 批量打开订阅门户（用于取消订阅） */
+  /** Open subscription portal in batches (for unsubscription) */
   const handleBatchOpenPortal = async (mode: 'selected' | 'all'): Promise<void> => {
     const targets = mode === 'selected'
       ? subscribed.filter((a) => a && selectedIds.has(a.id))
@@ -1851,12 +1851,12 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
     if (targets.length === 0) return
     if (!confirm(isEn
       ? `Open ${targets.length} subscription portal pages? (in browser incognito mode)`
-      : `打开 ${targets.length} 个订阅门户页面？（浏览器无痕模式）`
+      : `Open ${targets.length} Subscription portal page? (browser incognito mode)`
     )) return
 
     setIsBatchOpening(true)
     try {
-      // 并发池
+      // Concurrency pool
       let cursor = 0
       const worker = async (): Promise<void> => {
         while (cursor < targets.length) {
@@ -1876,7 +1876,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
             )
             if (r.success && r.url) {
               await window.api.openSubscriptionWindow(r.url)
-              // 每个之间留 500ms，让浏览器有时间响应
+              // Leave between each 500ms, giving the browser time to respond
               await new Promise((resolve) => setTimeout(resolve, 500))
             }
           } catch (err) {
@@ -1891,17 +1891,17 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
     }
   }
 
-  /** 批量关闭超额 */
+  /** Close excess in batches */
   const handleBatchDisableOverage = async (mode: 'selected' | 'all'): Promise<void> => {
     const targets = (mode === 'selected'
       ? subscribed.filter((a) => a && selectedIds.has(a.id))
       : subscribed
     ).filter((a) => a?.usage?.resourceDetail?.overageEnabled === true)
     if (targets.length === 0) {
-      alert(isEn ? 'No accounts with overage enabled' : '没有开启超额的账号')
+      alert(isEn ? 'No accounts with overage enabled' : 'No excess account is opened')
       return
     }
-    if (!confirm(isEn ? `Disable overage on ${targets.length} accounts?` : `关闭 ${targets.length} 个账号的超额？`)) return
+    if (!confirm(isEn ? `Disable overage on ${targets.length} accounts?` : `closure ${targets.length} An account's overage limit?`)) return
 
     setIsBatchDisablingOverage(true)
     try {
@@ -1950,7 +1950,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
           <p className="text-sm">
             {isEn
               ? 'No subscribed accounts found. Run "Check Accounts" first to refresh status.'
-              : '未发现已订阅账号。请先在账户页"批量检查"刷新状态。'
+              : 'No subscribed account found. Please first go to the account page"Batch inspection"Refresh status.'
             }
           </p>
         </CardContent>
@@ -1963,25 +1963,25 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
 
   return (
     <>
-      {/* 说明 */}
+      {/* illustrate */}
       <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/10">
         <CardContent className="py-3 space-y-2">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-blue-600" />
             <span className="text-sm font-medium">
-              {isEn ? 'Subscription Lifecycle Management' : '订阅生命周期管理'}
+              {isEn ? 'Subscription Lifecycle Management' : 'Subscription lifecycle management'}
             </span>
           </div>
           <p className="text-xs text-muted-foreground">
             {isEn
               ? 'Bulk open subscription portals in browser (cancel/manage there), or bulk disable overage.'
-              : '批量打开订阅门户（在浏览器内取消/管理），或批量关闭超额。'
+              : 'Open subscription portal in bulk (cancel in browser/Management), or turn off excess in batches.'
             }
           </p>
         </CardContent>
       </Card>
 
-      {/* 批量操作栏 */}
+      {/* Batch operation bar */}
       <Card>
         <CardContent className="py-3 flex items-center gap-2 flex-wrap">
           <Button
@@ -1990,7 +1990,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
             disabled={isBatchOpening || selectedCount === 0}
           >
             {isBatchOpening ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-1" />}
-            {isEn ? `Open Portal (Selected: ${selectedCount})` : `打开门户（已选 ${selectedCount}）`}
+            {isEn ? `Open Portal (Selected: ${selectedCount})` : `Open portal (selected ${selectedCount}）`}
           </Button>
           <Button
             size="sm"
@@ -1999,7 +1999,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
             disabled={isBatchOpening}
           >
             <ExternalLink className="h-4 w-4 mr-1" />
-            {isEn ? `Open All (${subscribed.length})` : `打开全部 (${subscribed.length})`}
+            {isEn ? `Open All (${subscribed.length})` : `Open all (${subscribed.length})`}
           </Button>
 
           <div className="w-px h-6 bg-border" />
@@ -2011,7 +2011,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
             disabled={isBatchDisablingOverage || selectedCount === 0}
           >
             {isBatchDisablingOverage ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Ban className="h-4 w-4 mr-1" />}
-            {isEn ? `Disable Overage (Selected)` : '关超额（已选）'}
+            {isEn ? `Disable Overage (Selected)` : 'Turn off excess (selected)'}
           </Button>
           <Button
             size="sm"
@@ -2020,19 +2020,19 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
             disabled={isBatchDisablingOverage || overageEnabledCount === 0}
           >
             <Ban className="h-4 w-4 mr-1" />
-            {isEn ? `Disable All Overage (${overageEnabledCount})` : `关全部超额 (${overageEnabledCount})`}
+            {isEn ? `Disable All Overage (${overageEnabledCount})` : `Close all excess (${overageEnabledCount})`}
           </Button>
 
           <span className="ml-auto text-xs text-muted-foreground">
             {selectedCount > 0
-              ? (isEn ? `${selectedCount} of ${subscribed.length} selected` : `已选 ${selectedCount} / ${subscribed.length}`)
-              : (isEn ? `${subscribed.length} subscribed accounts` : `${subscribed.length} 个已订阅账号`)
+              ? (isEn ? `${selectedCount} of ${subscribed.length} selected` : `Selected ${selectedCount} / ${subscribed.length}`)
+              : (isEn ? `${subscribed.length} subscribed accounts` : `${subscribed.length} subscribed accounts`)
             }
           </span>
         </CardContent>
       </Card>
 
-      {/* 账号列表（多选） */}
+      {/* Account list (multiple choices) */}
       <Card>
         <CardContent className="py-0 px-0">
           <div className="flex items-center gap-3 py-2 px-3 border-b text-xs font-medium text-muted-foreground bg-muted/30">
@@ -2045,11 +2045,11 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
               }
             </button>
             <span className="w-8 text-center">#</span>
-            <span className="flex-1">{isEn ? 'Email' : '邮箱'}</span>
-            <span className="w-28 text-center">{isEn ? 'Plan' : '订阅类型'}</span>
-            <span className="w-20 text-center">{isEn ? 'Days Left' : '剩余天数'}</span>
-            <span className="w-24 text-center">{isEn ? 'Overage' : '超额状态'}</span>
-            <span className="w-32 text-center">{isEn ? 'Actions' : '操作'}</span>
+            <span className="flex-1">{isEn ? 'Email' : 'Mail'}</span>
+            <span className="w-28 text-center">{isEn ? 'Plan' : 'Subscription type'}</span>
+            <span className="w-20 text-center">{isEn ? 'Days Left' : 'Days remaining'}</span>
+            <span className="w-24 text-center">{isEn ? 'Overage' : 'excess status'}</span>
+            <span className="w-32 text-center">{isEn ? 'Actions' : 'operate'}</span>
           </div>
 
           <SubscribedAccountsVirtualList
@@ -2060,7 +2060,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
             isEn={isEn}
           />
 
-          {/* 占位防止下面 dead code 被误删（实际渲染走 SubscribedAccountsVirtualList） */}
+          {/* Taking up space to prevent the following dead code Deleted by mistake (actually rendered SubscribedAccountsVirtualList） */}
           {false && (
             <div className="max-h-[60vh] overflow-y-auto">
               {subscribed.map((acc, idx) => {
@@ -2105,15 +2105,15 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
                     {daysLeft != null
                       ? <span className={cn(
                           daysLeft <= 3 ? 'text-red-500' : daysLeft <= 7 ? 'text-amber-500' : ''
-                        )}>{isEn ? `${daysLeft}d` : `${daysLeft} 天`}</span>
+                        )}>{isEn ? `${daysLeft}d` : `${daysLeft} sky`}</span>
                       : '-'
                     }
                   </span>
                   <span className="w-24 text-center">
                     {overageEnabled
-                      ? <span className="text-green-600 text-[10px]">{isEn ? 'ENABLED' : '已开启'}</span>
+                      ? <span className="text-green-600 text-[10px]">{isEn ? 'ENABLED' : 'Already turned on'}</span>
                       : overageCapable
-                        ? <span className="text-muted-foreground text-[10px]">{isEn ? 'DISABLED' : '未开启'}</span>
+                        ? <span className="text-muted-foreground text-[10px]">{isEn ? 'DISABLED' : 'Not turned on'}</span>
                         : <span className="text-muted-foreground text-[10px]">-</span>
                     }
                   </span>
@@ -2133,14 +2133,14 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
                         if (r.success && r.url) {
                           await window.api.openSubscriptionWindow(r.url)
                         } else {
-                          alert(isEn ? `Failed: ${r.error}` : `失败: ${r.error}`)
+                          alert(isEn ? `Failed: ${r.error}` : `fail: ${r.error}`)
                         }
                       }}
                       className="px-2 py-1 rounded text-[10px] bg-primary/10 text-primary hover:bg-primary/20"
-                      title={isEn ? 'Open subscription portal' : '打开订阅门户'}
+                      title={isEn ? 'Open subscription portal' : 'Open subscription portal'}
                     >
                       <ExternalLink className="h-3 w-3 inline mr-1" />
-                      {isEn ? 'Manage' : '管理'}
+                      {isEn ? 'Manage' : 'manage'}
                     </button>
                   </span>
                 </div>
@@ -2155,7 +2155,7 @@ function ManageSubscriptionsTab({ getAllSubscribed, updateAccount, concurrency, 
 }
 
 /**
- * 订阅账号虚拟化列表（处理上千个已订阅账号时避免卡顿）
+ * Subscription account virtualization list (to avoid lags when processing thousands of subscribed accounts)
  */
 interface SubscribedListProps {
   subscribed: Array<AccountType | undefined>
@@ -2166,7 +2166,7 @@ interface SubscribedListProps {
 }
 
 function SubscribedAccountsVirtualList({ subscribed, selectedIds, toggleSelect, updateAccount, isEn }: SubscribedListProps): React.ReactNode {
-  void updateAccount  // 暂未使用（保留参数对齐 API）
+  void updateAccount  // Not used yet (preserve parameter alignment API）
   const parentRef = useRef<HTMLDivElement>(null)
   const ROW_HEIGHT = 44
   const validItems = useMemo(() => subscribed.filter((a): a is AccountType => !!a), [subscribed])
@@ -2178,7 +2178,7 @@ function SubscribedAccountsVirtualList({ subscribed, selectedIds, toggleSelect, 
     overscan: 10
   })
 
-  // 不到 50 行时直接渲染
+  // less than 50 Render directly at runtime
   if (validItems.length < 50) {
     return (
       <div ref={parentRef} className="max-h-[60vh] overflow-y-auto">
@@ -2270,15 +2270,15 @@ function SubscribedRow({ acc, idx, selected, onToggleSelect, isEn }: {
       </span>
       <span className="w-20 text-center text-muted-foreground">
         {daysLeft != null
-          ? <span className={cn(daysLeft <= 3 ? 'text-red-500' : daysLeft <= 7 ? 'text-amber-500' : '')}>{isEn ? `${daysLeft}d` : `${daysLeft} 天`}</span>
+          ? <span className={cn(daysLeft <= 3 ? 'text-red-500' : daysLeft <= 7 ? 'text-amber-500' : '')}>{isEn ? `${daysLeft}d` : `${daysLeft} sky`}</span>
           : '-'
         }
       </span>
       <span className="w-24 text-center">
         {overageEnabled
-          ? <span className="text-green-600 text-[10px]">{isEn ? 'ENABLED' : '已开启'}</span>
+          ? <span className="text-green-600 text-[10px]">{isEn ? 'ENABLED' : 'Already turned on'}</span>
           : overageCapable
-            ? <span className="text-muted-foreground text-[10px]">{isEn ? 'DISABLED' : '未开启'}</span>
+            ? <span className="text-muted-foreground text-[10px]">{isEn ? 'DISABLED' : 'Not turned on'}</span>
             : <span className="text-muted-foreground text-[10px]">-</span>
         }
       </span>
@@ -2298,14 +2298,14 @@ function SubscribedRow({ acc, idx, selected, onToggleSelect, isEn }: {
             if (r.success && r.url) {
               await window.api.openSubscriptionWindow(r.url)
             } else {
-              alert(isEn ? `Failed: ${r.error}` : `失败: ${r.error}`)
+              alert(isEn ? `Failed: ${r.error}` : `fail: ${r.error}`)
             }
           }}
           className="px-2 py-1 rounded text-[10px] bg-primary/10 text-primary hover:bg-primary/20"
-          title={isEn ? 'Open subscription portal' : '打开订阅门户'}
+          title={isEn ? 'Open subscription portal' : 'Open subscription portal'}
         >
           <ExternalLink className="h-3 w-3 inline mr-1" />
-          {isEn ? 'Manage' : '管理'}
+          {isEn ? 'Manage' : 'manage'}
         </button>
       </span>
     </div>

@@ -122,16 +122,23 @@ export interface BrowserIdentity {
 function generateCanvasData(): { hash: number; histogram: number[] } {
   const bins = new Array<number>(256).fill(0)
   const totalSamples = 36000
-  bins[0] = 10000 + randInt(5001)
-  bins[255] = 12000 + randInt(4001)
+  // Add more variation to avoid detectable patterns
+  bins[0] = 10000 + randInt(8001) // Was 5001, now 8001 for more variance
+  bins[255] = 12000 + randInt(6001) // Was 4001, now 6001
 
-  const colorPeaks: [number, number][] = [
-    [255, 400 + randInt(301)], [165, 200 + randInt(201)],
-    [0, 300 + randInt(301)],   [128, 100 + randInt(201)],
-    [64, 50 + randInt(101)],   [192, 80 + randInt(121)],
-    [32, 30 + randInt(71)],    [224, 60 + randInt(121)]
-  ]
-  for (const [idx, val] of colorPeaks) bins[idx] = val
+  // More varied color peak positions and values
+  const numPeaks = 6 + randInt(4) // 6-9 peaks instead of fixed 8
+  const peakPositions: number[] = []
+  while (peakPositions.length < numPeaks) {
+    const pos = randInt(254) + 1 // Avoid 0 and 255 (already set)
+    if (!peakPositions.includes(pos)) {
+      peakPositions.push(pos)
+    }
+  }
+  
+  for (let i = 0; i < peakPositions.length; i++) {
+    bins[peakPositions[i]] = 50 + randInt(451) // 50-500 range for variety
+  }
 
   let remaining = totalSamples - bins.reduce((a, b) => a + b, 0)
   for (let i = 1; i < 255; i++) {
@@ -152,12 +159,12 @@ function generateCanvasData(): { hash: number; histogram: number[] } {
 }
 
 /**
- * 生成真实范围的 Chrome 详细版本号（major.minor.build.patch）
- * Chrome 稳定版格式：主版本.0.buildNumber.patchNumber
- * 随机从近几个主版本中选取，build/patch 在真实范围内随机
+ * Generate true range Chrome Detailed version number (major.minor.build.patch）
+ * Chrome Stable version format: major version.0.buildNumber.patchNumber
+ * Randomly selected from several recent major versions,build/patch random within true range
  */
 function randomChromeVersion(): string {
-  // 近期稳定版主版本及其对应的 build 号范围 (从 Chromium release history)
+  // Recent stable moderator versions and their corresponding build Number range (from Chromium release history)
   const versions = [
     { major: 137, buildMin: 7151, buildMax: 7160 },
     { major: 138, buildMin: 7204, buildMax: 7213 },
@@ -172,7 +179,7 @@ function randomChromeVersion(): string {
   ]
   const v = versions[Math.floor(Math.random() * versions.length)]
   const build = v.buildMin + Math.floor(Math.random() * (v.buildMax - v.buildMin + 1))
-  const patch = Math.floor(Math.random() * 150) // patch 通常 0-150
+  const patch = Math.floor(Math.random() * 150) // patch generally 0-150
   return `${v.major}.0.${build}.${patch}`
 }
 

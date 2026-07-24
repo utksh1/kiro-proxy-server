@@ -240,7 +240,7 @@ async function configureClaudeCode(context: ProxyClientContext): Promise<Omit<Pr
   env.ANTHROPIC_AUTH_TOKEN = context.apiKey
   env.ANTHROPIC_API_KEY = context.apiKey
   env.ANTHROPIC_MODEL = context.modelId
-  // 默认模型映射：让 Claude Code 的 haiku/opus/sonnet 快捷调用都走代理支持的模型
+  // Default model mapping: let Claude Code of haiku/opus/sonnet Quick calls are made through models supported by agents.
   const haikuModel = context.models.find(m => m.id.toLowerCase().includes('haiku'))?.id || 'claude-haiku-4.5'
   const opusModel = context.models.find(m => m.id.toLowerCase().includes('opus'))?.id || context.modelId
   env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haikuModel
@@ -251,9 +251,9 @@ async function configureClaudeCode(context: ProxyClientContext): Promise<Omit<Pr
 
 function openCodeModelConfig(model: ProxyClientModel): Record<string, unknown> {
   const modalities = inputModalities(model)
-  // opencode 1.15+ 使用 Effect Schema 严格校验：
-  //   limit.context / limit.output 必须是有限数字（Schema.Finite，不接受 null/Infinity）
-  //   modalities.input/output 必须是 "text"|"audio"|"image"|"video"|"pdf" 枚举
+  // opencode 1.15+ use Effect Schema Strict verification:
+  //   limit.context / limit.output Must be a finite number (Schema.Finite, do not accept null/Infinity）
+  //   modalities.input/output must be "text"|"audio"|"image"|"video"|"pdf" enumerate
   const ctx = contextLimit(model)
   const out = outputLimit(model)
   return {
@@ -419,7 +419,7 @@ async function configureHermes(context: ProxyClientContext): Promise<Omit<ProxyC
   const existing = (await exists(configPath)) ? await readFile(configPath, 'utf-8') : ''
   const newline = existing.includes('\r\n') ? '\r\n' : '\n'
 
-  // 构建 models dict
+  // Build models dict
   const modelsYaml = context.models.map(m => {
     const ctx = typeof m.maxInputTokens === 'number' && m.maxInputTokens > 0 ? m.maxInputTokens : 200000
     return `      ${m.id}:${newline}        context_length: ${ctx}`
@@ -434,7 +434,7 @@ async function configureHermes(context: ProxyClientContext): Promise<Omit<ProxyC
     modelsYaml
   ].join(newline)
 
-  // 简单追加/替换 custom_providers 中的 kiro 条目
+  // Simple append/replace custom_providers in kiro entry
   let content = existing
   const kiroProviderRegex = /^\s*- name:\s*kiro\b[\s\S]*?(?=^\s*- name:|^[a-z]|$)/gm
   if (kiroProviderRegex.test(content)) {
@@ -445,7 +445,7 @@ async function configureHermes(context: ProxyClientContext): Promise<Omit<ProxyC
     content = `${content.trimEnd()}${newline}${newline}custom_providers:${newline}${providerBlock}${newline}`
   }
 
-  // 更新 model section
+  // renew model section
   const modelSection = `model:${newline}  default: "kiro/${context.modelId}"${newline}  provider: "kiro"${newline}`
   if (/^model:/m.test(content)) {
     content = content.replace(/^model:.*(?:\n(?=\s).*)*$/m, modelSection.trimEnd())

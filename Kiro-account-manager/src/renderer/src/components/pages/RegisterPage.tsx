@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { appendSubscriptionLink, updateSubscriptionLink } from './SubscriptionPage'
 import { generateNextDotVariant, countSameRootVariants, totalVariantCount, splitEmail } from '@/lib/dotVariants'
 
-// 失败错误码归类：用于失败重试队列的过滤
+// Failure error code classification: filtering for failure retry queue
 type ErrCategory =
   | 'risk_control' | 'proxy_chain' | 'strict_proxy' | 'proxy_whitelist'
   | 'eof' | 'otp_timeout' | 'network' | 'email_used'
@@ -24,117 +24,117 @@ interface ErrorDiagnosis {
 }
 
 /**
- * 把失败原因翻译成"普通话"的诊断 + 建议，覆盖批量注册里最常见的几类失败。
- * 优先级：风控 > 代理白名单 > 代理链 > 严格代理 > EOF > OTP超时 > 网络 > 邮箱已用 > 限流 > 鉴权 > suspended > unknown
+ * Translate the reason for failure into"mandarin"diagnosis + It is recommended to cover the most common types of failures in batch registration.
+ * Priority: risk control > Proxy whitelist > proxy chain > strictly proxy > EOF > OTPtime out > network > Email is used > Current limiting > Authentication > suspended > unknown
  */
 function diagnoseRegError(err: string | undefined): ErrorDiagnosis {
   const e = (err || '').toLowerCase()
   if (!e) {
-    return { category: 'unknown', title: '未知错误', reasons: ['未捕获到具体错误信息'], suggestions: ['查看完整日志'] }
+    return { category: 'unknown', title: 'unknown error', reasons: ['No specific error information was captured'], suggestions: ['View full log'] }
   }
-  // AWS 风控
-  if (e.includes('aws-risk-control') || e.includes('风控') || e.includes('请稍后再试') || e.includes('try again later')) {
+  // AWS Risk control
+  if (e.includes('aws-risk-control') || e.includes('Risk control') || e.includes('Please try again later') || e.includes('try again later')) {
     return {
       category: 'risk_control',
-      title: 'AWS 风控触发',
-      reasons: ['注册请求被 AWS 安全策略拦截', '常见诱因：同 IP 短时注册多账号、行为节奏机械化、邮箱域名被关联'],
-      suggestions: ['启用代理池 + 每号唯一 session（每号一个 IP）', '降低速率（限速 10/分钟或更低）', '邮箱用多域名轮换', '若用 bestproxy 类住宅代理，确保来源 IP 非大陆']
+      title: 'AWS Risk control trigger',
+      reasons: ['The registration request was AWS Security policy interception', 'Common triggers: same IP Register multiple accounts in a short time, mechanize the rhythm of behavior, and associate email domain names'],
+      suggestions: ['Enable proxy pool + Unique for each number session(One for each number IP）', 'Reduce speed (speed limit 10/minutes or less)', 'Email rotation using multiple domain names', 'If used bestproxy Class residential agent, ensure source IP non-continent']
     }
   }
-  // bestproxy 610 / IP 白名单类
+  // bestproxy 610 / IP whitelist class
   if (e.includes('610') || e.includes('whitelist') || (e.includes('connect') && e.includes('http 4'))) {
     return {
       category: 'proxy_whitelist',
-      title: '代理认证 / 白名单失败',
-      reasons: ['目标代理拒绝认证（账密错或来源 IP 不在白名单）', 'bestproxy 的 610 = 来源 IP 未授权'],
-      suggestions: ['在代理后台把当前出口 IP 加入白名单', '或改用账密直连模式 + 确保来源是允许地区', '配合"上游中转代理"用非大陆中转']
+      title: 'Agency certification / Whitelist failed',
+      reasons: ['The target agent refuses authentication (the account password is wrong or the source IP Not in the whitelist)', 'bestproxy of 610 = source IP Unauthorized'],
+      suggestions: ['Put the current export in the proxy background IP Add to whitelist', 'Or switch to the direct account connection mode + Make sure the source is from a permitted region', 'Cooperate"upstream transfer agent"Transfer via non-mainland China']
     }
   }
-  // 代理链失败
-  if (e.includes('proxychain') || e.includes('代理链') || e.includes('上游中转')) {
+  // Agent chain failed
+  if (e.includes('proxychain') || e.includes('proxy chain') || e.includes('upstream transfer')) {
     return {
       category: 'proxy_chain',
-      title: '代理链建立失败',
-      reasons: ['"上游中转 → 目标代理"链路握手未通过'],
-      suggestions: ['到「代理池」页面点「诊断」定位哪一层挂了', '确认上游中转端口（如 socks5://127.0.0.1:7890）已在跑', '若目标代理要求白名单，确保中转出口 IP 已加白']
+      title: 'Agency chain establishment failed',
+      reasons: ['"upstream transfer → target agent"Link handshake failed'],
+      suggestions: ['Go to the "Agent Pool" page and click "Diagnosis" to locate which layer is down.', 'Confirm the upstream transit port (e.g. socks5://127.0.0.1:7890) is already running', 'If the target proxy requires a whitelist, ensure the transit exit IP Whitened']
     }
   }
-  // 严格代理（无可用代理拒绝裸奔）
-  if (e.includes('严格代理') || e.includes('strict') && e.includes('proxy')) {
+  // Strict proxy (reject streaking if no proxy is available)
+  if (e.includes('strictly proxy') || e.includes('strict') && e.includes('proxy')) {
     return {
       category: 'strict_proxy',
-      title: '严格代理模式拦截',
-      reasons: ['代理池启用了"绝不裸奔直连"，但当前无可用代理'],
-      suggestions: ['到代理池验活，确认至少 1 条 alive', '检查代理是否被自动停用', '临时可手动启用所有代理 / 关掉"失败自动停用"']
+      title: 'Strict proxy mode interception',
+      reasons: ['Proxy pool enabled"Never run naked and connect directly", but no proxy is currently available'],
+      suggestions: ['Go to the agent pool to verify your liveness and confirm that at least 1 strip alive', 'Check if the proxy is automatically deactivated', 'All proxies can be manually enabled temporarily / turn off"Automatically deactivate on failure"']
     }
   }
-  // EOF / status=0 网络抖动
+  // EOF / status=0 Network jitter
   if (e.includes('eof') || (e.includes('status=0') && e.includes('failed to do request')) || e.includes('connection reset')) {
     return {
       category: 'eof',
-      title: '网络瞬时断开（EOF）',
-      reasons: ['TLS 连接在握手或传输中被对端 RST/关闭', '常见于代理不稳定 / 高并发挤压 / 中间网络抖动'],
-      suggestions: ['降低并发数', '换代理 / 加上游中转', '已内置重试，偶发可忽略；连续大量则更换出口']
+      title: 'The network is momentarily disconnected (EOF）',
+      reasons: ['TLS The connection was blocked by the peer during handshake or transmission RST/closure', 'Commonly seen in proxy instability / High concurrency squeeze / Intermediate network jitter'],
+      suggestions: ['Reduce concurrency', 'Change agent / Plus upstream transfer', 'Retries are built-in and can be ignored if they happen occasionally; if there are a lot of them continuously, the outlet will be replaced.']
     }
   }
-  // OTP 超时
-  if ((e.includes('timeout') || e.includes('超时')) && (e.includes('otp') || e.includes('验证码') || e.includes('code'))) {
+  // OTP time out
+  if ((e.includes('timeout') || e.includes('time out')) && (e.includes('otp') || e.includes('Verification code') || e.includes('code'))) {
     return {
       category: 'otp_timeout',
-      title: '等待验证码超时',
-      reasons: ['临时邮箱未在期限内收到 AWS 验证邮件', '可能 AWS 没发（风控拦截）/ 邮件落到垃圾 / 临时邮箱服务延迟'],
-      suggestions: ['确认临时邮箱服务可用', '该邮箱域名可能被 AWS 标黑，换域名重试', '若反复出现，多半是 AWS 静默风控，需换 IP/换节奏']
+      title: 'Timeout waiting for verification code',
+      reasons: ['The temporary email was not received within the deadline. AWS Verification email', 'possible AWS Not sent (risk control interception)/ Mail falls into trash / Temporary mailbox service delay'],
+      suggestions: ['Confirm that temporary mailbox service is available', 'This email domain name may be AWS Marked black, change domain name and try again', 'If it happens repeatedly, it’s probably AWS Silent risk control needs to be replaced IP/Change of pace']
     }
   }
-  // 一般网络
-  if (e.includes('timeout') || e.includes('超时') || e.includes('etimedout') || e.includes('fetch failed') || e.includes('econnreset') || e.includes('econnrefused') || e.includes('enotfound') || e.includes('network')) {
+  // general network
+  if (e.includes('timeout') || e.includes('time out') || e.includes('etimedout') || e.includes('fetch failed') || e.includes('econnreset') || e.includes('econnrefused') || e.includes('enotfound') || e.includes('network')) {
     return {
       category: 'network',
-      title: '网络错误',
-      reasons: ['连接 / DNS / 超时类失败'],
-      suggestions: ['检查本机网络与代理可达性', '降低并发再试']
+      title: 'network error',
+      reasons: ['connect / DNS / Timeout class failure'],
+      suggestions: ['Check local network and proxy reachability', 'Reduce concurrency and try again']
     }
   }
-  // 邮箱已被注册
-  if (e.includes('已注册') || (e.includes('email') && (e.includes('already') || e.includes('exists') || e.includes('used') || e.includes('已存在') || e.includes('已被')))) {
+  // Email has been registered
+  if (e.includes('Registered') || (e.includes('email') && (e.includes('already') || e.includes('exists') || e.includes('used') || e.includes('Already exists') || e.includes('has been')))) {
     return {
       category: 'email_used',
-      title: '邮箱已被注册',
-      reasons: ['该邮箱地址 AWS 侧已存在'],
-      suggestions: ['前缀生成器近期已增强随机性（中间名/双姓），再跑一次几乎不会撞', '使用多域名进一步降低冲突']
+      title: 'Email has been registered',
+      reasons: ['this email address AWS side already exists'],
+      suggestions: ['The prefix generator has recently been enhanced with randomness (middle name/(double surname), there will be almost no collision if you run again', 'Use multiple domain names to further reduce conflicts']
     }
   }
-  // 限流
-  if (e.includes('rate') || e.includes('limit') || e.includes('too many') || e.includes('限流') || e.includes('429')) {
+  // Current limiting
+  if (e.includes('rate') || e.includes('limit') || e.includes('too many') || e.includes('Current limiting') || e.includes('429')) {
     return {
       category: 'rate_limit',
-      title: '触发限流',
-      reasons: ['短时请求次数超出 AWS 接受范围'],
-      suggestions: ['降低 maxPerMinute 与并发', '启用风控自动暂停']
+      title: 'Trigger current limit',
+      reasons: ['The number of short-term requests exceeds AWS Acceptance range'],
+      suggestions: ['reduce maxPerMinute with concurrency', 'Enable risk control auto-pause']
     }
   }
   // suspended
   if (e.includes('suspended')) {
     return {
       category: 'suspended',
-      title: '账号已被停用',
-      reasons: ['注册流程跑完但 AWS 在最后一步把账号标为 suspended', '通常是风控级判定（域名/IP/指纹综合）'],
-      suggestions: ['换出口 IP / 换邮箱域名 / 降低速率', '可看作"软风控"信号，应立刻放慢']
+      title: 'Account has been deactivated',
+      reasons: ['The registration process is completed but AWS In the last step, mark the account as suspended', 'Usually it is a risk control level determination (domain name/IP/Fingerprint synthesis)'],
+      suggestions: ['Change outlet IP / Change email domain name / Reduce rate', 'can be regarded as"Soft risk control"signal, you should slow down immediately']
     }
   }
-  // 鉴权
+  // Authentication
   if (e.includes('unauthorized') || e.includes('401') || e.includes('403')) {
     return {
       category: 'auth',
-      title: '鉴权失败',
-      reasons: ['上游接口返回 401/403'],
-      suggestions: ['检查凭据 / 看接口侧响应体']
+      title: 'Authentication failed',
+      reasons: ['Upstream interface returns 401/403'],
+      suggestions: ['Check credentials / Look at the response body on the interface side']
     }
   }
-  return { category: 'unknown', title: '其他错误', reasons: [err || ''], suggestions: ['查看完整日志定位'] }
+  return { category: 'unknown', title: 'Other errors', reasons: [err || ''], suggestions: ['View complete log location'] }
 }
 
-/** 旧 API 兼容：现有 retryFailed 等用 classifyError 做筛选 */
+/** old API Compatible: existing retryFailed Wait for use classifyError do screening */
 function classifyError(err: string | undefined): 'network' | 'otp_timeout' | 'email_used' | 'rate_limit' | 'auth' | 'risk_control' | 'unknown' {
   const cat = diagnoseRegError(err).category
   if (cat === 'risk_control') return 'risk_control'
@@ -146,7 +146,7 @@ function classifyError(err: string | undefined): 'network' | 'otp_timeout' | 'em
   return 'unknown'
 }
 
-// 随机 session 值（字母数字），用于代理「会话粘性」——同值保持同一出口 IP
+// random session Value (alphanumeric) used for agent "session stickiness" - same value keeps the same exit IP
 function randomSession(len = 8): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
   let s = ''
@@ -155,10 +155,10 @@ function randomSession(len = 8): string {
 }
 
 /**
- * 为代理 URL 注入「每账号唯一 session」，让同一账号整个注册流程走同一出口 IP、不同账号用不同 IP。
- * 1) url 含 {session} 占位符 → 替换为随机值（通用，适配任意服务商）；
- * 2) 参数化用户名（bestproxy 等，含 _area-/_life-/_city-/_state- 等）且未写 _session- → 自动补一个；
- * 其余情况（普通代理、已写 session）原样返回，不干扰。
+ * as agent URL Inject "unique per account" session”, allowing the entire registration process for the same account to go through the same exit. IP, Different accounts use different IP。
+ * 1) url Contains {session} placeholder → Replace with a random value (universal, adaptable to any service provider);
+ * 2) Parameterized username (bestproxy Wait, including _area-/_life-/_city-/_state- etc.) and not written _session- → Automatically add one;
+ * Other situations (ordinary agent, written session) is returned as is, without interference.
  */
 function injectProxySession(url: string): string {
   if (!url) return url
@@ -184,16 +184,16 @@ function injectProxySession(url: string): string {
 type RegMode = 'manual' | 'outlook' | 'tempmail' | 'proton' | 'gptmail' | 'mixed'
 type AutoEmailSource = 'outlook' | 'tempmail' | 'proton' | 'gptmail'
 /**
- * Phase 状态机：
- * - idle：未开始
- * - initializing：OIDC 设备授权初始化
- * - email：等待用户输入邮箱
- * - otp：等待用户输入验证码
- * - running：注册流程进行中（Verify/Password/Token 由日志关键字推断）
- * - done：核心注册流程完成（含 Token），未启用任何后处理时即为最终态
- * - importing：正在自动导入账号
- * - fetching-link：正在获取 Pro 订阅链接
- * - finalized：包含所有后处理在内的最终完成
+ * Phase State machine:
+ * - idle: not started
+ * - initializing：OIDC Device authorization initialization
+ * - email: Wait for the user to enter their email address
+ * - otp: Wait for the user to enter the verification code
+ * - running: The registration process is in progress (Verify/Password/Token Inferred from log keywords)
+ * - done: The core registration process is completed (including Token), which is the final state when no post-processing is enabled.
+ * - importing: Automatically importing accounts
+ * - fetching-link: Obtaining Pro Subscription link
+ * - finalized: Final finish including all post-processing
  */
 type Phase = 'idle' | 'initializing' | 'email' | 'otp' | 'running' | 'done' | 'importing' | 'fetching-link' | 'finalized'
 
@@ -245,28 +245,28 @@ type RegStepName =
   | 'create-identity' | 'set-password' | 'sso-workflow' | 'sso-token'
   | 'verify-alive' | 'done'
 
-/** step → 简短中文标签，给 UI 显示用 */
+/** step → Short Chinese tags for UI For display */
 const STEP_LABEL_CN: Record<RegStepName, string> = {
-  'init': '初始化',
-  'proxy-chain-ready': '代理链就绪',
-  'tls-ready': 'TLS 就绪',
-  'exit-ip': '探出口 IP',
+  'init': 'initialization',
+  'proxy-chain-ready': 'Agent chain ready',
+  'tls-ready': 'TLS ready',
+  'exit-ip': 'Explore the exit IP',
   'oidc': 'OIDC',
-  'device': '设备授权',
-  'email-created': '邮箱已创建',
+  'device': 'Device authorization',
+  'email-created': 'Email has been created',
   'portal': 'Portal',
-  'workflow-init': '工作流',
-  'submit-email': '提交邮箱',
+  'workflow-init': 'Workflow',
+  'submit-email': 'Submit email',
   'signup': 'Signup',
-  'send-otp': '发送验证码',
-  'waiting-otp': '等验证码',
-  'otp-received': '验证码到',
-  'create-identity': '建身份',
-  'set-password': '设密码',
-  'sso-workflow': 'SSO 工作流',
-  'sso-token': '取 Token',
-  'verify-alive': '验活',
-  'done': '完成'
+  'send-otp': 'Send verification code',
+  'waiting-otp': 'Waiting for verification code',
+  'otp-received': 'Verification code arrives',
+  'create-identity': 'Create an identity',
+  'set-password': 'Set password',
+  'sso-workflow': 'SSO Workflow',
+  'sso-token': 'Pick Token',
+  'verify-alive': 'Live test',
+  'done': 'Finish'
 }
 
 interface BatchItem {
@@ -276,7 +276,7 @@ interface BatchItem {
   email: string
   error?: string
   retryCount: number
-  /** 实时进度：当前 step、起步时间、当前 step 起步时间、出口 IP */
+  /** Real-time progress: current step, starting time, current step Start time, export IP */
   currentStep?: RegStepName
   startedAt?: number
   stepStartedAt?: number
@@ -291,8 +291,8 @@ function fmtMs(ms: number): string {
   return `${m}m${s.toString().padStart(2, '0')}s`
 }
 
-/** 单行批量任务的展示：状态图标 + 邮箱 + 当前步骤 + 总耗时 + 出口 IP / 错误 + 失败诊断展开。
- * 拆为子组件可减少父组件重渲染时的工作量，并配合 batchClock 让总耗时随秒滚动。
+/** Display of single-line batch tasks: status icon + Mail + current step + Total time spent + exit IP / mistake + Failure diagnosis expands.
+ * Splitting into sub-components can reduce the workload when re-rendering the parent component and coordinate batchClock Let the total elapsed time scroll over seconds.
  */
 function BatchItemRow({
   item,
@@ -323,7 +323,7 @@ function BatchItemRow({
           {item.status === 'imported' && <Download className="h-3 w-3 text-green-600 shrink-0" />}
           {item.status === 'failed' && <XCircle className="h-3 w-3 text-red-500 shrink-0" />}
           {item.status === 'import_failed' && <XCircle className="h-3 w-3 text-orange-500 shrink-0" />}
-          <span className="font-mono truncate">{item.email || <span className="text-muted-foreground italic">待生成</span>}</span>
+          <span className="font-mono truncate">{item.email || <span className="text-muted-foreground italic">To be generated</span>}</span>
           {isActive && stepLabel && (
             <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal shrink-0">{stepLabel}</Badge>
           )}
@@ -353,9 +353,9 @@ function BatchItemRow({
             <button
               onClick={() => setDiagOpen((v) => !v)}
               className="ml-1 text-[10px] px-1.5 py-0.5 rounded border border-border bg-background hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-              title="查看原因与建议"
+              title="View reasons and suggestions"
             >
-              {diagOpen ? '收起' : '诊断'}
+              {diagOpen ? 'close' : 'diagnosis'}
             </button>
           )}
         </div>
@@ -366,7 +366,7 @@ function BatchItemRow({
             <div className="font-medium text-red-700 dark:text-red-400 text-[11px]">{diag.title}</div>
             {diag.reasons.length > 0 && (
               <div className="text-[11px] text-foreground/80">
-                <div className="text-muted-foreground">可能原因：</div>
+                <div className="text-muted-foreground">Possible reasons:</div>
                 <ul className="list-disc pl-4 space-y-0.5">
                   {diag.reasons.map((r, i) => <li key={i}>{r}</li>)}
                 </ul>
@@ -374,7 +374,7 @@ function BatchItemRow({
             )}
             {diag.suggestions.length > 0 && (
               <div className="text-[11px] text-foreground/80">
-                <div className="text-muted-foreground">建议：</div>
+                <div className="text-muted-foreground">suggestion:</div>
                 <ul className="list-disc pl-4 space-y-0.5">
                   {diag.suggestions.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
@@ -382,7 +382,7 @@ function BatchItemRow({
             )}
             {item.error && (
               <div className="text-[10px] text-muted-foreground font-mono break-all pt-1 border-t border-red-500/20">
-                原始：{item.error}
+                original:{item.error}
               </div>
             )}
           </div>
@@ -393,33 +393,33 @@ function BatchItemRow({
 }
 
 /**
- * 注册进度的核心 6 步：OIDC → Email → Verify → Password → Token → Done
- * 后处理可选追加：Import（自动导入开启时）、ProLink（自动获取 Pro 链接开启时）
+ * The core of registration progress 6 step:OIDC → Email → Verify → Password → Token → Done
+ * Optional post-processing additions:Import(When automatic import is turned on),ProLink(obtained automatically Pro (when the link is open)
  */
 const CORE_STEPS = ['OIDC', 'Email', 'Verify', 'Password', 'Token', 'Done'] as const
 
 /**
- * 根据用户开关动态构建步骤列表
- * @param hasImport 是否启用了自动导入
- * @param hasProLink 是否启用了自动获取 Pro 链接
+ * Dynamically build a list of steps based on user switches
+ * @param hasImport Whether automatic import is enabled
+ * @param hasProLink Whether automatic acquisition is enabled Pro Link
  */
 function buildManualSteps(hasImport: boolean, hasProLink: boolean): readonly string[] {
   const extras: string[] = []
   if (hasImport) extras.push('Import')
   if (hasProLink) extras.push('ProLink')
   if (extras.length === 0) return CORE_STEPS
-  // 在 Done 之前插入额外步骤；'Done' 永远在最后
+  // exist Done Insert extra steps before;'Done' always at the end
   return [...CORE_STEPS.slice(0, -1), ...extras, 'Done']
 }
 
 /**
- * 将 phase + 最近日志推断到当前步骤索引（基于动态步骤数组）
- * @param phase 后端发出的注册阶段（含后处理阶段）
- * @param lastLog 最近一条日志（用于在 running 阶段细分到 Verify/Password/Token）
- * @param steps 通过 buildManualSteps 构造的动态步骤数组
+ * Will phase + Recent log extrapolated to current step index (based on dynamic step array)
+ * @param phase Registration phase issued by the backend (including post-processing phase)
+ * @param lastLog The most recent log (used in running The stages are subdivided into Verify/Password/Token）
+ * @param steps pass buildManualSteps Constructed dynamic step array
  */
 function phaseToStep(phase: Phase, lastLog: string | undefined, steps: readonly string[]): number {
-  // 步骤索引辅助：找具体步骤名在动态数组中的位置
+  // Step index assistance: find the position of the specific step name in the dynamic array
   const idxOf = (name: string): number => steps.indexOf(name)
   const lastIdx = steps.length - 1
 
@@ -428,7 +428,7 @@ function phaseToStep(phase: Phase, lastLog: string | undefined, steps: readonly 
     case 'initializing': return idxOf('OIDC')
     case 'email': return idxOf('Email')
     case 'otp': return idxOf('Verify')
-    case 'done': return idxOf('Done')  // 核心流程完成（未启用后处理时即最终态）
+    case 'done': return idxOf('Done')  // The core process is completed (final state when post-processing is not enabled)
     case 'importing': {
       const i = idxOf('Import')
       return i >= 0 ? i : idxOf('Done')
@@ -441,25 +441,25 @@ function phaseToStep(phase: Phase, lastLog: string | undefined, steps: readonly 
     case 'running': {
       if (!lastLog) return Math.max(0, idxOf('Email'))
       const log = lastLog.toLowerCase()
-      // 自动模式 OTP 提交时也走 running，这里识别后处理消息
-      if (log.includes('正在获取 pro') || log.includes('pro link') || log.includes('fetching pro')) {
+      // automatic mode OTP Also go when submitting running, here the message is processed after recognition
+      if (log.includes('Getting pro') || log.includes('pro link') || log.includes('fetching pro')) {
         const i = idxOf('ProLink')
         if (i >= 0) return i
       }
-      if (log.includes('正在导入') || log.includes('importing') || log.includes('已导入')) {
+      if (log.includes('Importing') || log.includes('importing') || log.includes('Imported')) {
         const i = idxOf('Import')
         if (i >= 0) return i
       }
-      // [13] SSO Token / [12.5] complete-signup / 验活成功
-      if (log.includes('sso') || log.includes('token') || log.includes('验活') || log.includes('complete') || log.includes('end-of-workflow')) return idxOf('Token')
-      // [12] 设置密码 / SetPassword / 加密公钥
-      if (log.includes('密码') || log.includes('password') || log.includes('加密公钥')) return idxOf('Password')
+      // [13] SSO Token / [12.5] complete-signup / Live test successful
+      if (log.includes('sso') || log.includes('token') || log.includes('Live test') || log.includes('complete') || log.includes('end-of-workflow')) return idxOf('Token')
+      // [12] Set password / SetPassword / Encryption public key
+      if (log.includes('password') || log.includes('password') || log.includes('Encryption public key')) return idxOf('Password')
       // [9] OTP / [10] verify-email / signup verify
-      if (log.includes('验证码') || log.includes('otp') || log.includes('verify')) return idxOf('Verify')
+      if (log.includes('Verification code') || log.includes('otp') || log.includes('verify')) return idxOf('Verify')
       // [7-8] Signup / SignupInit / Profile
-      if (log.includes('signup') || log.includes('profile') || log.includes('注册初始化')) return idxOf('Verify')
-      // [6] 提交邮箱 / SubmitEmail
-      if (log.includes('提交邮箱') || log.includes('submit') || log.includes('邮箱')) return idxOf('Email')
+      if (log.includes('signup') || log.includes('profile') || log.includes('Registration initialization')) return idxOf('Verify')
+      // [6] Submit email / SubmitEmail
+      if (log.includes('Submit email') || log.includes('submit') || log.includes('Mail')) return idxOf('Email')
       return Math.max(0, idxOf('Email'))
     }
   }
@@ -467,9 +467,9 @@ function phaseToStep(phase: Phase, lastLog: string | undefined, steps: readonly 
 
 const STORAGE_KEY = 'kiro-register-config'
 const HISTORY_KEY = 'kiro-register-history'
-/** 已知占用邮箱黑名单：注册失败为 email_used 时加入，下次自动跳过 */
+/** Known occupied mailbox blacklist: registration failed for email_used Join now and skip automatically next time */
 const EMAIL_BLACKLIST_KEY = 'kiro-register-email-blacklist'
-/** 注册策略模板：完整 RegisterConfig 命名快照，便于一键切换场景 */
+/** Registration Policy Template: Complete RegisterConfig Name snapshots for easy one-click switching of scenes */
 const TEMPLATES_KEY = 'kiro-register-templates'
 
 interface RegisterTemplate {
@@ -503,7 +503,7 @@ function loadEmailBlacklist(): Set<string> {
 
 function saveEmailBlacklist(set: Set<string>): void {
   try {
-    // 限制最多 5000 条，避免无限增长
+    // most restrictive 5000 to avoid unlimited growth
     const arr = Array.from(set).slice(-5000)
     localStorage.setItem(EMAIL_BLACKLIST_KEY, JSON.stringify(arr))
   } catch { /* ignore */ }
@@ -513,7 +513,7 @@ function clearEmailBlacklist(): void {
   try { localStorage.removeItem(EMAIL_BLACKLIST_KEY) } catch { /* ignore */ }
 }
 
-// 模块级状态：组件卸载后仍保留（同一会话内）
+// Module-level state: retained after component uninstallation (within the same session)
 let _logs: string[] = []
 let _phase: Phase = 'idle'
 let _result: RegResult | null = null
@@ -522,19 +522,19 @@ let _batchDone = 0
 let _batchSuccess = 0
 let _batchFail = 0
 let _batchItems: BatchItem[] = []
-// Proton 登录态缓存到模块级：切换页面回来不丢失显示（真实登录态持久化在 persist:proton session）
+// Proton The login state is cached to the module level: switching pages does not lose the display (the real login state is persisted in persist:proton session）
 let _protonLoggedIn = false
 /**
- * 模块级映射：taskId(后端) → batchItem.id(前端)，用于把 step 事件路由到对应行。
- * 必须放模块级 — 之前用 useRef 会在切换页面 unmount 时丢失，导致重新挂载后
- * 仍在跑的任务的 step/IP/耗时不再更新（页面回来后看起来"信息没保存"）。
+ * Module level mapping:taskId(rear end) → batchItem.id(front end), used to put step Events are routed to the corresponding row.
+ * Must be placed at module level — Used before useRef Will switch pages unmount is lost, resulting in remounting
+ * of tasks still running step/IP/Time consuming and no longer updated (the page will look like"Information not saved"）。
  */
 const _taskIdToItemId = new Map<string, string>()
 
 /**
- * 模块级 step 事件订阅：注册一次后永不取消。
- * 旧实现把订阅放 useEffect，切到其它页面 unmount 时被 cleanup 取消，
- * 期间发生的所有 step 事件全部丢失，切回来后 UI 信息缺失。
+ * module level step Event subscription: Register once and never cancel.
+ * The old implementation put the subscription in useEffect, switch to other pages unmount when being cleanup Cancel,
+ * everything that happened during step All events are lost, and after switching back UI Information is missing.
  */
 let _stepListenerRegistered = false
 function ensureStepListenerRegistered(): void {
@@ -545,7 +545,7 @@ function ensureStepListenerRegistered(): void {
     const itemId = _taskIdToItemId.get(taskId)
     if (!itemId) return
     const now = event.ts || Date.now()
-    // 写模块级数据 + 通知挂载中的 React 组件刷新（用 _refSetBatchItems）
+    // Write module level data + Notification is being mounted React Component refresh (using _refSetBatchItems）
     _batchItems = _batchItems.map((it) => {
       if (it.id !== itemId) return it
       return {
@@ -562,8 +562,8 @@ function ensureStepListenerRegistered(): void {
 }
 
 /**
- * 模块级 log 订阅同理：切页面期间发生的日志也不会丢。
- * 行为对齐 addLog：加时间戳前缀。
+ * module level log The same applies to subscriptions: logs that occur during page switching will not be lost.
+ * behavioral alignment addLog:Add timestamp prefix.
  */
 let _logListenerRegistered = false
 function ensureLogListenerRegistered(): void {
@@ -577,7 +577,7 @@ function ensureLogListenerRegistered(): void {
   })
 }
 
-// 模块级 React setter refs：异步代码跨组件生命周期调用最新 setter
+// module level React setter refs: Asynchronous code calls the latest across component life cycles setter
 let _refSetPhase: ((v: Phase) => void) | null = null
 let _refSetResult: ((v: RegResult | null) => void) | null = null
 let _refSetLogs: ((v: string[]) => void) | null = null
@@ -601,7 +601,7 @@ function saveHistory(items: HistoryItem[]): void {
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 100))) } catch { /* ignore */ }
 }
 
-/** 订阅计划类型（对应 Kiro 后端 qSubscriptionType）*/
+/** Subscription plan type (corresponds to Kiro rear end qSubscriptionType）*/
 export type ProPlanType = 'Q_DEVELOPER_STANDALONE_PRO' | 'Q_DEVELOPER_STANDALONE_PRO_PLUS' | 'Q_DEVELOPER_STANDALONE_POWER'
 
 interface RegisterConfig {
@@ -618,20 +618,20 @@ interface RegisterConfig {
   tempMailEmail: string
   tempMailEpin: string
   tempMailDomain: string
-  /** Proton 母邮箱（点号别名母号，如 evanbartellchae@protonmail.com）*/
+  /** Proton Mother mailbox (dot alias mother number, such as evanbartellchae@protonmail.com）*/
   protonBaseEmail: string
-  /** GPTmail (mail.chatgpt.org.uk) — 支持两种模式：私有域名直收（inbox 留空）或 CF 转发（填 inbox）；
-   *   私有域名设了密码时填 privatePassword */
+  /** GPTmail (mail.chatgpt.org.uk) — Supports two modes: private domain name direct acquisition (inbox leave blank) or CF Forward (fill in inbox）；
+   *   Fill it in when a password is set for the private domain name privatePassword */
   gptMailBaseURL: string
   gptMailInboxEmail: string
   gptMailDomain: string
   gptMailPrefix: string
   gptMailPrivatePassword: string
-  /** 手动模式 — 母邮箱（收验证码的真实邮箱）*/
+  /** manual mode — Parent email address (the real email address where the verification code is received)*/
   manualParentEmail: string
-  /** 手动模式 — 启用匿名邮箱（点号变体）*/
+  /** manual mode — Enable anonymous mailbox (dot dot variant)*/
   manualAnonymousEmail: boolean
-  /** 混合模式 — 启用的邮箱源 */
+  /** blend mode — Enabled mailbox sources */
   mixedEnabledSources?: AutoEmailSource[]
 }
 
@@ -662,31 +662,31 @@ export function RegisterPage(): React.JSX.Element {
   const setPhase = useCallback((p: Phase) => { _phase = p; _refSetPhase?.(p) }, [])
   const setResult = useCallback((r: RegResult | null) => { _result = r; _refSetResult?.(r) }, [])
 
-  // 手动模式
+  // manual mode
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState(saved.fullName || '')
   const [otp, setOtp] = useState('')
   const [parentEmail, setParentEmail] = useState(saved.manualParentEmail || '')
   const [anonymousEmail, setAnonymousEmail] = useState(saved.manualAnonymousEmail ?? false)
 
-  // Outlook 配置
+  // Outlook Configuration
   const [outlookData, setOutlookData] = useState(saved.outlookData || '')
 
-  // TempMail.Plus 配置
+  // TempMail.Plus Configuration
   const [tempMailEmail, setTempMailEmail] = useState(saved.tempMailEmail || '')
   const [tempMailEpin, setTempMailEpin] = useState(saved.tempMailEpin || '')
   const [tempMailDomain, setTempMailDomain] = useState(saved.tempMailDomain || '')
 
-  // Proton 配置（点号别名，webview 借壳官方网页取码，需先登录一次）
+  // Proton configure(dotalias,webview To obtain the code from the official backdoor website, you need to log in first)
   const [protonBaseEmail, setProtonBaseEmail] = useState(saved.protonBaseEmail || '')
-  // 初始值取模块级缓存：切到别的页面再回来仍保持登录态显示
+  // The initial value is module-level cache: switch to other pages and come back and still maintain the login status display.
   const [protonLoggedIn, _setProtonLoggedIn] = useState(_protonLoggedIn)
   const setProtonLoggedIn = useCallback((v: boolean): void => { _protonLoggedIn = v; _setProtonLoggedIn(v) }, [])
   const [protonChecking, setProtonChecking] = useState(false)
 
-  // GPTmail (mail.chatgpt.org.uk) 配置 —— 同时支持两种模式：
-  //   A. 私有域名直收：MX 解析到 GPTmail；inboxEmail 留空；私有域名设了密码就填 privatePassword
-  //   B. CF Email Routing 转发：inboxEmail 填固定 GPTmail 邮箱
+  // GPTmail (mail.chatgpt.org.uk) Configuration —— Supports two modes at the same time:
+  //   A. Private domain name direct payment:MX parse to GPTmail；inboxEmail Leave it blank; fill it in if you set a password for the private domain name privatePassword
+  //   B. CF Email Routing Forward:inboxEmail Fill in fixed GPTmail Mail
   const [gptMailBaseURL, setGptMailBaseURL] = useState(saved.gptMailBaseURL || '')
   const [gptMailInboxEmail, setGptMailInboxEmail] = useState(saved.gptMailInboxEmail || '')
   const [gptMailDomain, setGptMailDomain] = useState(saved.gptMailDomain || '')
@@ -696,7 +696,7 @@ export function RegisterPage(): React.JSX.Element {
   const logContainerRef = useRef<HTMLDivElement>(null)
   const { addAccount, accounts } = useAccountsStore()
 
-  /** 从代理池取下一个可用代理（如果启用），返回 proxy + upstreamProxy 供注册配置注入 */
+  /** Removes the next available proxy from the proxy pool (if enabled) and returns proxy + upstreamProxy For registration configuration injection */
   const getRegistrationProxy = useCallback((): { proxy: string; upstreamProxy: string; proxyId: string; label: string } | null => {
     const { pickNextProxy, proxyPoolConfig } = useAccountsStore.getState()
     const entry = pickNextProxy()
@@ -721,18 +721,18 @@ export function RegisterPage(): React.JSX.Element {
     if (el) el.scrollTop = el.scrollHeight
   }, [logs])
 
-  // 注册一次性的 log / step IPC 监听器：模块级注册，永不取消，
-  // 避免切到其它页面时丢失中间的事件（之前用 useEffect 在 unmount 时取消会丢事件）
+  // Register one-time log / step IPC Listener: module level registration, never canceled,
+  // Avoid losing intermediate events when switching to other pages (previously used useEffect exist unmount If canceled, the event will be lost)
   useEffect(() => {
     ensureLogListenerRegistered()
     ensureStepListenerRegistered()
   }, [])
 
-  // 页面挂载时检测注册流程状态
+  // Detect the registration process status when the page is mounted
   useEffect(() => {
     window.api.registrationStatus().then((res) => {
       if (res.inProgress && _phase === 'idle') {
-        // 后端有流程但前端无状态（应用重启场景），取消残留
+        // There is a process in the backend but no state in the frontend (application restart scenario), cancel the remaining
         window.api.registrationCancel()
       }
     })
@@ -749,28 +749,28 @@ export function RegisterPage(): React.JSX.Element {
     setOtp('')
   }
 
-  // ============ 手动模式 ============
+  // ============ manual mode ============
 
-  /** 收集本地已使用过的邮箱集合（帐号库存 + 注册历史 + 已知占用黑名单）*/
+  /** Collect local used mailbox collections (account inventory + Registration history + Known occupancy blacklist)*/
   const collectUsedEmails = useCallback((): Set<string> => {
     const used = new Set<string>()
     for (const acc of accounts.values()) {
       if (acc.email) used.add(acc.email.toLowerCase())
     }
-    // 注册历史（包括未导入账号的历史记录）
+    // Registration history (including history of unimported accounts)
     for (const item of loadHistory()) {
       if (item.email) used.add(item.email.toLowerCase())
     }
-    // 已知占用邮箱黑名单
+    // Known occupied mailbox blacklist
     for (const e of loadEmailBlacklist()) {
       used.add(e)
     }
     return used
   }, [accounts])
 
-  // Proton 点号变体分配：会话级已分配集合，避免并发/连续注册生成重复变体
+  // Proton Dot variant allocation: session-level allocated collection to avoid concurrency/Continuous registration generates duplicate variants
   const protonAllocatedRef = useRef<Set<string>>(new Set())
-  /** 生成下一个未使用的 Proton 点号变体地址；母邮箱未填或变体用尽返回 null */
+  /** Generate the next unused Proton Dot number variant address; the main email address is not filled in or the variants are exhausted and returned null */
   const generateProtonEmail = useCallback((): string | null => {
     const base = protonBaseEmail.trim()
     if (!base || !splitEmail(base)) return null
@@ -782,7 +782,7 @@ export function RegisterPage(): React.JSX.Element {
   }, [protonBaseEmail, collectUsedEmails])
 
   const startManual = async (): Promise<void> => {
-    // 1. 预生成邮箱：开启匿名时从母邮箱生成点号变体；否则使用母邮箱本身（如果填了）
+    // 1. Pre-generated email: Generate dot number variants from the parent email when anonymous is turned on; otherwise use the parent email itself (if filled in)
     let preEmail = ''
     if (anonymousEmail) {
       const parent = parentEmail.trim()
@@ -812,12 +812,12 @@ export function RegisterPage(): React.JSX.Element {
     const config: Record<string, string> = {}
     if (fullName.trim()) config.fullName = fullName.trim()
 
-    // 代理池注入：如果代理池启用且有可用代理，自动取一个并传入 config
+    // Proxy pool injection: If the proxy pool is enabled and there is an available proxy, one will be automatically taken and passed in config
     const proxyInfo = getRegistrationProxy()
     if (proxyInfo) {
       config.proxy = injectProxySession(proxyInfo.proxy)
       config.upstreamProxy = proxyInfo.upstreamProxy
-      addLog(`[Proxy] ${isEn ? 'Using proxy pool' : '使用代理池'}: ${config.proxy.replace(/:([^:@/]+)@/, ':***@')}`)
+      addLog(`[Proxy] ${isEn ? 'Using proxy pool' : 'Use proxy pool'}: ${config.proxy.replace(/:([^:@/]+)@/, ':***@')}`)
     }
 
     const res = await window.api.registrationManualPhase1(config)
@@ -829,7 +829,7 @@ export function RegisterPage(): React.JSX.Element {
     addLog(t('register.logInitDone'))
     setPhase('email')
 
-    // 2. 如果预填了邮箱，自动提交 phase2跳过手动输入阶段
+    // 2. If the email address is prefilled, it will be automatically submitted. phase2Skip the manual entry stage
     if (preEmail) {
       setPhase('running')
       addLog(`${t('register.logSubmitEmail')} ${preEmail}`)
@@ -891,7 +891,7 @@ export function RegisterPage(): React.JSX.Element {
         setPhase('fetching-link')
         await fetchProSubscriptionUrl(regResult, regResult.email)
       }
-      // 后处理全部完成 → finalized；未启用任何后处理时保持 done（语义等价）
+      // All post-processing completed → finalized;Hold when no postprocessing is enabled done(Semantic equivalent)
       if (needImport || needProLink) {
         setPhase('finalized')
       }
@@ -901,7 +901,7 @@ export function RegisterPage(): React.JSX.Element {
     }
   }
 
-  // ============ 自动模式 (MoEmail / Outlook) ============
+  // ============ automatic mode (MoEmail / Outlook) ============
 
   const startAuto = async (): Promise<void> => {
     setPhase('running')
@@ -923,33 +923,33 @@ export function RegisterPage(): React.JSX.Element {
     } else if (mode === 'proton') {
       const variant = generateProtonEmail()
       if (!variant) {
-        addLog(isEn ? '[Proton] Base email not set or all dot-variants used up' : '[Proton] 未配置母邮箱或点号变体已用尽')
+        addLog(isEn ? '[Proton] Base email not set or all dot-variants used up' : '[Proton] The parent mailbox is not configured or the dot number variants have been exhausted.')
         setPhase('idle')
         return
       }
       config.useProton = true
       config.protonEmail = variant
-      addLog(`[Proton] ${isEn ? 'Using dot-variant' : '使用点号变体'}: ${variant}`)
+      addLog(`[Proton] ${isEn ? 'Using dot-variant' : 'Use dot variant'}: ${variant}`)
     } else if (mode === 'gptmail') {
       if (!gptMailDomain.trim()) {
-        addLog(isEn ? '[GPTmail] Domain not configured' : '[GPTmail] 未配置域名')
+        addLog(isEn ? '[GPTmail] Domain not configured' : '[GPTmail] No domain name configured')
         setPhase('idle')
         return
       }
       config.useGptMail = true
       config.gptMailBaseURL = gptMailBaseURL.trim()
-      config.gptMailInboxEmail = gptMailInboxEmail.trim()  // 留空 → 私有域名直收；填了 → CF 转发
+      config.gptMailInboxEmail = gptMailInboxEmail.trim()  // Leave blank → Private domain name will be collected directly; filled in → CF Forward
       config.gptMailDomain = gptMailDomain
       config.gptMailPrefix = gptMailPrefix.trim()
-      config.gptMailPrivatePassword = gptMailPrivatePassword  // 私有域名设了密码才填
+      config.gptMailPrivatePassword = gptMailPrivatePassword  // Fill in the private domain name after setting a password
     }
 
-    // 代理池注入
+    // Agent pool injection
     const proxyInfo = getRegistrationProxy()
     if (proxyInfo) {
       config.proxy = injectProxySession(proxyInfo.proxy)
       config.upstreamProxy = proxyInfo.upstreamProxy
-      addLog(`[Proxy] ${isEn ? 'Using proxy pool' : '使用代理池'}: ${String(config.proxy).replace(/:([^:@/]+)@/, ':***@')}`)
+      addLog(`[Proxy] ${isEn ? 'Using proxy pool' : 'Use proxy pool'}: ${String(config.proxy).replace(/:([^:@/]+)@/, ':***@')}`)
     }
 
     const res = await window.api.registrationStartAuto(config as Parameters<typeof window.api.registrationStartAuto>[0])
@@ -959,7 +959,7 @@ export function RegisterPage(): React.JSX.Element {
     }
   }
 
-  // ============ 取消 ============
+  // ============ Cancel ============
 
   const cancel = async (): Promise<void> => {
     await window.api.registrationCancel()
@@ -967,7 +967,7 @@ export function RegisterPage(): React.JSX.Element {
     setPhase('idle')
   }
 
-  // ============ 导入账号 ============
+  // ============ Import account ============
 
   const importAccount = async (): Promise<void> => {
     if (!result || result.status !== 'success' || !result.refreshToken) return
@@ -1054,11 +1054,11 @@ export function RegisterPage(): React.JSX.Element {
     }
   }
 
-  // 'isRunning' 表示注册流程主线进行中（不含 idle/email/otp 等待用户输入态、也不含完成态）
+  // 'isRunning' Indicates that the main line of the registration process is in progress (excluding idle/email/otp Waiting for user input state, not including completion state)
   const isRunning = phase === 'initializing' || phase === 'running' || phase === 'importing' || phase === 'fetching-link'
-  // manualSteps / currentStep 在下方"批量注册"区块的 state 定义之后计算
+  // manualSteps / currentStep below"Batch registration"block state Calculated after definition
 
-  // ============ 批量注册 ============
+  // ============ Batch registration ============
 
   const [batchCount, setBatchCount] = useState(saved.batchCount ?? 1)
   const [batchInterval, setBatchInterval] = useState(saved.batchInterval ?? 5)
@@ -1073,10 +1073,10 @@ export function RegisterPage(): React.JSX.Element {
   const [proPlanType, setProPlanType] = useState<ProPlanType>(saved.proPlanType ?? 'Q_DEVELOPER_STANDALONE_PRO')
   const [batchItems, _setBatchItems] = useState<BatchItem[]>(_batchItems)
 
-  // taskId → batchItem.id 映射：直接引用模块级 Map，组件 unmount/remount 不影响
+  // taskId → batchItem.id Mapping: direct reference to module level Map, component unmount/remount does not affect
   const taskIdToItemId = useRef(_taskIdToItemId)
 
-  /** 1Hz 心跳，让运行中任务的"总耗时"实时跳动（仅 batchRunning 时启用，省电） */
+  /** 1Hz Heartbeat, allowing running tasks to"Total time spent"Live beat (only batchRunning When enabled, save power) */
   const [batchClock, setBatchClock] = useState(Date.now())
   useEffect(() => {
     if (!batchRunning) return
@@ -1084,7 +1084,7 @@ export function RegisterPage(): React.JSX.Element {
     return () => clearInterval(id)
   }, [batchRunning])
 
-  // 动态构建注册步骤（根据是否启用自动导入 / Pro 链接）
+  // Dynamically build registration step (depending on whether automatic import is enabled / Pro Link)
   const manualSteps = useMemo(
     () => buildManualSteps(batchAutoImport, autoFetchProLink),
     [batchAutoImport, autoFetchProLink]
@@ -1106,18 +1106,18 @@ export function RegisterPage(): React.JSX.Element {
     const next = typeof v === 'function' ? v(_batchItems) : v; _batchItems = next; _refSetBatchItems?.(next)
   }
   const batchAbort = useRef(false)
-  // 暂停状态：仅暂停"启动新任务"，已并发执行的会跑完
+  // Pause status: Pause only"Start new task", the ones that have been executed concurrently will run out.
   const batchPause = useRef(false)
   const [isPaused, setIsPaused] = useState(false)
-  // 当前批量任务在任务中心的 ID（用于更新进度）
+  // The current batch task is in the task center ID(for updating progress)
   const currentTaskCenterId = useRef<string | null>(null)
 
-  // ============ 注册策略模板 ============
+  // ============ Registration policy template ============
   const [templates, setTemplates] = useState<RegisterTemplate[]>(loadTemplates)
   const [showTemplatesMenu, setShowTemplatesMenu] = useState(false)
 
   const collectCurrentConfig = useCallback((): RegisterConfig => {
-    // mixedEnabledSources 在本组件内声明在更下方，避免 hoisting 限制：从 localStorage 读取最新值
+    // mixedEnabledSources Declare it below in this component to avoid hoisting Limit: from localStorage Read the latest value
     let mixed: AutoEmailSource[] = ['outlook', 'tempmail']
     try {
       const raw = localStorage.getItem('kiro-register-mixed-sources')
@@ -1155,7 +1155,7 @@ export function RegisterPage(): React.JSX.Element {
 
   const applyTemplate = useCallback((tpl: RegisterTemplate) => {
     const c = tpl.config
-    // 兼容老模板：mode === 'moemail' 时回退到 outlook
+    // Compatible with old templates:mode === 'moemail' fall back to outlook
     setMode((c.mode === ('moemail' as RegMode) ? 'outlook' : c.mode) as RegMode)
     setOutlookData(c.outlookData || '')
     setFullName(c.fullName || '')
@@ -1178,12 +1178,12 @@ export function RegisterPage(): React.JSX.Element {
     setParentEmail(c.manualParentEmail || '')
     setAnonymousEmail(c.manualAnonymousEmail ?? false)
     if (c.mixedEnabledSources) setMixedEnabledSources(c.mixedEnabledSources)
-    addLog(`[Template] 已应用模板：${tpl.name}`)
+    addLog(`[Template] Template applied:${tpl.name}`)
     setShowTemplatesMenu(false)
   }, [addLog])
 
   const saveCurrentAsTemplate = useCallback(() => {
-    const name = prompt('为当前配置保存为模板，请输入模板名称：')?.trim()
+    const name = prompt('To save the current configuration as a template, enter a template name:')?.trim()
     if (!name) return
     const tpl: RegisterTemplate = {
       id: crypto.randomUUID(),
@@ -1194,18 +1194,18 @@ export function RegisterPage(): React.JSX.Element {
     const next = [tpl, ...templates]
     setTemplates(next)
     saveTemplates(next)
-    addLog(`[Template] 已保存模板：${name}`)
+    addLog(`[Template] Saved template:${name}`)
   }, [collectCurrentConfig, templates, addLog])
 
   const removeTemplate = useCallback((id: string) => {
-    if (!confirm('确定删除这个模板？')) return
+    if (!confirm('Are you sure you want to delete this template?')) return
     const next = templates.filter((t) => t.id !== id)
     setTemplates(next)
     saveTemplates(next)
   }, [templates])
 
-  // ============ 定时任务 + 每日配额 ============
-  // 每日已注册成功数（按本地日期聚合，跨日自动重置）
+  // ============ scheduled tasks + daily quota ============
+  // Daily number of successful registrations (aggregated by local date, automatically reset across days)
   const dailyQuotaKey = useMemo(() => {
     const d = new Date()
     return `kiro-register-quota-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`
@@ -1230,7 +1230,7 @@ export function RegisterPage(): React.JSX.Element {
   const [scheduleTime, setScheduleTime] = useState<string>(() => {
     try { return localStorage.getItem('kiro-register-schedule-time') || '03:00' } catch { return '03:00' }
   })
-  /** C6: 星期掩码（位 0=周日 ... 位 6=周六），默认每天（127） */
+  /** C6: day of the week mask (bit 0=Sunday ... Bit 6=Saturday), default every day (127） */
   const [scheduleWeekMask, setScheduleWeekMask] = useState<number>(() => {
     try { return parseInt(localStorage.getItem('kiro-register-schedule-week-mask') || '127', 10) } catch { return 127 }
   })
@@ -1240,8 +1240,8 @@ export function RegisterPage(): React.JSX.Element {
   useEffect(() => { try { localStorage.setItem('kiro-register-schedule-time', scheduleTime) } catch { /* ignore */ } }, [scheduleTime])
   useEffect(() => { try { localStorage.setItem('kiro-register-schedule-week-mask', String(scheduleWeekMask)) } catch { /* ignore */ } }, [scheduleWeekMask])
 
-  // 定时任务：每分钟检查一次是否到点（含星期过滤）
-  const scheduleTriggered = useRef<string>('')  // 标记今日是否已触发，防止重复
+  // Scheduled task: Check whether the time is up every minute (including weekday filtering)
+  const scheduleTriggered = useRef<string>('')  // Mark whether it has been triggered today to prevent duplication
   useEffect(() => {
     if (!scheduleEnabled) return
     const tick = (): void => {
@@ -1249,25 +1249,25 @@ export function RegisterPage(): React.JSX.Element {
       const now = new Date()
       const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`
       if (scheduleTriggered.current === todayKey) return
-      // C6: 星期掩码过滤（位 0=周日 ... 位 6=周六）
+      // C6: Weekday mask filter (bit 0=Sunday ... Bit 6=Saturday)
       const dow = now.getDay()
       if (!(scheduleWeekMask & (1 << dow))) return
       const [hh, mm] = scheduleTime.split(':').map((s) => parseInt(s, 10))
       if (now.getHours() === hh && now.getMinutes() === mm) {
         scheduleTriggered.current = todayKey
-        addLog(`[Schedule] 到达定时启动时间 ${scheduleTime}，自动开始批量注册`)
+        addLog(`[Schedule] Reach scheduled start time ${scheduleTime}, automatically start batch registration`)
         void startBatch()
       }
     }
     const timer = setInterval(tick, 60_000)
     tick()
     return () => clearInterval(timer)
-    // 故意忽略 startBatch 依赖（它依赖太多 state，引用每次都变化；scheduleTriggered 防止重入）
+    // deliberately ignore startBatch Dependencies (it depends on too many state, the reference changes every time;scheduleTriggered prevent reentrancy)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scheduleEnabled, scheduleTime, scheduleWeekMask, batchRunning])
 
-  // ============ 限速 + 风控 ============
-  // 持久化用户的限速配置
+  // ============ speed limit + Risk control ============
+  // Persistent user rate limit configuration
   const [rateLimitEnabled, setRateLimitEnabled] = useState<boolean>(() => {
     try { const v = localStorage.getItem('kiro-register-ratelimit-enabled'); return v === null ? true : v === '1' } catch { return true }
   })
@@ -1286,7 +1286,7 @@ export function RegisterPage(): React.JSX.Element {
   const [autoBackoff, setAutoBackoff] = useState<boolean>(() => {
     try { return localStorage.getItem('kiro-register-autobackoff') !== '0' } catch { return true }
   })
-  // 风控触发后自动暂停（B3）
+  // Automatically pause after risk control is triggered (B3）
   const [autoPauseOnRisk, setAutoPauseOnRisk] = useState<boolean>(() => {
     try { return localStorage.getItem('kiro-register-autopause-risk') === '1' } catch { return false }
   })
@@ -1298,11 +1298,11 @@ export function RegisterPage(): React.JSX.Element {
   useEffect(() => { try { localStorage.setItem('kiro-register-autobackoff', autoBackoff ? '1' : '0') } catch { /* ignore */ } }, [autoBackoff])
   useEffect(() => { try { localStorage.setItem('kiro-register-autopause-risk', autoPauseOnRisk ? '1' : '0') } catch { /* ignore */ } }, [autoPauseOnRisk])
 
-  // 限速器实例（单例 ref）
+  // Rate limiter instance (singleton ref）
   const rateLimiterRef = useRef<RateLimiter | null>(null)
-  // 限速器快照（每秒刷新一次到 React state）
+  // Rate limiter snapshot (refreshed every second to React state）
   const [rateSnapshot, setRateSnapshot] = useState<RateLimiterSnapshot | null>(null)
-  // 跟踪上次风控状态，避免持续触发 webhook
+  // Track the last risk control status to avoid continuous triggering webhook
   const lastRiskWarningRef = useRef(false)
   useEffect(() => {
     if (!batchRunning) {
@@ -1314,31 +1314,31 @@ export function RegisterPage(): React.JSX.Element {
       if (rateLimiterRef.current) {
         const snap = rateLimiterRef.current.snapshot()
         setRateSnapshot(snap)
-        // 风控信号上升沿：从未警告 → 警告，触发 webhook + 可能自动暂停
+        // Risk control signal rising edge: never warned → warning, trigger webhook + May automatically pause
         if (snap.riskWarning && !lastRiskWarningRef.current) {
           lastRiskWarningRef.current = true
-          // 自动暂停
+          // auto-pause
           if (autoPauseOnRisk && !batchPause.current) {
             batchPause.current = true
             setIsPaused(true)
             if (currentTaskCenterId.current) {
               useTaskStore.getState().updateTask(currentTaskCenterId.current, { status: 'paused' })
             }
-            addLog(`[RiskControl] 风控触发，自动暂停（成功率 ${Math.round(snap.successRate * 100)}%）`)
+            addLog(`[RiskControl] Risk control triggers and automatically pauses (success rate ${Math.round(snap.successRate * 100)}%）`)
           }
           void useWebhookStore.getState().triggerEvent('risk-warning', {
-            title: '风控信号触发',
-            message: `批量注册成功率降至 ${Math.round(snap.successRate * 100)}%${autoPauseOnRisk ? '，已自动暂停' : '，建议暂停检查'}`,
+            title: 'Risk control signal trigger',
+            message: `The batch registration success rate is reduced to ${Math.round(snap.successRate * 100)}%${autoPauseOnRisk ? ', automatically paused' : ', it is recommended to suspend inspection'}`,
             level: 'warn',
             fields: {
-              成功率: `${Math.round(snap.successRate * 100)}%`,
-              连续失败: snap.consecutiveFailures,
-              吞吐: `${snap.throughputPerMinute}/min`,
-              动作: autoPauseOnRisk ? '已自动暂停' : '请手动检查'
+              'success rate': `${Math.round(snap.successRate * 100)}%`,
+              'consecutive failures': snap.consecutiveFailures,
+              'Hesitation': `${snap.throughputPerMinute}/min`,
+              action: autoPauseOnRisk ? 'Automatically paused' : 'Please check manually'
             }
           })
         } else if (!snap.riskWarning && lastRiskWarningRef.current) {
-          // 风控恢复
+          // Risk control recovery
           lastRiskWarningRef.current = false
         }
       }
@@ -1346,12 +1346,12 @@ export function RegisterPage(): React.JSX.Element {
     return () => clearInterval(timer)
   }, [batchRunning])
 
-  // 自动保存配置到 localStorage
+  // Automatically save configuration to localStorage
   useEffect(() => {
     saveConfig({ mode, outlookData, fullName, batchCount, batchInterval, batchAutoImport, batchRetries, batchConcurrency, autoFetchProLink, proPlanType, tempMailEmail, tempMailEpin, tempMailDomain, protonBaseEmail, gptMailBaseURL, gptMailInboxEmail, gptMailDomain, gptMailPrefix, gptMailPrivatePassword, manualParentEmail: parentEmail, manualAnonymousEmail: anonymousEmail })
   }, [mode, outlookData, fullName, batchCount, batchInterval, batchAutoImport, batchRetries, batchConcurrency, autoFetchProLink, proPlanType, tempMailEmail, tempMailEpin, tempMailDomain, protonBaseEmail, gptMailBaseURL, gptMailInboxEmail, gptMailDomain, gptMailPrefix, gptMailPrivatePassword, parentEmail, anonymousEmail])
 
-  // 匿名邮箱预览计算 — 以 anonymousEmail/parentEmail/accounts 为依赖实时冷算下一个变体
+  // Anonymous mailbox preview calculation — by anonymousEmail/parentEmail/accounts Next variant for relying on real-time cold calculations
   const anonymousPreview = useMemo(() => {
     if (!anonymousEmail) return null
     const parent = parentEmail.trim()
@@ -1368,12 +1368,12 @@ export function RegisterPage(): React.JSX.Element {
     const result = generateNextDotVariant(parent, used)
     const sameRootCount = countSameRootVariants(parent, used)
     const localLen = split[0].replace(/\./g, '').length
-    // 上限估算到 5 个点，足以应付绝大多数场景（避免大二项式造成 UI 误导）
+    // The upper limit is estimated to 5 points, enough to cope with most scenarios (to avoid the large binomial UI misleading)
     const totalCapacity = totalVariantCount(localLen, 5)
     return { ...result, sameRootCount, totalCapacity, localLen, error: null as null | 'empty' | 'invalid' }
   }, [anonymousEmail, parentEmail, accounts])
 
-  // ============ 注册历史 ============
+  // ============ Registration history ============
 
   const [history, _setHistory] = useState<HistoryItem[]>(loadHistory)
 
@@ -1394,7 +1394,7 @@ export function RegisterPage(): React.JSX.Element {
     }, ...prev])
   }, [setHistory])
 
-  // 注册模块级 setter refs，确保异步代码跨组件生命周期调用最新 setter
+  // Register module level setter refs, ensuring that asynchronous code calls the latest across component lifecycles setter
   useEffect(() => {
     _refSetPhase = _setPhase
     _refSetResult = _setResult
@@ -1405,7 +1405,7 @@ export function RegisterPage(): React.JSX.Element {
     _refSetBatchFail = _setBatchFail
     _refSetBatchItems = _setBatchItems
     _refSetHistory = _setHistory
-    // 组件重新挂载时同步模块级状态到 React state
+    // Synchronize module-level status to when component is remounted React state
     _setPhase(_phase)
     _setResult(_result)
     setLogs([..._logs])
@@ -1416,14 +1416,14 @@ export function RegisterPage(): React.JSX.Element {
     _setBatchItems([..._batchItems])
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 自动导入单个成功结果
+  // Automatically import a single successful result
   const autoImportResult = useCallback(async (regResult: RegResult): Promise<boolean> => {
     if (!regResult.refreshToken || !regResult.clientId || !regResult.clientSecret) return false
     const now = Date.now()
     const defaultUsage = { current: 0, limit: 0, percentUsed: 0, lastUpdated: now }
 
-    // 快速路径：后端 verifyAlive 已返回完整信息（verify.alive=true），直接用它导入
-    // 避免重新调 verifyAccountCredentials 花 30-60 秒（网络请求冗余）
+    // Fast Path: Backend verifyAlive Complete information returned (verify.alive=true), directly use it to import
+    // avoid resetting verifyAccountCredentials flower 30-60 seconds (network request redundancy)
     const v = regResult.verify as Record<string, unknown> | undefined
     if (v && v.alive) {
       const sub = String(v.subscription || 'KIRO FREE')
@@ -1459,7 +1459,7 @@ export function RegisterPage(): React.JSX.Element {
       return true
     }
 
-    // 降级路径：后端 verify 信息缺失时走网络验证（兜底）
+    // Downgrade path: backend verify When information is missing, go to the Internet for verification (recovery)
     try {
       const verifyResult = await window.api.verifyAccountCredentials({
         refreshToken: regResult.refreshToken,
@@ -1494,7 +1494,7 @@ export function RegisterPage(): React.JSX.Element {
     }
   }, [addAccount])
 
-  // 获取 Pro 订阅链接并写入订阅页面链接列表
+  // get Pro Subscription link and write the subscription page link list
   const fetchProSubscriptionUrl = useCallback(async (regResult: RegResult, email: string): Promise<string | undefined> => {
     const accessToken = regResult.accessToken
     if (!accessToken) return undefined
@@ -1529,22 +1529,22 @@ export function RegisterPage(): React.JSX.Element {
     }
   }, [addLog, t])
 
-  // 监听注册完成 - 同时记录到历史 + 自动导入
+  // Monitoring registration completed - Record to history at the same time + Automatic import
   const onRegComplete = useCallback(async (res: RegResult) => {
     setResult(res)
     setPhase('done')
     if (res.status === 'success') {
       addLog(`${t('register.logRegSuccess')} ${res.email}`)
       addHistory({ email: res.email, status: 'success', password: res.password, result: res })
-      // 触发 Webhook
+      // trigger Webhook
       void useWebhookStore.getState().triggerEvent('register-success', {
-        title: '账号注册成功',
-        message: `新账号 ${res.email} 注册完成`,
+        title: 'Account registration successful',
+        message: `new account ${res.email} Registration completed`,
         level: 'success',
-        fields: { 邮箱: res.email, 模式: mode }
+        fields: { Mail: res.email, model: mode }
       })
-      // 与手动模式 submitOTP 状态机保持一致：后处理期间推进 phase，
-      // 避免后处理仍在跑时 phase 提前变 'done' 导致"新注册"按钮提前出现 + reset 竞态
+      // with manual mode submitOTP State machine remains consistent: advancement during post-processing phase，
+      // Avoid postprocessing while still running phase Change in advance 'done' lead to"New registration"Button appears early + reset Competition
       const needImport = batchAutoImport
       const needProLink = autoFetchProLink
       if (needImport) {
@@ -1564,43 +1564,43 @@ export function RegisterPage(): React.JSX.Element {
         setPhase('fetching-link')
         await fetchProSubscriptionUrl(res, res.email)
       }
-      // 后处理全部完成 → finalized；未启用任何后处理时保持 done（语义等价）
+      // All post-processing completed → finalized;Hold when no postprocessing is enabled done(Semantic equivalent)
       if (needImport || needProLink) {
         setPhase('finalized')
       }
     } else {
       addLog(`${t('register.logRegFailed')} ${res.error}`)
       addHistory({ email: res.email, status: res.status, error: res.error, password: res.password, result: res })
-      // 单次模式失败补偿：邮箱已占用时加入黑名单（与批量 runSingleWithRetry 逻辑对齐），
-      // 下次 generateProtonEmail / 匿名变体经 collectUsedEmails 自动跳过
+      // Single mode failure compensation: add to blacklist when mailbox is occupied (similar to batch runSingleWithRetry logical alignment),
+      // next time generateProtonEmail / Anonymous transfiguration collectUsedEmails automatically skip
       if (res.email && classifyError(res.error) === 'email_used') {
         const set = loadEmailBlacklist()
         set.add(res.email.toLowerCase())
         saveEmailBlacklist(set)
-        addLog(`[Precheck] 邮箱 ${res.email} 已加入占用黑名单`)
+        addLog(`[Precheck] Mail ${res.email} Already added to occupation blacklist`)
       }
-      // 触发 Webhook
+      // trigger Webhook
       void useWebhookStore.getState().triggerEvent('register-failed', {
-        title: '账号注册失败',
-        message: `${res.email || '(未知邮箱)'} 注册失败`,
+        title: 'Account registration failed',
+        message: `${res.email || '(Unknown email)'} Registration failed`,
         level: 'error',
-        fields: { 邮箱: res.email || '-', 错误: res.error || '-', 模式: mode }
+        fields: { Mail: res.email || '-', mistake: res.error || '-', model: mode }
       })
     }
   }, [addLog, addHistory, t, batchAutoImport, autoImportResult, autoFetchProLink, fetchProSubscriptionUrl, mode])
 
-  // 覆盖原有的 onRegistrationComplete 监听
+  // overwrite the original onRegistrationComplete monitor
   useEffect(() => {
     const unsub = window.api.onRegistrationComplete(onRegComplete)
     return () => unsub()
   }, [onRegComplete])
 
-  // 混合模式：启用的子源 + 权重 + 累积调度状态
+  // Mixed Mode: Subsources Enabled + weight + Cumulative scheduling status
   const [mixedEnabledSources, setMixedEnabledSources] = useState<AutoEmailSource[]>(() => {
     try {
       const raw = localStorage.getItem('kiro-register-mixed-sources')
       if (raw) {
-        // 兼容老数据：过滤掉已废弃的 moemail
+        // Compatible with old data: filter out obsolete data moemail
         const arr = JSON.parse(raw) as string[]
         const valid = arr.filter((x): x is AutoEmailSource => x === 'outlook' || x === 'tempmail' || x === 'proton' || x === 'gptmail')
         return valid.length > 0 ? valid : ['outlook', 'tempmail']
@@ -1608,7 +1608,7 @@ export function RegisterPage(): React.JSX.Element {
     } catch { /* ignore */ }
     return ['outlook', 'tempmail']
   })
-  /** 每个源的权重（默认 1） — 加权轮询 */
+  /** The weight of each source (default 1） — weighted polling */
   const [mixedWeights, setMixedWeights] = useState<Record<AutoEmailSource, number>>(() => {
     try {
       const raw = localStorage.getItem('kiro-register-mixed-weights')
@@ -1626,28 +1626,28 @@ export function RegisterPage(): React.JSX.Element {
     try { localStorage.setItem('kiro-register-mixed-weights', JSON.stringify(mixedWeights)) } catch { /* ignore */ }
   }, [mixedWeights])
 
-  // 加权轮询调度：维护各源的"信用"分数，每次选信用最高的，扣除后累积
-  // 这是 Smooth Weighted Round-Robin 算法（nginx 用的同款）
+  // Weighted round-robin scheduling: maintain the"Credit"Score, choose the one with the highest credit each time, and accumulate after deduction
+  // This is Smooth Weighted Round-Robin algorithm(nginx Use the same style)
   const mixedCredits = useRef<Record<AutoEmailSource, number>>({ outlook: 0, tempmail: 0, proton: 0, gptmail: 0 })
 
-  /** 在混合模式下按加权轮询挑选下一个有效子源 */
+  /** Pick next valid subsource in weighted polling in mixed mode */
   const pickNextSource = useCallback((): AutoEmailSource | null => {
     const candidates = mixedEnabledSources.filter((src) => {
-      // 子源必须填了对应的配置
+      // The sub-source must fill in the corresponding configuration.
       if (src === 'outlook') return !!outlookData.trim()
       if (src === 'tempmail') return !!(tempMailDomain.trim() && tempMailEmail.trim() && tempMailEpin.trim())
       if (src === 'proton') return !!protonBaseEmail.trim()
-      // GPTmail：只要有域名就 OK（inboxEmail 留空 = 私有直收模式）
+      // GPTmail: As long as there is a domain name OK（inboxEmail Leave blank = Private direct collection mode)
       if (src === 'gptmail') return !!gptMailDomain.trim()
       return false
     })
     if (candidates.length === 0) return null
     if (candidates.length === 1) return candidates[0]
 
-    // SWRR：每次给所有候选 credit += weight，挑选 credit 最高的，然后该项 credit -= totalWeight
+    // SWRR: Give all candidates each time credit += weight, pick credit highest, then the item credit -= totalWeight
     let totalWeight = 0
     for (const c of candidates) totalWeight += Math.max(0, mixedWeights[c] || 0)
-    if (totalWeight === 0) totalWeight = candidates.length // 兜底：全 0 权重时退化为简单轮询
+    if (totalWeight === 0) totalWeight = candidates.length // Cover: all 0 Degradation to simple polling when weighting
 
     let best: AutoEmailSource | null = null
     let bestCredit = -Infinity
@@ -1665,11 +1665,11 @@ export function RegisterPage(): React.JSX.Element {
     return best
   }, [mixedEnabledSources, mixedWeights, outlookData, tempMailDomain, tempMailEmail, tempMailEpin, protonBaseEmail, gptMailDomain, gptMailInboxEmail])
 
-  // 构建自动模式配置
+  // Build automatic mode configuration
   const buildAutoConfig = useCallback((): Parameters<typeof window.api.registrationStartAuto>[0] => {
     const config: Record<string, unknown> = {}
 
-    // 混合模式：每次调用挑一个子源
+    // Mixed mode: pick one subsource per call
     const effectiveMode: AutoEmailSource | null = mode === 'mixed'
       ? pickNextSource()
       : (mode === 'manual' ? null : (mode as AutoEmailSource))
@@ -1697,23 +1697,23 @@ export function RegisterPage(): React.JSX.Element {
     return config as Parameters<typeof window.api.registrationStartAuto>[0]
   }, [mode, pickNextSource, outlookData, tempMailEmail, tempMailEpin, tempMailDomain, generateProtonEmail, gptMailBaseURL, gptMailInboxEmail, gptMailDomain, gptMailPrefix, gptMailPrivatePassword])
 
-  // 代理池：注册时为每个任务自动挑选一个出口代理（启用后生效）
+  // Agent pool: Automatically select an exit agent for each task when registering (effective after enabling)
   const { proxyPool, proxyPoolConfig, pickNextProxy, reportProxyResult } = useAccountsStore()
 
   /**
-   * Outlook 单行池：批量启动时 shuffle 一次，每个 task 独占一行避免并发抢占。
-   * 之前的 bug：所有 task 共享同一份 outlookData，主进程用 Math.random() 挑选 → 并发任务可能撞同一个邮箱。
+   * Outlook Single row pool: when starting in batches shuffle once, every task Exclusively occupy a row to avoid concurrent preemption.
+   * previous bug:all task share the same outlookData, used by the main process Math.random() Pick → Concurrent tasks may hit the same mailbox.
    */
   const outlookPoolRef = useRef<string[]>([])
 
-  // 执行单次注册（含重试）— 每次都重新 buildAutoConfig，让 mixed 模式权重正确生效
+  // Perform single registration (including retries) - Restart every time buildAutoConfig,let mixed Mode weights take effect correctly
   const runSingleWithRetry = useCallback(async (
     itemId: string,
     taskId: string,
     maxRetries: number
   ): Promise<{ success: boolean; result?: RegResult }> => {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      // 暂停时阻塞等待恢复；停止时立即退出 —— 让暂停/停止对"重试"也即时生效
+      // When paused, block and wait for recovery; when stopped, exit immediately —— let pause/Stop talking about"Try again"Also effective immediately
       while (batchPause.current && !batchAbort.current) {
         await new Promise((r) => setTimeout(r, 300))
       }
@@ -1724,7 +1724,7 @@ export function RegisterPage(): React.JSX.Element {
           it.id === itemId ? { ...it, status: 'retrying' as BatchItemStatus, retryCount: attempt } : it
         ))
         addLog(t('register.batchRetrying').replace('{current}', String(attempt)).replace('{max}', String(maxRetries)))
-        // 可中断的重试等待（每 100ms 检查一次 abort，最多 3s）
+        // Interruptible retry wait (per 100ms Check once abort,most 3s）
         for (let w = 0; w < 30 && !batchAbort.current; w++) {
           await new Promise((r) => setTimeout(r, 100))
         }
@@ -1735,32 +1735,32 @@ export function RegisterPage(): React.JSX.Element {
         ))
       }
 
-      // 每次都重新 build：混合模式下每个 task / 每次重试都独立挑源（权重正确生效）
+      // Restart every time build: each in blend mode task / Each retry selects the source independently (the weights take effect correctly)
       const config = buildAutoConfig()
       const enrichedConfig: Record<string, unknown> = { ...config, taskId }
 
-      // Outlook 模式：从 shuffle 后的池里取单行（不同 task 不会抢同一个邮箱）
-      // 池空时回退到完整列表（主进程 random pick，兼容兜底）
+      // Outlook Mode: from shuffle Take a single row from the last pool (different task Will not grab the same email address)
+      // Fallback to full list when pool is empty (main process random pick, compatible with pocket)
       if (config.useOutlook && outlookPoolRef.current.length > 0) {
         const line = outlookPoolRef.current.shift()
         if (line) {
           enrichedConfig.outlookData = line
-          addLog(`[Outlook] 分配邮箱: ${line.split('----')[0]}`)
+          addLog(`[Outlook] Assign mailbox: ${line.split('----')[0]}`)
         }
       }
 
-      // 从代理池挑一个代理（仅在启用时）；每次重试也重新挑，让失效代理自动回避
+      // Pick a proxy from the proxy pool (only when enabled); re-pick every time you try again, allowing failed proxy to be automatically avoided
       let pickedProxy: ReturnType<typeof pickNextProxy> = null
       if (proxyPoolConfig.enabled) {
-        // 严格代理模式：代理池启用就绝不允许裸奔直连（暴露本机真实 IP 给 AWS 是大忌）
+        // Strict proxy mode: When the proxy pool is enabled, naked direct connections are never allowed (exposing the true identity of the machine). IP Give AWS It’s a taboo)
         if (proxyPool.size === 0) {
-          addLog('[Proxy] 代理池已启用但池中无任何代理，已中止注册（请先在「代理池」页面添加代理）')
-          return { success: false, result: { status: 'failed', email: '', error: '代理池已启用但池为空' } as RegResult }
+          addLog('[Proxy] The agent pool has been enabled but there is no agent in the pool. Registration has been terminated (please add an agent on the "Agent Pool" page first)')
+          return { success: false, result: { status: 'failed', email: '', error: 'Agent pool is enabled but the pool is empty' } as RegResult }
         }
         pickedProxy = pickNextProxy()
         if (!pickedProxy) {
-          addLog('[Proxy] 代理池已启用但当前无可用代理（全部 dead/disabled），已中止注册以防裸奔直连')
-          return { success: false, result: { status: 'failed', email: '', error: '代理池无可用代理' } as RegResult }
+          addLog('[Proxy] Agent pool is enabled but no agents are currently available (all dead/disabled), registration has been suspended to prevent naked direct connection')
+          return { success: false, result: { status: 'failed', email: '', error: 'There are no available agents in the agent pool.' } as RegResult }
         }
         const proxyUrl = injectProxySession(pickedProxy.url)
         enrichedConfig.proxy = proxyUrl
@@ -1768,13 +1768,13 @@ export function RegisterPage(): React.JSX.Element {
         if (proxyPoolConfig.upstreamProxy && proxyPoolConfig.upstreamProxy.trim()) {
           enrichedConfig.upstreamProxy = proxyPoolConfig.upstreamProxy.trim()
         }
-        const sessionTag = proxyUrl !== pickedProxy.url ? ' (session 已注入)' : ''
+        const sessionTag = proxyUrl !== pickedProxy.url ? ' (session Injected)' : ''
         addLog(`[Proxy] Using ${pickedProxy.protocol}://${pickedProxy.host}:${pickedProxy.port}${sessionTag}`)
       }
 
       const res = await window.api.registrationStartAuto(enrichedConfig as typeof config)
 
-      // 上报代理使用结果
+      // Report agent usage results
       if (pickedProxy) {
         const ok = res.success && (res.result as RegResult | undefined)?.status === 'success'
         const emailUsed = (res.result as RegResult | undefined)?.email
@@ -1797,14 +1797,14 @@ export function RegisterPage(): React.JSX.Element {
     return { success: false }
   }, [addLog, t, proxyPool, proxyPoolConfig.enabled, pickNextProxy, reportProxyResult, buildAutoConfig])
 
-  // 处理单个批量注册任务完成
+  // Processing of single batch registration task completed
   const handleBatchOutcome = async (
     itemId: string,
     outcome: { success: boolean; result?: RegResult }
   ): Promise<void> => {
     if (outcome.success && outcome.result) {
       setBatchSuccess((p) => p + 1)
-      // 每日配额计数（仅成功才扣减）
+      // Daily quota count (deducted only on success)
       if (dailyQuotaLimit > 0) incrementDailyQuota(1)
       setBatchItems((prev) => prev.map((it) =>
         it.id === itemId ? { ...it, status: 'success', email: outcome.result!.email } : it
@@ -1843,48 +1843,48 @@ export function RegisterPage(): React.JSX.Element {
         addHistory({ email: errEmail, status: 'failed', error: errMsg })
       }
       const errCategory = classifyError(errMsg)
-      // 经验型预校验：邮箱已占用错误加入黑名单
+      // Empirical pre-verification: the mailbox is occupied error and is added to the blacklist
       if (errEmail && errCategory === 'email_used') {
         const set = loadEmailBlacklist()
         set.add(errEmail.toLowerCase())
         saveEmailBlacklist(set)
-        addLog(`[Precheck] 邮箱 ${errEmail} 已加入占用黑名单`)
+        addLog(`[Precheck] Mail ${errEmail} Already added to occupation blacklist`)
       }
-      // AWS 风控触发：立即暂停（如启用自动暂停）
+      // AWS Risk control trigger: immediate pause (if automatic pause is enabled)
       if (errCategory === 'risk_control' && autoPauseOnRisk && !batchPause.current) {
         batchPause.current = true
         setIsPaused(true)
         if (currentTaskCenterId.current) {
           useTaskStore.getState().updateTask(currentTaskCenterId.current, { status: 'paused' })
         }
-        addLog(`[RiskControl] 检测到 AWS 风控（${errEmail || '账号'}），自动暂停批量注册`)
+        addLog(`[RiskControl] detected AWS Risk control (${errEmail || 'account'}), automatically suspend batch registration`)
         void useWebhookStore.getState().triggerEvent('risk-warning', {
-          title: 'AWS 风控触发，已自动暂停',
-          message: `账号 ${errEmail || '(创建中)'} 触发 AWS 风控限流。建议启用代理池 + 验活，或换 IP 后再恢复。`,
+          title: 'AWS Risk control triggered and automatically suspended',
+          message: `account ${errEmail || '(Creating)'} trigger AWS Risk control and current limiting. It is recommended to enable proxy pool + Live test, or change IP and then resume.`,
           level: 'error',
-          fields: { 邮箱: errEmail || '-', 错误: errMsg }
+          fields: { Mail: errEmail || '-', mistake: errMsg }
         })
       }
     }
     setBatchDone((p) => p + 1)
   }
 
-  // 批量注册主逻辑（支持并发 + 暂停/恢复 + 任务中心进度上报）
-  // 第二个参数 retryItems 用于"从失败重试队列"启动：仅重跑指定 items 而非创建新 N 个
+  // Batch registration of main logic (supports concurrency + pause/recover + Progress reporting in task center)
+  // second parameter retryItems used for"Retry queue from failure"Start: Rerun specified only items instead of creating a new N indivual
   const startBatch = async (retryItems?: BatchItem[]): Promise<void> => {
     if (mode === 'manual') return
 
-    // 每日配额检查
+    // Daily quota check
     if (dailyQuotaLimit > 0) {
       const remainingQuota = Math.max(0, dailyQuotaLimit - dailyQuotaUsed)
       if (remainingQuota === 0) {
-        addLog(`[Quota] 今日配额已满 (${dailyQuotaUsed}/${dailyQuotaLimit})，跳过启动`)
-        alert(`今日注册配额已用完 (${dailyQuotaUsed}/${dailyQuotaLimit})`)
+        addLog(`[Quota] Quota is full today (${dailyQuotaUsed}/${dailyQuotaLimit}), skip startup`)
+        alert(`Today’s registration quota has been exhausted (${dailyQuotaUsed}/${dailyQuotaLimit})`)
         return
       }
       const want = retryItems ? retryItems.length : batchCount
       if (want > remainingQuota) {
-        addLog(`[Quota] 本次申请 ${want} 个，今日剩余配额 ${remainingQuota}，自动缩减到 ${remainingQuota}`)
+        addLog(`[Quota] This application ${want} , remaining quota today ${remainingQuota}, automatically reduced to ${remainingQuota}`)
         if (!retryItems) {
           setBatchCount(remainingQuota)
         }
@@ -1898,15 +1898,15 @@ export function RegisterPage(): React.JSX.Element {
 
     let items: BatchItem[]
     if (retryItems && retryItems.length > 0) {
-      // 仅重置传入项的状态
+      // Only resets the status of the incoming item
       items = retryItems.map((it) => ({ ...it, status: 'pending' as BatchItemStatus, error: undefined, retryCount: 0 }))
-      // 合并回完整列表，保持其它成功项可见
+      // Merge back into full list, keeping other successful items visible
       const ids = new Set(items.map((i) => i.id))
       setBatchItems((prev) => [
         ...prev.filter((it) => !ids.has(it.id)),
         ...items
       ])
-      // 重试模式下统计仅重置失败计数
+      // Statistics in retry mode only reset the failure count
       setBatchFail(0)
       setBatchDone((prev) => Math.max(0, prev - items.length))
     } else {
@@ -1926,7 +1926,7 @@ export function RegisterPage(): React.JSX.Element {
     const concurrency = Math.max(1, batchConcurrency)
     const totalCount = items.length
 
-    // 初始化 Outlook 单行池（avoid 并发抢占）—— 仅当 outlook / mixed 启用且填了 outlookData
+    // initialization Outlook Single row pool (avoid Concurrent preemption)—— only if outlook / mixed Enabled and filled in outlookData
     const needsOutlook = mode === 'outlook' || (mode === 'mixed' && mixedEnabledSources.includes('outlook'))
     if (needsOutlook && outlookData.trim()) {
       const lines = outlookData.split('\n').map((s) => s.trim()).filter((s) => s.includes('----'))
@@ -1937,9 +1937,9 @@ export function RegisterPage(): React.JSX.Element {
       }
       outlookPoolRef.current = lines
       if (lines.length < totalCount) {
-        addLog(`[Outlook] 警告：邮箱池仅 ${lines.length} 个，本批 ${totalCount} 个任务，超出部分将随机复用（可能撞号）`)
+        addLog(`[Outlook] Warning: Mailbox pools are only ${lines.length} individual, this batch ${totalCount} tasks, the remaining parts will be randomly reused (possible number collision)`)
       } else {
-        addLog(`[Outlook] 邮箱池已就绪 (${lines.length} 个，shuffle 后分配)`)
+        addLog(`[Outlook] Mailbox pool is ready (${lines.length} indivual,shuffle post allocation)`)
       }
     } else {
       outlookPoolRef.current = []
@@ -1947,14 +1947,14 @@ export function RegisterPage(): React.JSX.Element {
 
     setPhase('running')
 
-    // 初始化限速器（如启用）
+    // Initialize the speed limiter (if enabled)
     if (rateLimitEnabled) {
       const cfg = {
         maxPerMinute,
         burst: burstSize,
         backoffBaseMs: backoffBaseSec * 1000,
         backoffMaxMs: backoffMaxSec * 1000,
-        consecutiveFailureThreshold: autoBackoff ? 5 : 999999  // 关闭自动退避时通过大阈值禁用
+        consecutiveFailureThreshold: autoBackoff ? 5 : 999999  // Turn off automatic backoff when disabled by large threshold
       }
       if (!rateLimiterRef.current) {
         rateLimiterRef.current = createRateLimiter(cfg)
@@ -1962,17 +1962,17 @@ export function RegisterPage(): React.JSX.Element {
         rateLimiterRef.current.updateConfig(cfg)
         rateLimiterRef.current.reset()
       }
-      addLog(`[RateLimit] 已启用：${maxPerMinute}/分钟 burst=${burstSize} 退避 ${backoffBaseSec}~${backoffMaxSec}s，自动退避：${autoBackoff ? '开' : '关'}`)
+      addLog(`[RateLimit] Enabled:${maxPerMinute}/minute burst=${burstSize} retreat ${backoffBaseSec}~${backoffMaxSec}s, automatic retreat:${autoBackoff ? 'open' : 'close'}`)
     } else {
       rateLimiterRef.current = null
     }
 
-    // 在任务中心创建任务条目
+    // Create task entries in Task Center
     const taskCenter = useTaskStore.getState()
     const taskCenterId = taskCenter.createTask({
       kind: 'register-batch',
-      title: retryItems ? `重试 ${totalCount} 个失败任务` : `批量注册 ${totalCount} 个账号`,
-      subtitle: `${mode === 'outlook' ? 'Outlook' : mode === 'tempmail' ? 'TempMail.Plus' : mode === 'proton' ? 'Proton' : mode === 'gptmail' ? 'GPTmail' : mode === 'mixed' ? 'Mixed' : 'Manual'}，并发 ${concurrency}${proxyPoolConfig.enabled ? ' + 代理池' : ''}${rateLimitEnabled ? ` + ${maxPerMinute}/分钟` : ''}`,
+      title: retryItems ? `Try again ${totalCount} failed tasks` : `Batch registration ${totalCount} accounts`,
+      subtitle: `${mode === 'outlook' ? 'Outlook' : mode === 'tempmail' ? 'TempMail.Plus' : mode === 'proton' ? 'Proton' : mode === 'gptmail' ? 'GPTmail' : mode === 'mixed' ? 'Mixed' : 'Manual'},concurrent ${concurrency}${proxyPoolConfig.enabled ? ' + proxy pool' : ''}${rateLimitEnabled ? ` + ${maxPerMinute}/minute` : ''}`,
       total: totalCount,
       onPause: () => {
         batchPause.current = true
@@ -1991,7 +1991,7 @@ export function RegisterPage(): React.JSX.Element {
     })
     currentTaskCenterId.current = taskCenterId
 
-    // 并发池执行
+    // Concurrency pool execution
     const executing = new Set<Promise<void>>()
     let launched = 0
 
@@ -2001,13 +2001,13 @@ export function RegisterPage(): React.JSX.Element {
         break
       }
 
-      // 暂停：等待恢复
+      // Pause: Waiting to resume
       while (batchPause.current && !batchAbort.current) {
         await new Promise((r) => setTimeout(r, 500))
       }
       if (batchAbort.current) break
 
-      // 限速：等待令牌（含退避）
+      // Rate limit: waiting for token (including backoff)
       if (rateLimiterRef.current) {
         await rateLimiterRef.current.waitForSlot({ get aborted() { return batchAbort.current } })
         if (batchAbort.current) break
@@ -2023,11 +2023,11 @@ export function RegisterPage(): React.JSX.Element {
         const outcome = await runSingleWithRetry(itemId, taskId, batchRetries)
         taskIdToItemId.current.delete(taskId)
         await handleBatchOutcome(itemId, outcome)
-        // 上报限速器结果（用于动态退避 + 风控判定）
+        // Report rate limiter results (used for dynamic backoff + Risk control judgment)
         if (rateLimiterRef.current) {
           rateLimiterRef.current.reportResult(outcome.success)
         }
-        // 上报任务中心进度
+        // Report progress to task center
         useTaskStore.getState().updateTask(taskCenterId, {
           done: _batchDone,
           successCount: _batchSuccess,
@@ -2039,18 +2039,18 @@ export function RegisterPage(): React.JSX.Element {
       const tracked = task.finally(() => executing.delete(tracked))
       executing.add(tracked)
 
-      // 控制并发数：池满时等待空位
+      // Control the number of concurrencies: wait for vacancies when the pool is full
       if (executing.size >= concurrency) {
         await Promise.race(executing)
       }
 
-      // 每次启动任务后等待间隔（0 则不等待）
+      // The waiting interval after each start of the task (0 then do not wait)
       if (i < items.length - 1 && !batchAbort.current && batchInterval > 0) {
         await new Promise((r) => setTimeout(r, batchInterval * 1000))
       }
     }
 
-    // 等待所有正在执行的任务完成
+    // Wait for all executing tasks to complete
     await Promise.all(executing)
 
     setBatchRunning(false)
@@ -2058,29 +2058,29 @@ export function RegisterPage(): React.JSX.Element {
     setPhase('idle')
     addLog(t('register.batchCompleted'))
 
-    // 完成任务中心条目
+    // Complete Mission Center entry
     useTaskStore.getState().completeTask(taskCenterId, {
       successCount: _batchSuccess,
       failedCount: _batchFail
     })
     currentTaskCenterId.current = null
 
-    // 触发 Webhook 通知
+    // trigger Webhook notify
     void useWebhookStore.getState().triggerEvent('batch-completed', {
-      title: `批量注册${retryItems ? '重试' : ''}完成`,
-      message: `共 ${totalCount} 个任务，成功 ${_batchSuccess}，失败 ${_batchFail}`,
+      title: `Batch registration${retryItems ? 'Try again' : ''}Finish`,
+      message: `common ${totalCount} mission, success ${_batchSuccess},fail ${_batchFail}`,
       level: _batchFail === 0 ? 'success' : (_batchSuccess === 0 ? 'error' : 'warn'),
       fields: {
-        模式: mode === 'outlook' ? 'Outlook' : mode === 'tempmail' ? 'TempMail.Plus' : mode === 'proton' ? 'Proton' : mode === 'gptmail' ? 'GPTmail' : mode === 'mixed' ? 'Mixed' : 'Manual',
-        并发: concurrency,
-        成功: _batchSuccess,
-        失败: _batchFail,
-        总数: totalCount
+        model: mode === 'outlook' ? 'Outlook' : mode === 'tempmail' ? 'TempMail.Plus' : mode === 'proton' ? 'Proton' : mode === 'gptmail' ? 'GPTmail' : mode === 'mixed' ? 'Mixed' : 'Manual',
+        concurrent: concurrency,
+        success: _batchSuccess,
+        fail: _batchFail,
+        total: totalCount
       }
     })
   }
 
-  /** 暂停 / 恢复批量注册 */
+  /** pause / Resume batch registration */
   const togglePauseBatch = (): void => {
     if (!batchRunning) return
     if (batchPause.current) {
@@ -2100,11 +2100,11 @@ export function RegisterPage(): React.JSX.Element {
 
   const stopBatch = (): void => {
     batchAbort.current = true
-    // 同时解除暂停，避免暂停态下主循环 / 重试循环卡在 while 等待
+    // At the same time, cancel the pause to avoid the main loop in the paused state. / Retry loop stuck at while wait
     batchPause.current = false
     setIsPaused(false)
-    addLog(isEn ? '[Batch] Stopping, aborting in-flight requests...' : '[Batch] 正在停止，已中止在途请求...')
-    // 取消后端所有在途注册（中断当前正在跑的 registrationStartAuto）
+    addLog(isEn ? '[Batch] Stopping, aborting in-flight requests...' : '[Batch] Stopping, request in transit aborted...')
+    // Cancel all registrations in progress on the backend (interrupt the currently running registrationStartAuto）
     window.api.registrationCancel()
     if (currentTaskCenterId.current) {
       useTaskStore.getState().cancelTask(currentTaskCenterId.current)
@@ -2112,7 +2112,7 @@ export function RegisterPage(): React.JSX.Element {
     }
   }
 
-  /** 从失败列表中按筛选条件重试 */
+  /** Retry by filter from failed list */
   const retryFailed = (filter?: 'network' | 'otp_timeout' | 'rate_limit' | 'all'): void => {
     const failedItems = _batchItems.filter((it) => {
       if (it.status !== 'failed' && it.status !== 'import_failed') return false
@@ -2120,14 +2120,14 @@ export function RegisterPage(): React.JSX.Element {
       return classifyError(it.error) === filter
     })
     if (failedItems.length === 0) {
-      addLog(`[Retry] 没有匹配的失败任务可重试`)
+      addLog(`[Retry] There are no matching failed tasks to retry`)
       return
     }
-    addLog(`[Retry] 重试 ${failedItems.length} 个失败任务（筛选: ${filter || 'all'}）`)
+    addLog(`[Retry] Try again ${failedItems.length} failed tasks (filter: ${filter || 'all'}）`)
     void startBatch(failedItems)
   }
 
-  // 导入历史中的账号
+  // Import accounts from history
   const importHistoryItem = async (item: HistoryItem): Promise<void> => {
     if (!item.result || item.result.status !== 'success' || !item.result.refreshToken) return
     const r = item.result
@@ -2182,12 +2182,12 @@ export function RegisterPage(): React.JSX.Element {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-primary">{t('register.title')}</h1>
-            <p className="text-sm text-muted-foreground">{isEn ? 'Register new Kiro accounts automatically or manually' : '自动或手动注册新的 Kiro 账号'}</p>
+            <p className="text-sm text-muted-foreground">{isEn ? 'Register new Kiro accounts automatically or manually' : 'Register new ones automatically or manually Kiro account'}</p>
           </div>
         </div>
       </div>
 
-      {/* 模式选择 + 配置 */}
+      {/* Mode selection + Configuration */}
       <Card className="hover-lift">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -2203,7 +2203,7 @@ export function RegisterPage(): React.JSX.Element {
               ['tempmail', t('register.tempmail')],
               ['proton', 'Proton'],
               ['gptmail', 'GPTmail'],
-              ['mixed', isEn ? 'Mixed' : '混合']
+              ['mixed', isEn ? 'Mixed' : 'mix']
             ] as [RegMode, string][]).map(([m, label]) => (
               <button
                 key={m}
@@ -2222,7 +2222,7 @@ export function RegisterPage(): React.JSX.Element {
           </div>
 
 
-          {/* 自动导入开关 */}
+          {/* Automatic import switch */}
           <div className="flex items-center gap-3">
             <Switch
               checked={batchAutoImport}
@@ -2236,7 +2236,7 @@ export function RegisterPage(): React.JSX.Element {
             </div>
           </div>
 
-          {/* 自动获取 Pro 订阅链接开关 + 计划选择 */}
+          {/* Get automatically Pro Subscribe link switch + Plan selection */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Switch
@@ -2251,10 +2251,10 @@ export function RegisterPage(): React.JSX.Element {
               </div>
             </div>
 
-            {/* 计划类型选择（仅开关开启时显示）*/}
+            {/* Plan type selection (only displayed when the switch is on)*/}
             {autoFetchProLink && (
               <div className="ml-11 flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{isEn ? 'Plan:' : '计划:'}</span>
+                <span className="text-xs text-muted-foreground">{isEn ? 'Plan:' : 'plan:'}</span>
                 {([
                   { value: 'Q_DEVELOPER_STANDALONE_PRO' as ProPlanType, label: 'Pro', color: 'bg-blue-500' },
                   { value: 'Q_DEVELOPER_STANDALONE_PRO_PLUS' as ProPlanType, label: 'Pro+', color: 'bg-purple-500' },
@@ -2276,13 +2276,13 @@ export function RegisterPage(): React.JSX.Element {
                   </button>
                 ))}
                 <span className="text-[10px] text-muted-foreground ml-1 italic">
-                  {isEn ? '(Plan ID will be sent to Kiro API)' : '(计划 ID 会作为订阅类型发送)'}
+                  {isEn ? '(Plan ID will be sent to Kiro API)' : '(plan ID will be sent as a subscription type)'}
                 </span>
               </div>
             )}
           </div>
 
-          {/* Outlook 配置（独立模式 或 混合模式启用了 outlook 时显示） */}
+          {/* Outlook Configuration (standalone mode or Blending mode is enabled outlook displayed) */}
           {(mode === 'outlook' || (mode === 'mixed' && mixedEnabledSources.includes('outlook'))) && (
             <div className="p-4 bg-muted/30 rounded-lg border border-dashed space-y-1.5">
               <Label>{t('register.outlookAccounts')} ({t('register.outlookFormat')})</Label>
@@ -2297,10 +2297,10 @@ export function RegisterPage(): React.JSX.Element {
             </div>
           )}
 
-          {/* 混合模式配置：勾选要参与轮询的子源 + 权重 */}
+          {/* Mixed mode configuration: Check the subsources to participate in polling + weight */}
           {mode === 'mixed' && (
             <div className="p-4 bg-muted/30 rounded-lg border border-dashed space-y-3">
-              <Label>{isEn ? 'Enabled email sources (Weighted Round-Robin)' : '启用的邮箱源（加权轮询）'}</Label>
+              <Label>{isEn ? 'Enabled email sources (Weighted Round-Robin)' : 'Enabled mailbox sources (weighted polling)'}</Label>
               <div className="space-y-2">
                 {(['outlook', 'tempmail', 'proton', 'gptmail'] as AutoEmailSource[]).map((src) => {
                   const enabled = mixedEnabledSources.includes(src)
@@ -2325,18 +2325,18 @@ export function RegisterPage(): React.JSX.Element {
                             : 'border-border hover:border-primary/50',
                           !configured && 'opacity-60'
                         )}
-                        title={!configured ? '该源尚未配置，会被跳过' : ''}
+                        title={!configured ? 'The source has not been configured and will be skipped' : ''}
                       >
                         {enabled
                           ? <CheckCircle2 className="h-4 w-4" />
                           : <Square className="h-4 w-4" />
                         }
                         {label}
-                        {!configured && <span className="text-[10px] text-amber-500 ml-auto">{isEn ? 'not configured' : '未配置'}</span>}
+                        {!configured && <span className="text-[10px] text-amber-500 ml-auto">{isEn ? 'not configured' : 'Not configured'}</span>}
                       </button>
                       {enabled && configured && (
                         <div className="flex items-center gap-1 text-xs">
-                          <span className="text-muted-foreground">{isEn ? 'Weight:' : '权重:'}</span>
+                          <span className="text-muted-foreground">{isEn ? 'Weight:' : 'weight:'}</span>
                           <Input
                             type="number" min={0} max={100}
                             value={mixedWeights[src] || 0}
@@ -2358,18 +2358,18 @@ export function RegisterPage(): React.JSX.Element {
               <p className="text-xs text-muted-foreground">
                 {isEn
                   ? 'Smooth Weighted Round-Robin: e.g. moemail=4 + tempmail=1 means 80% / 20%. Set 0 to disable.'
-                  : '平滑加权轮询：例如 moemail=4 + tempmail=1 表示 80% / 20%。权重为 0 等于不参与。'
+                  : 'Smooth weighted polling: e.g. moemail=4 + tempmail=1 express 80% / 20%. The weight is 0 It means not participating.'
                 }
               </p>
               {mixedEnabledSources.length === 0 && (
                 <p className="text-xs text-amber-500">
-                  {isEn ? 'Please enable at least one source.' : '请至少启用一个源'}
+                  {isEn ? 'Please enable at least one source.' : 'Please enable at least one source'}
                 </p>
               )}
             </div>
           )}
 
-          {/* TempMail.Plus 配置（独立模式 或 混合模式启用了 tempmail 时显示） */}
+          {/* TempMail.Plus Configuration (standalone mode or Blending mode is enabled tempmail displayed) */}
           {(mode === 'tempmail' || (mode === 'mixed' && mixedEnabledSources.includes('tempmail'))) && (
             <div className="p-4 bg-muted/30 rounded-lg border border-dashed space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2385,8 +2385,8 @@ export function RegisterPage(): React.JSX.Element {
                   {tempMailDomain.trim() && (() => {
                     const list = tempMailDomain.split(/[\s,;]+/).filter(Boolean)
                     return list.length > 1
-                      ? <p className="text-[11px] text-muted-foreground">域名池 {list.length} 个，每个账号随机挑一个，降低单域名关联</p>
-                      : <p className="text-[11px] text-muted-foreground">填多个域名（空格/逗号分隔）可启用域名轮换</p>
+                      ? <p className="text-[11px] text-muted-foreground">Domain name pool {list.length} Randomly select one for each account to reduce single domain name association</p>
+                      : <p className="text-[11px] text-muted-foreground">Fill in multiple domain names (spaces/comma separated) to enable domain name rotation</p>
                   })()}
                 </div>
                 <div className="space-y-1.5">
@@ -2412,11 +2412,11 @@ export function RegisterPage(): React.JSX.Element {
             </div>
           )}
 
-          {/* Proton 配置（独立模式 或 混合模式启用了 proton 时显示） */}
+          {/* Proton Configuration (standalone mode or Blending mode is enabled proton displayed) */}
           {(mode === 'proton' || (mode === 'mixed' && mixedEnabledSources.includes('proton'))) && (
             <div className="p-4 bg-muted/30 rounded-lg border border-dashed space-y-3">
               <div className="space-y-1.5">
-                <Label>{isEn ? 'Proton base email (dot-alias parent)' : 'Proton 母邮箱（点号别名母号）'}</Label>
+                <Label>{isEn ? 'Proton base email (dot-alias parent)' : 'Proton Mother mailbox (dot number alias mother number)'}</Label>
                 <Input
                   type="email"
                   value={protonBaseEmail}
@@ -2429,10 +2429,10 @@ export function RegisterPage(): React.JSX.Element {
                 />
                 {protonBaseEmail.trim() && (() => {
                   const split = splitEmail(protonBaseEmail.trim())
-                  if (!split) return <p className="text-[11px] text-destructive">{isEn ? 'Invalid email' : '邮箱格式无效'}</p>
+                  if (!split) return <p className="text-[11px] text-destructive">{isEn ? 'Invalid email' : 'Email format is invalid'}</p>
                   const localLen = split[0].replace(/\./g, '').length
                   const capacity = totalVariantCount(localLen, 5)
-                  return <p className="text-[11px] text-muted-foreground">{isEn ? `Auto-generates dot-variants of the local part, ~${capacity.toLocaleString()} available` : `自动生成用户名点号变体，约 ${capacity.toLocaleString()} 个可用`}</p>
+                  return <p className="text-[11px] text-muted-foreground">{isEn ? `Auto-generates dot-variants of the local part, ~${capacity.toLocaleString()} available` : `Automatically generate dotted variant of username, approx. ${capacity.toLocaleString()} available`}</p>
                 })()}
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -2445,8 +2445,8 @@ export function RegisterPage(): React.JSX.Element {
                       const r = await window.api.protonOpenLogin()
                       setProtonLoggedIn(r.loggedIn)
                       addLog(r.loggedIn
-                        ? (isEn ? '[Proton] Already logged in' : '[Proton] 已登录')
-                        : (isEn ? '[Proton] Please complete login in the popup window' : '[Proton] 请在弹出的窗口中完成登录'))
+                        ? (isEn ? '[Proton] Already logged in' : '[Proton] Logged in')
+                        : (isEn ? '[Proton] Please complete login in the popup window' : '[Proton] Please complete the login in the pop-up window'))
                     } catch (err) {
                       addLog(`[Proton] ${err instanceof Error ? err.message : String(err)}`)
                     } finally {
@@ -2455,7 +2455,7 @@ export function RegisterPage(): React.JSX.Element {
                   }}
                   className="px-3 py-1.5 rounded-md border border-primary bg-primary/10 text-primary text-sm font-medium transition-colors hover:bg-primary/20 disabled:opacity-50"
                 >
-                  {protonChecking ? (isEn ? 'Opening...' : '打开中...') : (isEn ? 'Login Proton' : '登录 Proton')}
+                  {protonChecking ? (isEn ? 'Opening...' : 'Opening...') : (isEn ? 'Login Proton' : 'Log in Proton')}
                 </button>
                 <button
                   type="button"
@@ -2465,51 +2465,51 @@ export function RegisterPage(): React.JSX.Element {
                     try {
                       const r = await window.api.protonLoginStatus()
                       setProtonLoggedIn(r.loggedIn)
-                      addLog(r.loggedIn ? (isEn ? '[Proton] Logged in' : '[Proton] 登录态有效') : (isEn ? '[Proton] Not logged in' : '[Proton] 未登录'))
+                      addLog(r.loggedIn ? (isEn ? '[Proton] Logged in' : '[Proton] Login status is valid') : (isEn ? '[Proton] Not logged in' : '[Proton] Not logged in'))
                     } finally {
                       setProtonChecking(false)
                     }
                   }}
                   className="px-3 py-1.5 rounded-md border border-border text-sm transition-colors hover:border-primary/50 disabled:opacity-50"
                 >
-                  {isEn ? 'Check status' : '检查登录态'}
+                  {isEn ? 'Check status' : 'Check login status'}
                 </button>
                 <span className={cn('text-xs', protonLoggedIn ? 'text-green-500' : 'text-muted-foreground')}>
-                  {protonLoggedIn ? (isEn ? '● Logged in' : '● 已登录') : (isEn ? '○ Not logged in' : '○ 未登录')}
+                  {protonLoggedIn ? (isEn ? '● Logged in' : '● Logged in') : (isEn ? '○ Not logged in' : '○ Not logged in')}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground leading-snug">
                 {isEn
                   ? 'Reads codes via the official Proton web page (login once, session persists). Each account uses a dot-variant of the base email (e.g. evanbar.tellcha.e@), all landing in the same inbox. Recommended concurrency: 1.'
-                  : '借壳 Proton 官方网页取码（登录一次，会话持久化）。每个账号使用母邮箱的点号变体（如 evanbar.tellcha.e@），全部进同一收件箱。建议并发设为 1。'}
+                  : 'Backdoor Proton Get the code from the official website (log in once, session persistence). Each account uses a dotted variant of the parent email address (e.g. evanbar.tellcha.e@), all into the same inbox. It is recommended that the concurrency be set to 1。'}
               </p>
             </div>
           )}
 
-          {/* GPTmail 配置（独立模式 或 混合模式启用了 gptmail 时显示）
-              支持两种模式：
-                A. 私有域名直收（接收邮箱留空）—— MX 直接解析到 GPTmail，无需 CF
-                B. CF 转发（填接收邮箱）—— 跟 TempMail.Plus 玩法一致 */}
+          {/* GPTmail Configuration (standalone mode or Blending mode is enabled gptmail displayed)
+              Two modes are supported:
+                A. Direct delivery of private domain names (leave the receiving email address blank)—— MX parse directly to GPTmail, no need CF
+                B. CF Forward (fill in the receiving email address)—— and TempMail.Plus Same gameplay */}
           {(mode === 'gptmail' || (mode === 'mixed' && mixedEnabledSources.includes('gptmail'))) && (() => {
             const isPrivateMode = !gptMailInboxEmail.trim()
             return (
             <div className="p-4 bg-muted/30 rounded-lg border border-dashed space-y-4">
-              {/* 模式状态标签 */}
+              {/* Mode status label */}
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">{isEn ? 'Current mode:' : '当前模式：'}</span>
+                <span className="text-muted-foreground">{isEn ? 'Current mode:' : 'Current mode:'}</span>
                 <span className={cn(
                   'px-2 py-0.5 rounded-full font-medium',
                   isPrivateMode ? 'bg-primary/10 text-primary' : 'bg-amber-500/10 text-amber-600'
                 )}>
                   {isPrivateMode
-                    ? (isEn ? 'A · Private direct (MX → GPTmail)' : 'A · 私有域名直收（MX → GPTmail）')
-                    : (isEn ? 'B · CF Email Routing forward' : 'B · CF Email Routing 转发')}
+                    ? (isEn ? 'A · Private direct (MX → GPTmail)' : 'A · Private domain name direct collection (MX → GPTmail）')
+                    : (isEn ? 'B · CF Email Routing forward' : 'B · CF Email Routing Forward')}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>{isEn ? 'Your domain pool' : '自建域名池'} <span className="text-destructive">*</span></Label>
+                  <Label>{isEn ? 'Your domain pool' : 'Self-built domain name pool'} <span className="text-destructive">*</span></Label>
                   <Input
                     value={gptMailDomain}
                     onChange={(e) => setGptMailDomain(e.target.value)}
@@ -2520,18 +2520,18 @@ export function RegisterPage(): React.JSX.Element {
                   {gptMailDomain.trim() && (() => {
                     const list = gptMailDomain.split(/[\s,;]+/).filter(Boolean)
                     return list.length > 1
-                      ? <p className="text-[11px] text-muted-foreground">{isEn ? `Domain pool: ${list.length}, randomized per account` : `域名池 ${list.length} 个，每个账号随机挑一个（降低关联）`}</p>
-                      : <p className="text-[11px] text-muted-foreground">{isEn ? 'Multiple domains (space/comma separated) enable rotation' : '填多个域名（空格/逗号分隔）可启用域名轮换'}</p>
+                      ? <p className="text-[11px] text-muted-foreground">{isEn ? `Domain pool: ${list.length}, randomized per account` : `Domain name pool ${list.length} , randomly select one for each account (reduce association)`}</p>
+                      : <p className="text-[11px] text-muted-foreground">{isEn ? 'Multiple domains (space/comma separated) enable rotation' : 'Fill in multiple domain names (spaces/comma separated) to enable domain name rotation'}</p>
                   })()}
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>{isEn ? 'GPTmail inbox (optional, for CF forwarding)' : 'GPTmail 接收邮箱（可选，CF 转发用）'}</Label>
+                  <Label>{isEn ? 'GPTmail inbox (optional, for CF forwarding)' : 'GPTmail Receiving email (optional,CF For forwarding)'}</Label>
                   <Input
                     type="email"
                     value={gptMailInboxEmail}
                     onChange={(e) => setGptMailInboxEmail(e.target.value)}
-                    placeholder={isEn ? 'leave empty for private direct' : '留空 = 私有域名直收'}
+                    placeholder={isEn ? 'leave empty for private direct' : 'Leave blank = Direct transfer of private domain names'}
                     disabled={isRunning || batchRunning}
                     autoComplete="off"
                     spellCheck={false}
@@ -2540,17 +2540,17 @@ export function RegisterPage(): React.JSX.Element {
                   <p className="text-[11px] text-muted-foreground leading-snug">
                     {isEn
                       ? 'Empty: register prefix@yourdomain directly as the inbox (MX must point to GPTmail). Filled: CF Email Routing forwards *@yourdomain to this inbox.'
-                      : '留空：prefix@yourdomain 本身就是 inbox（域名 MX 必须解析到 GPTmail）。填了：CF Email Routing 把 *@yourdomain 转发到此邮箱。'}
+                      : 'Leave blank:prefix@yourdomain itself inbox(domain name MX must be parsed to GPTmail). Filled out:CF Email Routing Bundle *@yourdomain Forward to this email.'}
                   </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>{isEn ? 'Private domain password (optional)' : '私有域名密码（可选）'}</Label>
+                  <Label>{isEn ? 'Private domain password (optional)' : 'Private domain name password (optional)'}</Label>
                   <Input
                     type="password"
                     value={gptMailPrivatePassword}
                     onChange={(e) => setGptMailPrivatePassword(e.target.value)}
-                    placeholder={isEn ? 'only for private domains with password' : '仅在 GPTmail 设了私密密码时填'}
+                    placeholder={isEn ? 'only for private domains with password' : 'only in GPTmail Fill in the private password when setting it'}
                     disabled={isRunning || batchRunning}
                     autoComplete="off"
                     className="font-mono text-xs"
@@ -2558,21 +2558,21 @@ export function RegisterPage(): React.JSX.Element {
                   <p className="text-[11px] text-muted-foreground leading-snug">
                     {isEn
                       ? 'If you added your domain as "Private" on GPTmail, fill the password here. Auto-unlocks the inbox before polling.'
-                      : '如果你在 GPTmail 把域名添加为"私密域名"并设了密码，填这里。轮询前会自动解锁 inbox。'}
+                      : 'if you are GPTmail Add domain name as"private domain name"And set a password, fill it in here. Will be automatically unlocked before polling inbox。'}
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>{isEn ? 'Fixed prefix (optional)' : '固定前缀（可选）'}</Label>
+                  <Label>{isEn ? 'Fixed prefix (optional)' : 'Fixed prefix (optional)'}</Label>
                   <Input
                     value={gptMailPrefix}
                     onChange={(e) => setGptMailPrefix(e.target.value)}
-                    placeholder={isEn ? 'leave empty for random' : '留空则自动生成随机前缀'}
+                    placeholder={isEn ? 'leave empty for random' : 'Leave blank to automatically generate a random prefix'}
                     disabled={isRunning || batchRunning}
                     className="font-mono text-xs"
                   />
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
-                  <Label>{isEn ? 'Custom Base URL (optional)' : '自定义 BaseURL（可选）'}</Label>
+                  <Label>{isEn ? 'Custom Base URL (optional)' : 'Customize BaseURL(optional)'}</Label>
                   <Input
                     value={gptMailBaseURL}
                     onChange={(e) => setGptMailBaseURL(e.target.value)}
@@ -2580,30 +2580,30 @@ export function RegisterPage(): React.JSX.Element {
                     disabled={isRunning || batchRunning}
                     className="font-mono text-xs"
                   />
-                  <p className="text-[11px] text-muted-foreground">{isEn ? 'Defaults to https://mail.chatgpt.org.uk; change for self-hosted' : '默认 https://mail.chatgpt.org.uk，私有部署可改'}</p>
+                  <p className="text-[11px] text-muted-foreground">{isEn ? 'Defaults to https://mail.chatgpt.org.uk; change for self-hosted' : 'default https://mail.chatgpt.org.uk, private deployment can be modified'}</p>
                 </div>
               </div>
 
-              {/* 模式说明 */}
+              {/* Mode description */}
               <div className="p-2.5 bg-background/60 rounded border-l-2 border-primary/60 text-xs leading-relaxed text-muted-foreground space-y-1">
                 {isPrivateMode ? (
                   <>
-                    <p className="font-medium text-foreground">{isEn ? 'Mode A · Private direct (recommended):' : '模式 A · 私有域名直收（推荐）：'}</p>
+                    <p className="font-medium text-foreground">{isEn ? 'Mode A · Private direct (recommended):' : 'model A · Private domain name direct payment (recommended):'}</p>
                     <ol className="list-decimal pl-5 space-y-0.5">
-                      <li>{isEn ? 'Add your domain on mail.chatgpt.org.uk (it gives you MX records)' : '在 mail.chatgpt.org.uk 添加私有/公开域名（页面会给出 MX 解析记录）'}</li>
-                      <li>{isEn ? 'Point your domain MX to GPTmail at your DNS provider' : '在 DNS 提供商把你的域名 MX 指向 GPTmail'}</li>
-                      <li>{isEn ? 'Each registration uses prefix@yourdomain as both register email and inbox' : '每次注册用 prefix@你的域名 作为注册邮箱（同时也是 inbox）'}</li>
-                      <li>{isEn ? 'GPTmail receives directly, we poll the API and extract the code' : 'GPTmail 直接收信 → 我们轮询 API 提取验证码'}</li>
+                      <li>{isEn ? 'Add your domain on mail.chatgpt.org.uk (it gives you MX records)' : 'exist mail.chatgpt.org.uk add private/Public domain name (the page will give MX Parsing records)'}</li>
+                      <li>{isEn ? 'Point your domain MX to GPTmail at your DNS provider' : 'exist DNS Provider takes your domain name MX point to GPTmail'}</li>
+                      <li>{isEn ? 'Each registration uses prefix@yourdomain as both register email and inbox' : 'For each registration prefix@your domain name As the registered email address (also inbox）'}</li>
+                      <li>{isEn ? 'GPTmail receives directly, we poll the API and extract the code' : 'GPTmail receive mail directly → We poll API Extract verification code'}</li>
                     </ol>
                   </>
                 ) : (
                   <>
-                    <p className="font-medium text-foreground">{isEn ? 'Mode B · Cloudflare Email Routing forward:' : '模式 B · Cloudflare Email Routing 转发：'}</p>
+                    <p className="font-medium text-foreground">{isEn ? 'Mode B · Cloudflare Email Routing forward:' : 'model B · Cloudflare Email Routing Forward:'}</p>
                     <ol className="list-decimal pl-5 space-y-0.5">
-                      <li>{isEn ? 'Register a receiving inbox on mail.chatgpt.org.uk (e.g. abc@msn-mail-free-9224.dynv6.net)' : '在 mail.chatgpt.org.uk 注册一个接收邮箱（如 abc@msn-mail-free-9224.dynv6.net）'}</li>
-                      <li>{isEn ? 'In Cloudflare Email Routing, set catch-all *@yourdomain → that inbox' : '在 Cloudflare Email Routing 把 *@你的域名 catch-all 转发到该邮箱'}</li>
-                      <li>{isEn ? 'Each registration uses prefix@yourdomain' : '每次注册用 prefix@你的域名'}</li>
-                      <li>{isEn ? 'AWS sends OTP → CF forwards to GPTmail → we poll GPTmail API and extract the code' : 'AWS 发送验证码 → CF 转发到 GPTmail → 我们轮询 GPTmail API 提取验证码'}</li>
+                      <li>{isEn ? 'Register a receiving inbox on mail.chatgpt.org.uk (e.g. abc@msn-mail-free-9224.dynv6.net)' : 'exist mail.chatgpt.org.uk Register a receiving email (such as abc@msn-mail-free-9224.dynv6.net）'}</li>
+                      <li>{isEn ? 'In Cloudflare Email Routing, set catch-all *@yourdomain → that inbox' : 'exist Cloudflare Email Routing Bundle *@your domain name catch-all Forward to this email'}</li>
+                      <li>{isEn ? 'Each registration uses prefix@yourdomain' : 'For each registration prefix@your domain name'}</li>
+                      <li>{isEn ? 'AWS sends OTP → CF forwards to GPTmail → we poll GPTmail API and extract the code' : 'AWS Send verification code → CF forward to GPTmail → We poll GPTmail API Extract verification code'}</li>
                     </ol>
                   </>
                 )}
@@ -2614,7 +2614,7 @@ export function RegisterPage(): React.JSX.Element {
         </CardContent>
       </Card>
 
-      {/* 手动模式母邮箱输入 + 匿名邮箱开关（仅 phase=idle） */}
+      {/* Manual mode parent mailbox input + Anonymous mailbox switch (only phase=idle） */}
       {mode === 'manual' && phase === 'idle' && !batchRunning && (
         <Card className="hover-lift">
           <CardHeader className="pb-3">
@@ -2664,7 +2664,7 @@ export function RegisterPage(): React.JSX.Element {
               </div>
             </div>
 
-            {/* 预览面板 */}
+            {/* preview panel */}
             {anonymousEmail && (
               <div className="text-xs">
                 {anonymousPreview?.error === 'empty' && (
@@ -2705,7 +2705,7 @@ export function RegisterPage(): React.JSX.Element {
         </Card>
       )}
 
-      {/* 手动模式进度步骤条（动态步骤：6-8 步，根据开关启用 Import / ProLink） */}
+      {/* Manual mode progress step bar (dynamic steps:6-8 step, enabled according to the switch Import / ProLink） */}
       {mode === 'manual' && phase !== 'idle' && (
         <div className="bg-card border rounded-xl p-4">
           <div className="flex items-center justify-between">
@@ -2713,7 +2713,7 @@ export function RegisterPage(): React.JSX.Element {
               const isLast = i === manualSteps.length - 1
               const isDone = i < currentStep
               const isCurrent = i === currentStep
-              // 区分核心步骤 vs 后处理步骤（用不同颜色）
+              // Differentiate core steps vs Post-processing steps (in different colors)
               const isExtra = step === 'Import' || step === 'ProLink'
               return (
                 <div key={step} className={cn('flex items-center', isLast ? '' : 'flex-1 min-w-0')}>
@@ -2754,10 +2754,10 @@ export function RegisterPage(): React.JSX.Element {
         </div>
       )}
 
-      {/* 操作区 */}
+      {/* operating area */}
       <Card className="hover-lift">
         <CardContent className="pt-5 space-y-4">
-          {/* 手动模式 email/otp 输入 */}
+          {/* manual mode email/otp enter */}
           {mode === 'manual' && phase === 'email' && (
             <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-dashed">
               <div className="space-y-1.5">
@@ -2808,7 +2808,7 @@ export function RegisterPage(): React.JSX.Element {
             </div>
           )}
 
-          {/* 按钮 */}
+          {/* button */}
           <div className="flex gap-3">
             {phase === 'idle' && !batchRunning && (
               <Button
@@ -2850,7 +2850,7 @@ export function RegisterPage(): React.JSX.Element {
         </CardContent>
       </Card>
 
-      {/* 日志（紧跟"开始注册"卡片，方便观察进度，不再放到页面最底部） */}
+      {/* Log (followed by"Start registration"Cards make it easier to observe progress and are no longer placed at the bottom of the page) */}
       {logs.length > 0 && (
         <Card className="overflow-hidden">
           <CardHeader className="py-3 border-b">
@@ -2871,7 +2871,7 @@ export function RegisterPage(): React.JSX.Element {
         </Card>
       )}
 
-      {/* 批量注册 (非手动模式) */}
+      {/* Batch registration (Non-manual mode) */}
       {mode !== 'manual' && (
         <Card className="hover-lift">
           <CardHeader className="pb-3 flex flex-row items-center justify-between">
@@ -2879,7 +2879,7 @@ export function RegisterPage(): React.JSX.Element {
               <Play className="h-4 w-4 text-primary" />
               {t('register.batchTitle')}
             </CardTitle>
-            {/* 策略模板 */}
+            {/* Policy template */}
             <div className="relative">
               <Button
                 variant="outline"
@@ -2888,18 +2888,18 @@ export function RegisterPage(): React.JSX.Element {
                 disabled={batchRunning}
               >
                 <Settings2 className="h-4 w-4 mr-1" />
-                {isEn ? 'Templates' : '模板'} ({templates.length})
+                {isEn ? 'Templates' : 'template'} ({templates.length})
               </Button>
               {showTemplatesMenu && (
                 <div className="absolute right-0 top-full mt-2 z-50 min-w-[280px] max-h-[400px] overflow-y-auto bg-popover border rounded-lg shadow-lg p-2">
                   <div className="flex items-center justify-between mb-2 px-2">
-                    <span className="text-xs font-medium uppercase text-muted-foreground">{isEn ? 'Strategy Templates' : '策略模板'}</span>
+                    <span className="text-xs font-medium uppercase text-muted-foreground">{isEn ? 'Strategy Templates' : 'Policy template'}</span>
                     <div className="flex items-center gap-1">
                       <Button size="sm" variant="ghost" onClick={saveCurrentAsTemplate} className="h-7 text-xs">
                         <Download className="h-3 w-3 mr-1" />
-                        {isEn ? 'Save current' : '保存当前'}
+                        {isEn ? 'Save current' : 'save current'}
                       </Button>
-                      {/* C8: 导入/导出 */}
+                      {/* C8: import/Export */}
                       <button
                         type="button"
                         onClick={() => {
@@ -2911,12 +2911,12 @@ export function RegisterPage(): React.JSX.Element {
                           a.click()
                           setTimeout(() => URL.revokeObjectURL(url), 1000)
                         }}
-                        title={isEn ? 'Export all templates' : '导出全部模板'}
+                        title={isEn ? 'Export all templates' : 'Export all templates'}
                         className="p-1 rounded hover:bg-muted text-muted-foreground"
                       >
                         <Download className="h-3 w-3" />
                       </button>
-                      <label className="p-1 rounded hover:bg-muted text-muted-foreground cursor-pointer" title={isEn ? 'Import templates' : '导入模板'}>
+                      <label className="p-1 rounded hover:bg-muted text-muted-foreground cursor-pointer" title={isEn ? 'Import templates' : 'Import template'}>
                         <input
                           type="file"
                           accept="application/json,.json"
@@ -2927,9 +2927,9 @@ export function RegisterPage(): React.JSX.Element {
                             try {
                               const text = await file.text()
                               const arr = JSON.parse(text) as RegisterTemplate[]
-                              if (!Array.isArray(arr)) throw new Error('文件格式无效')
+                              if (!Array.isArray(arr)) throw new Error('Invalid file format')
                               const merged = [...arr, ...templates]
-                              // 按 ID 去重，新文件优先
+                              // according to ID Remove duplicates, new files first
                               const seen = new Set<string>()
                               const dedup: RegisterTemplate[] = []
                               for (const t of merged) {
@@ -2939,9 +2939,9 @@ export function RegisterPage(): React.JSX.Element {
                               }
                               setTemplates(dedup)
                               saveTemplates(dedup)
-                              addLog(`[Template] 已导入 ${arr.length} 个模板`)
+                              addLog(`[Template] Imported ${arr.length} templates`)
                             } catch (err) {
-                              alert(`导入失败：${err instanceof Error ? err.message : String(err)}`)
+                              alert(`Import failed:${err instanceof Error ? err.message : String(err)}`)
                             }
                             e.currentTarget.value = ''
                           }}
@@ -2953,7 +2953,7 @@ export function RegisterPage(): React.JSX.Element {
                   <div className="border-t mb-1" />
                   {templates.length === 0 ? (
                     <div className="py-6 text-center text-xs text-muted-foreground">
-                      {isEn ? 'No templates yet. Click "Save current" to save the current config as a template.' : '尚无模板。点击「保存当前」把当前配置保存为模板。'}
+                      {isEn ? 'No templates yet. Click "Save current" to save the current config as a template.' : 'There is no template yet. Click "Save Current" to save the current configuration as a template.'}
                     </div>
                   ) : (
                     templates.map((tpl) => (
@@ -2967,13 +2967,13 @@ export function RegisterPage(): React.JSX.Element {
                         >
                           <div className="text-sm truncate">{tpl.name}</div>
                           <div className="text-[10px] text-muted-foreground">
-                            {tpl.config.mode} · {isEn ? 'count' : '批量'} {tpl.config.batchCount} · {isEn ? 'conc.' : '并发'} {tpl.config.batchConcurrency}
+                            {tpl.config.mode} · {isEn ? 'count' : 'batch'} {tpl.config.batchCount} · {isEn ? 'conc.' : 'concurrent'} {tpl.config.batchConcurrency}
                           </div>
                         </button>
                         <button
                           onClick={() => removeTemplate(tpl.id)}
                           className="p-1 rounded hover:bg-destructive/10 text-destructive"
-                          title={isEn ? 'Delete' : '删除'}
+                          title={isEn ? 'Delete' : 'delete'}
                         >
                           <Trash2 className="h-3 w-3" />
                         </button>
@@ -2985,7 +2985,7 @@ export function RegisterPage(): React.JSX.Element {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* 配置行 */}
+            {/* Configuration line */}
             <div className="flex flex-wrap items-end gap-4">
               <div className="space-y-1">
                 <Label className="text-xs">{t('register.batchCount')}</Label>
@@ -3044,19 +3044,19 @@ export function RegisterPage(): React.JSX.Element {
                 {batchRunning ? <><Square className="h-4 w-4 mr-2" />{t('register.batchStop')}</> : <><Play className="h-4 w-4 mr-2" />{t('register.batchStart')}</>}
               </Button>
               {batchRunning && (
-                <Button variant="outline" onClick={togglePauseBatch} title={isPaused ? '恢复' : '暂停'}>
-                  {isPaused ? <><Play className="h-4 w-4 mr-2" />{isEn ? 'Resume' : '恢复'}</> : <><Pause className="h-4 w-4 mr-2" />{isEn ? 'Pause' : '暂停'}</>}
+                <Button variant="outline" onClick={togglePauseBatch} title={isPaused ? 'recover' : 'pause'}>
+                  {isPaused ? <><Play className="h-4 w-4 mr-2" />{isEn ? 'Resume' : 'recover'}</> : <><Pause className="h-4 w-4 mr-2" />{isEn ? 'Pause' : 'pause'}</>}
                 </Button>
               )}
             </div>
 
-            {/* 定时任务 + 每日配额 */}
+            {/* scheduled tasks + daily quota */}
             <div className="flex items-center gap-4 flex-wrap p-3 rounded-lg bg-muted/30 border border-dashed">
               <div className="flex items-center gap-2">
                 <Switch checked={scheduleEnabled} onCheckedChange={setScheduleEnabled} disabled={batchRunning} />
                 <Label className="text-sm cursor-pointer flex items-center gap-1.5">
                   <CalendarClock className="h-4 w-4 text-primary" />
-                  定时启动
+                  Scheduled start
                 </Label>
               </div>
               {scheduleEnabled && (
@@ -3070,9 +3070,9 @@ export function RegisterPage(): React.JSX.Element {
                       className="h-8 w-28 text-xs"
                     />
                   </div>
-                  {/* C6: 星期选择 */}
+                  {/* C6: Week selection */}
                   <div className="flex items-center gap-1 text-xs">
-                    {(isEn ? ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] : ['日', '一', '二', '三', '四', '五', '六']).map((label, i) => {
+                    {(isEn ? ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] : ['day', 'one', 'two', 'three', 'Four', 'five', 'six']).map((label, i) => {
                       const checked = !!(scheduleWeekMask & (1 << i))
                       return (
                         <button
@@ -3096,9 +3096,9 @@ export function RegisterPage(): React.JSX.Element {
                       onClick={() => setScheduleWeekMask(scheduleWeekMask === 127 ? 0b0111110 : 127)}
                       disabled={batchRunning}
                       className="text-[10px] text-primary hover:underline ml-1"
-                      title={isEn ? 'Toggle: all / weekdays only' : '切换：全选 / 仅工作日'}
+                      title={isEn ? 'Toggle: all / weekdays only' : 'Toggle: select all / Working days only'}
                     >
-                      {scheduleWeekMask === 127 ? (isEn ? 'Weekdays' : '工作日') : (isEn ? 'Daily' : '每天')}
+                      {scheduleWeekMask === 127 ? (isEn ? 'Weekdays' : 'working days') : (isEn ? 'Daily' : 'every day')}
                     </button>
                   </div>
                 </>
@@ -3106,7 +3106,7 @@ export function RegisterPage(): React.JSX.Element {
               <div className="w-px h-6 bg-border" />
               <div className="flex items-center gap-1.5 text-xs">
                 <Timer className="h-4 w-4 text-primary" />
-                <span className="text-muted-foreground">{isEn ? 'Daily quota:' : '每日配额:'}</span>
+                <span className="text-muted-foreground">{isEn ? 'Daily quota:' : 'daily quota:'}</span>
                 <Input
                   type="number" min={0} max={9999}
                   value={dailyQuotaLimit}
@@ -3114,7 +3114,7 @@ export function RegisterPage(): React.JSX.Element {
                   disabled={batchRunning}
                   className="h-8 w-20 text-xs text-center"
                 />
-                <span className="text-muted-foreground">{isEn ? '/day' : '个/天'}</span>
+                <span className="text-muted-foreground">{isEn ? '/day' : 'indivual/sky'}</span>
                 {dailyQuotaLimit > 0 && (
                   <>
                     <Badge
@@ -3128,43 +3128,43 @@ export function RegisterPage(): React.JSX.Element {
                             : 'text-muted-foreground'
                       )}
                     >
-                      {isEn ? 'Today' : '今日'}: {dailyQuotaUsed} / {dailyQuotaLimit}
+                      {isEn ? 'Today' : 'today'}: {dailyQuotaUsed} / {dailyQuotaLimit}
                     </Badge>
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm(isEn ? `Reset today's used quota (currently ${dailyQuotaUsed})?` : `重置今日已用配额（当前 ${dailyQuotaUsed}）？`)) {
+                        if (confirm(isEn ? `Reset today's used quota (currently ${dailyQuotaUsed})?` : `Reset today's used quota (currently ${dailyQuotaUsed}）？`)) {
                           setDailyQuotaUsedState(0)
                           try { localStorage.setItem(dailyQuotaKey, '0') } catch { /* ignore */ }
-                          addLog(isEn ? '[Quota] Today\'s quota counter reset' : '[Quota] 已重置今日配额计数')
+                          addLog(isEn ? "[Quota] Today's quota counter reset" : "[Quota] Today's quota count has been reset")
                         }
                       }}
                       className="text-[10px] text-muted-foreground hover:text-foreground underline"
-                      title={isEn ? "Manually reset today's used quota" : '手动重置今日已用配额'}
+                      title={isEn ? "Manually reset today's used quota" : 'Manually reset today’s used quota'}
                     >
-                      {isEn ? 'Reset' : '重置'}
+                      {isEn ? 'Reset' : 'reset'}
                     </button>
                   </>
                 )}
                 {dailyQuotaLimit === 0 && (
-                  <span className="text-[10px] text-muted-foreground italic">{isEn ? '(0 = unlimited)' : '（0 = 不限制）'}</span>
+                  <span className="text-[10px] text-muted-foreground italic">{isEn ? '(0 = unlimited)' : '（0 = no limit)'}</span>
                 )}
               </div>
             </div>
 
-            {/* 限速 + 退避配置 */}
+            {/* speed limit + Backoff configuration */}
             <div className="flex items-center gap-4 flex-wrap p-3 rounded-lg bg-muted/30 border border-dashed">
               <div className="flex items-center gap-2">
                 <Switch checked={rateLimitEnabled} onCheckedChange={setRateLimitEnabled} disabled={batchRunning} />
                 <Label className="text-sm cursor-pointer flex items-center gap-1.5">
                   <Gauge className="h-4 w-4 text-primary" />
-                  {isEn ? 'Rate limit' : '限速'}
+                  {isEn ? 'Rate limit' : 'speed limit'}
                 </Label>
               </div>
               {rateLimitEnabled && (
                 <>
                   <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-muted-foreground">{isEn ? 'Max launch rate:' : '最大启动速率:'}</span>
+                    <span className="text-muted-foreground">{isEn ? 'Max launch rate:' : 'maximum boot rate:'}</span>
                     <Input
                       type="number" min={1} max={300}
                       value={maxPerMinute}
@@ -3172,26 +3172,26 @@ export function RegisterPage(): React.JSX.Element {
                       disabled={batchRunning}
                       className="w-20 h-8 text-xs text-center"
                     />
-                    <span className="text-muted-foreground">{isEn ? '/ min' : '/ 分钟'}</span>
+                    <span className="text-muted-foreground">{isEn ? '/ min' : '/ minute'}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={autoBackoff} onCheckedChange={setAutoBackoff} disabled={batchRunning} />
                     <Label className="text-xs cursor-pointer">
-                      {isEn ? 'Auto backoff on consecutive failures (exponential)' : '连续失败自动退避（指数）'}
+                      {isEn ? 'Auto backoff on consecutive failures (exponential)' : 'Automatic backoff on consecutive failures (exponential)'}
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={autoPauseOnRisk} onCheckedChange={setAutoPauseOnRisk} disabled={batchRunning} />
                     <Label className="text-xs cursor-pointer flex items-center gap-1">
                       <ShieldAlert className="h-3 w-3 text-amber-500" />
-                      {isEn ? 'Auto pause on risk control' : '风控触发自动暂停'}
+                      {isEn ? 'Auto pause on risk control' : 'Risk control triggers automatic suspension'}
                     </Label>
                   </div>
-                  {/* C3: 高级配置 */}
+                  {/* C3: Advanced configuration */}
                   <div className="w-full flex items-center gap-3 text-xs flex-wrap pt-2 border-t border-dashed">
-                    <span className="text-muted-foreground">{isEn ? 'Advanced:' : '高级:'}</span>
+                    <span className="text-muted-foreground">{isEn ? 'Advanced:' : 'advanced:'}</span>
                     <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">{isEn ? 'Burst cap' : '突发上限'}</span>
+                      <span className="text-muted-foreground">{isEn ? 'Burst cap' : 'Burst upper limit'}</span>
                       <Input
                         type="number" min={1} max={100}
                         value={burstSize}
@@ -3201,7 +3201,7 @@ export function RegisterPage(): React.JSX.Element {
                       />
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">{isEn ? 'Backoff start' : '退避起始'}</span>
+                      <span className="text-muted-foreground">{isEn ? 'Backoff start' : 'Backoff start'}</span>
                       <Input
                         type="number" min={1} max={300}
                         value={backoffBaseSec}
@@ -3209,10 +3209,10 @@ export function RegisterPage(): React.JSX.Element {
                         disabled={batchRunning}
                         className="w-16 h-7 text-xs text-center"
                       />
-                      <span className="text-muted-foreground">{isEn ? 'sec' : '秒'}</span>
+                      <span className="text-muted-foreground">{isEn ? 'sec' : 'Second'}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="text-muted-foreground">{isEn ? 'Backoff cap' : '退避上限'}</span>
+                      <span className="text-muted-foreground">{isEn ? 'Backoff cap' : 'Backoff upper limit'}</span>
                       <Input
                         type="number" min={1} max={3600}
                         value={backoffMaxSec}
@@ -3220,7 +3220,7 @@ export function RegisterPage(): React.JSX.Element {
                         disabled={batchRunning}
                         className="w-20 h-7 text-xs text-center"
                       />
-                      <span className="text-muted-foreground">{isEn ? 'sec' : '秒'}</span>
+                      <span className="text-muted-foreground">{isEn ? 'sec' : 'Second'}</span>
                     </div>
                   </div>
                 </>
@@ -3229,12 +3229,12 @@ export function RegisterPage(): React.JSX.Element {
                 <span className="text-xs text-muted-foreground">
                   {isEn
                     ? 'When enabled, a token bucket paces launches and auto-extends intervals on consecutive failures to avoid risk control.'
-                    : '开启后会以令牌桶控制启动节奏，连续失败时自动延长间隔，防风控'}
+                    : 'After being enabled, the token bucket will be used to control the startup rhythm, and the interval will be automatically extended when consecutive failures occur to prevent risk control.'}
                 </span>
               )}
             </div>
 
-            {/* 运行中：实时速率 + 风控信号 */}
+            {/* Running: real-time rate + Risk control signal */}
             {batchRunning && rateSnapshot && (
               <div className={cn(
                 'p-3 rounded-lg border space-y-2 transition-colors',
@@ -3249,30 +3249,30 @@ export function RegisterPage(): React.JSX.Element {
                     <>
                       <ShieldAlert className="h-4 w-4 text-red-500 animate-pulse" />
                       <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                        {isEn ? 'Risk warning: success rate too low' : '风控警告：成功率过低'} ({Math.round(rateSnapshot.successRate * 100)}%)
+                        {isEn ? 'Risk warning: success rate too low' : 'Risk control warning: success rate is too low'} ({Math.round(rateSnapshot.successRate * 100)}%)
                       </span>
                     </>
                   ) : rateSnapshot.backoffRemainingMs > 0 ? (
                     <>
                       <Clock className="h-4 w-4 text-amber-500" />
                       <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                        {isEn ? `Backing off: resuming in ${Math.ceil(rateSnapshot.backoffRemainingMs / 1000)}s` : `退避中：等待 ${Math.ceil(rateSnapshot.backoffRemainingMs / 1000)}s 后恢复`}
+                        {isEn ? `Backing off: resuming in ${Math.ceil(rateSnapshot.backoffRemainingMs / 1000)}s` : `Retreating: Waiting ${Math.ceil(rateSnapshot.backoffRemainingMs / 1000)}s After recovery`}
                       </span>
                     </>
                   ) : (
                     <>
                       <Activity className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{isEn ? 'Running' : '运行中'}</span>
+                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">{isEn ? 'Running' : 'Running'}</span>
                     </>
                   )}
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">{isEn ? 'Throughput:' : '吞吐:'}</span>
+                    <span className="text-muted-foreground">{isEn ? 'Throughput:' : 'Hesitation:'}</span>
                     <span className="font-mono tabular-nums">{rateSnapshot.throughputPerMinute}/min</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">{isEn ? 'Success rate:' : '成功率:'}</span>
+                    <span className="text-muted-foreground">{isEn ? 'Success rate:' : 'success rate:'}</span>
                     <span className={cn(
                       'font-mono tabular-nums font-medium',
                       rateSnapshot.successRate >= 0.8 ? 'text-green-600' :
@@ -3280,7 +3280,7 @@ export function RegisterPage(): React.JSX.Element {
                     )}>{Math.round(rateSnapshot.successRate * 100)}%</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">{isEn ? 'Window:' : '窗口:'}</span>
+                    <span className="text-muted-foreground">{isEn ? 'Window:' : 'window:'}</span>
                     <span className="font-mono tabular-nums">
                       <span className="text-green-600">✓{rateSnapshot.windowSuccess}</span>
                       <span className="text-muted-foreground mx-0.5">/</span>
@@ -3288,7 +3288,7 @@ export function RegisterPage(): React.JSX.Element {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">{isEn ? 'Consec. fails:' : '连续失败:'}</span>
+                    <span className="text-muted-foreground">{isEn ? 'Consec. fails:' : 'consecutive failures:'}</span>
                     <span className={cn(
                       'font-mono tabular-nums',
                       rateSnapshot.consecutiveFailures >= 3 ? 'text-red-600 font-medium' : ''
@@ -3298,9 +3298,9 @@ export function RegisterPage(): React.JSX.Element {
               </div>
             )}
 
-            {/* 失败重试面板（仅有失败时显示） */}
+            {/* Failed retry panel (only displayed on failure) */}
             {!batchRunning && batchFail > 0 && batchItems.some(it => it.status === 'failed' || it.status === 'import_failed') && (() => {
-              // 按错误类型分桶
+              // Bucket by error type
               const buckets: Record<string, number> = { network: 0, otp_timeout: 0, email_used: 0, rate_limit: 0, risk_control: 0, auth: 0, unknown: 0 }
               for (const it of batchItems) {
                 if (it.status !== 'failed' && it.status !== 'import_failed') continue
@@ -3316,22 +3316,22 @@ export function RegisterPage(): React.JSX.Element {
                 auth: 'Auth error',
                 unknown: 'Other/Unknown'
               } : {
-                network: '网络错误',
-                otp_timeout: '验证码超时',
-                email_used: '邮箱已占用',
-                rate_limit: '限流',
-                risk_control: 'AWS 风控',
-                auth: '认证错误',
-                unknown: '其它/未知'
+                network: 'network error',
+                otp_timeout: 'Verification code timeout',
+                email_used: 'Email is occupied',
+                rate_limit: 'Current limiting',
+                risk_control: 'AWS Risk control',
+                auth: 'Authentication error',
+                unknown: 'other/unknown'
               }
               return (
                 <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg space-y-2">
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <span className="text-sm font-medium">{isEn ? `${batchFail} tasks failed` : `${batchFail} 个任务失败`}</span>
+                    <span className="text-sm font-medium">{isEn ? `${batchFail} tasks failed` : `${batchFail} tasks failed`}</span>
                     <Button size="sm" variant="default" className="ml-auto" onClick={() => retryFailed('all')}>
                       <RefreshCw className="h-3.5 w-3.5 mr-1" />
-                      {isEn ? 'Retry all' : '全部重试'}
+                      {isEn ? 'Retry all' : 'Retry all'}
                     </Button>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -3341,7 +3341,7 @@ export function RegisterPage(): React.JSX.Element {
                         type="button"
                         onClick={() => retryFailed(k as 'network' | 'otp_timeout' | 'rate_limit' | 'all')}
                         className="px-2 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
-                        title={isEn ? 'Click to retry this category' : '点击重试该类失败'}
+                        title={isEn ? 'Click to retry this category' : 'Click Retry This class failed'}
                       >
                         {labels[k]} ({c})
                       </button>
@@ -3351,7 +3351,7 @@ export function RegisterPage(): React.JSX.Element {
               )
             })()}
 
-            {/* 进度 + 每项状态 */}
+            {/* schedule + Each status */}
             {(batchRunning || batchDone > 0) && (
               <div className="space-y-3">
                 <div className="flex items-center gap-4 text-sm">
@@ -3361,7 +3361,7 @@ export function RegisterPage(): React.JSX.Element {
                 </div>
                 <Progress value={batchCount > 0 ? (batchDone / batchCount) * 100 : 0} className="h-2" />
 
-                {/* 每项状态列表 */}
+                {/* List of each status */}
                 {batchItems.length > 0 && (
                   <div className="max-h-60 overflow-y-auto border rounded-lg bg-muted/20">
                     {batchItems.map((item) => <BatchItemRow key={item.id} item={item} t={t} batchClock={batchClock} />)}
@@ -3373,7 +3373,7 @@ export function RegisterPage(): React.JSX.Element {
         </Card>
       )}
 
-      {/* 结果 */}
+      {/* result */}
       {result && (
         <Card className={cn('border shadow-sm',
           result.status === 'success' ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
@@ -3423,13 +3423,13 @@ export function RegisterPage(): React.JSX.Element {
         </Card>
       )}
 
-      {/* 注册结果分析报表（视觉升级版） */}
+      {/* Registration result analysis report (visual upgraded version) */}
       {history.length >= 5 && <RegisterAnalyticsReport history={history} />}
 
-      {/* 占用邮箱黑名单管理 */}
+      {/* Occupied mailbox blacklist management */}
       <EmailBlacklistManager />
 
-      {/* 注册历史 */}
+      {/* Registration history */}
       {history.length > 0 && (
         <Card className="overflow-hidden">
           <CardHeader className="py-3 border-b">
@@ -3454,7 +3454,7 @@ export function RegisterPage(): React.JSX.Element {
                       {item.status === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" /> : <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />}
                       <span className="font-mono text-xs truncate">{item.email}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0">{new Date(item.time).toLocaleTimeString()}</span>
-                      {/* 指纹摘要徽章（B7） */}
+                      {/* Fingerprint summary badge (B7） */}
                       {fp && (
                         <span
                           className="text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono flex-shrink-0 cursor-help"
@@ -3485,7 +3485,7 @@ export function RegisterPage(): React.JSX.Element {
   )
 }
 
-// ============ 注册结果分析报表（视觉升级版） ============
+// ============ Registration result analysis report (visual upgraded version) ============
 
 interface RegisterAnalyticsProps {
   history: HistoryItem[]
@@ -3499,11 +3499,11 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
     let success = 0, failed = 0
     const byMode: Record<string, { success: number; failed: number }> = {}
     const byHour: Record<number, { success: number; failed: number }> = {}
-    const byDay: Record<string, { success: number; failed: number }> = {}  // 7 日趋势
+    const byDay: Record<string, { success: number; failed: number }> = {}  // 7 daily trend
     const errorBuckets: Record<string, number> = {}
 
     const now = Date.now()
-    // 准备最近 7 天的桶（含今天）
+    // prepare recently 7 bucket of days (including today)
     const sevenDays: string[] = []
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now - i * 86400000)
@@ -3521,7 +3521,7 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
       const hr = dt.getHours()
       if (!byHour[hr]) byHour[hr] = { success: 0, failed: 0 }
       if (h.status === 'success') byHour[hr].success++; else byHour[hr].failed++
-      // 日桶（7 天内）
+      // Daily barrel (7 within days)
       const dayKey = `${dt.getMonth() + 1}/${dt.getDate()}`
       if (byDay[dayKey]) {
         if (h.status === 'success') byDay[dayKey].success++; else byDay[dayKey].failed++
@@ -3533,7 +3533,7 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
     }
     const successRate = total > 0 ? success / total : 0
     const peakHours = Object.entries(byHour)
-      .filter(([, v]) => v.success + v.failed >= 2)  // 至少 2 个样本
+      .filter(([, v]) => v.success + v.failed >= 2)  // At least 2 samples
       .sort((a, b) => {
         const ar = a[1].success / (a[1].success + a[1].failed)
         const br = b[1].success / (b[1].success + b[1].failed)
@@ -3571,19 +3571,19 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
   }, [history])
 
   const errorLabels: Record<string, { label: string; color: string }> = {
-    network: { label: isEn ? 'Network error' : '网络错误', color: 'bg-blue-500' },
-    otp_timeout: { label: isEn ? 'OTP timeout' : '验证码超时', color: 'bg-amber-500' },
-    email_used: { label: isEn ? 'Email in use' : '邮箱已占用', color: 'bg-slate-500' },
-    rate_limit: { label: isEn ? 'Rate limited' : '限流', color: 'bg-orange-500' },
-    risk_control: { label: isEn ? 'AWS risk control' : 'AWS 风控', color: 'bg-red-500' },
-    auth: { label: isEn ? 'Auth error' : '认证错误', color: 'bg-purple-500' },
-    unknown: { label: isEn ? 'Other/Unknown' : '其它/未知', color: 'bg-gray-500' }
+    network: { label: isEn ? 'Network error' : 'network error', color: 'bg-blue-500' },
+    otp_timeout: { label: isEn ? 'OTP timeout' : 'Verification code timeout', color: 'bg-amber-500' },
+    email_used: { label: isEn ? 'Email in use' : 'Email is occupied', color: 'bg-slate-500' },
+    rate_limit: { label: isEn ? 'Rate limited' : 'Current limiting', color: 'bg-orange-500' },
+    risk_control: { label: isEn ? 'AWS risk control' : 'AWS Risk control', color: 'bg-red-500' },
+    auth: { label: isEn ? 'Auth error' : 'Authentication error', color: 'bg-purple-500' },
+    unknown: { label: isEn ? 'Other/Unknown' : 'other/unknown', color: 'bg-gray-500' }
   }
 
   const successColor = analytics.successRate >= 0.85 ? '#22c55e'
     : analytics.successRate >= 0.6 ? '#f59e0b' : '#ef4444'
 
-  // SVG 圆环图参数
+  // SVG Donut chart parameters
   const ringRadius = 36
   const ringStroke = 8
   const ringCircum = 2 * Math.PI * ringRadius
@@ -3596,9 +3596,9 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
           <div className="p-1.5 rounded-lg bg-primary/10">
             <Activity className="h-4 w-4 text-primary" />
           </div>
-          <span>{isEn ? 'Registration Analytics' : '注册结果分析报表'}</span>
+          <span>{isEn ? 'Registration Analytics' : 'Registration result analysis report'}</span>
           <Badge variant="outline" className="text-[10px] ml-auto">
-            {isEn ? 'Samples' : '样本'} {analytics.total}
+            {isEn ? 'Samples' : 'sample'} {analytics.total}
           </Badge>
           <Button
             size="sm"
@@ -3612,12 +3612,12 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
-        {/* 顶部：圆环图 + 关键指标 */}
+        {/* Top: donut chart + key indicators */}
         <div className="grid grid-cols-1 md:grid-cols-[140px_1fr] gap-4 items-center">
-          {/* 圆环图 */}
+          {/* donut chart */}
           <div className="relative flex items-center justify-center">
             <svg width="120" height="120" viewBox="0 0 100 100">
-              {/* 底圈 */}
+              {/* Bottom circle */}
               <circle
                 cx="50" cy="50" r={ringRadius}
                 fill="none"
@@ -3625,7 +3625,7 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
                 strokeWidth={ringStroke}
                 opacity="0.1"
               />
-              {/* 成功率圈 */}
+              {/* success rate circle */}
               <circle
                 cx="50" cy="50" r={ringRadius}
                 fill="none"
@@ -3642,22 +3642,22 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
               <div className="text-2xl font-bold tabular-nums" style={{ color: successColor }}>
                 {Math.round(analytics.successRate * 100)}%
               </div>
-              <div className="text-[10px] text-muted-foreground">{isEn ? 'Success rate' : '成功率'}</div>
+              <div className="text-[10px] text-muted-foreground">{isEn ? 'Success rate' : 'success rate'}</div>
             </div>
           </div>
 
-          {/* 关键指标 */}
+          {/* key indicators */}
           <div className="grid grid-cols-2 gap-2">
             <div className="p-3 rounded-lg bg-green-500/5 border border-green-500/20">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">{isEn ? 'Success' : '成功'}</span>
+                <span className="text-[10px] text-muted-foreground">{isEn ? 'Success' : 'success'}</span>
                 <CheckCircle2 className="h-3 w-3 text-green-500" />
               </div>
               <div className="text-xl font-bold tabular-nums text-green-600 mt-0.5">{analytics.success}</div>
             </div>
             <div className="p-3 rounded-lg bg-red-500/5 border border-red-500/20">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground">{isEn ? 'Failed' : '失败'}</span>
+                <span className="text-[10px] text-muted-foreground">{isEn ? 'Failed' : 'fail'}</span>
                 <XCircle className="h-3 w-3 text-red-500" />
               </div>
               <div className="text-xl font-bold tabular-nums text-red-600 mt-0.5">{analytics.failed}</div>
@@ -3666,11 +3666,11 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {isEn ? 'Top 3 success hours' : '高成功率时段 TOP3'}
+                  {isEn ? 'Top 3 success hours' : 'High success rate period TOP3'}
                 </span>
               </div>
               {analytics.peakHours.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{isEn ? 'Not enough data' : '样本不足'}</p>
+                <p className="text-xs text-muted-foreground">{isEn ? 'Not enough data' : 'Insufficient sample'}</p>
               ) : (
                 <div className="flex gap-2">
                   {analytics.peakHours.map(([h, v]) => {
@@ -3688,37 +3688,37 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
           </div>
         </div>
 
-        {/* 24 小时分布（SVG 平滑曲线 + 渐变填充） */}
+        {/* 24 Hourly distribution (SVG smooth curve + gradient fill) */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium">{isEn ? '24-hour distribution' : '24 小时分布'}</span>
+            <span className="text-xs font-medium">{isEn ? '24-hour distribution' : '24 Hourly distribution'}</span>
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500" /> {isEn ? 'Success' : '成功'}
+                <span className="w-2 h-2 rounded-full bg-green-500" /> {isEn ? 'Success' : 'success'}
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500" /> {isEn ? 'Failed' : '失败'}
+                <span className="w-2 h-2 rounded-full bg-red-500" /> {isEn ? 'Failed' : 'fail'}
               </span>
             </div>
           </div>
           <HourDistributionChart byHour={analytics.byHour} />
         </div>
 
-        {/* 7 日趋势 */}
+        {/* 7 daily trend */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium">{isEn ? '7-day trend' : '7 日趋势'}</span>
-            <span className="text-[10px] text-muted-foreground">{isEn ? 'Registrations' : '注册数'}</span>
+            <span className="text-xs font-medium">{isEn ? '7-day trend' : '7 daily trend'}</span>
+            <span className="text-[10px] text-muted-foreground">{isEn ? 'Registrations' : 'Number of registrations'}</span>
           </div>
           <SevenDayChart sevenDays={analytics.sevenDays} byDay={analytics.byDay} />
         </div>
 
-        {/* 失败原因分布（精致版） */}
+        {/* Failure reason distribution (refined version) */}
         {analytics.topErrors.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium">{isEn ? 'Failure reasons' : '失败原因分布'}</span>
-              <span className="text-[10px] text-muted-foreground">{isEn ? `${analytics.failed} failures total` : `共 ${analytics.failed} 次失败`}</span>
+              <span className="text-xs font-medium">{isEn ? 'Failure reasons' : 'Failure reason distribution'}</span>
+              <span className="text-[10px] text-muted-foreground">{isEn ? `${analytics.failed} failures total` : `common ${analytics.failed} failed`}</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {analytics.topErrors.map(([cat, count]) => {
@@ -3742,10 +3742,10 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
           </div>
         )}
 
-        {/* 登录方式对比 */}
+        {/* Comparison of login methods */}
         {Object.keys(analytics.byMode).length > 1 && (
           <div>
-            <div className="text-xs font-medium mb-2">{isEn ? 'Mode comparison' : '登录方式对比'}</div>
+            <div className="text-xs font-medium mb-2">{isEn ? 'Mode comparison' : 'Comparison of login methods'}</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
               {Object.entries(analytics.byMode).map(([m, v]) => {
                 const tot = v.success + v.failed
@@ -3762,7 +3762,7 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
                       <div className={cn('h-full', srBg)} style={{ width: `${sr}%` }} />
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-1">
-                      ✓{v.success} / ✗{v.failed} ({isEn ? 'total' : '共'} {tot})
+                      ✓{v.success} / ✗{v.failed} ({isEn ? 'total' : 'common'} {tot})
                     </div>
                   </div>
                 )
@@ -3775,13 +3775,13 @@ function RegisterAnalyticsReport({ history }: RegisterAnalyticsProps): React.Rea
   )
 }
 
-/** 24 小时分布 SVG 图（平滑曲线 + 渐变填充） */
+/** 24 Hourly distribution SVG graph (smooth curve + gradient fill) */
 function HourDistributionChart({ byHour }: { byHour: Record<number, { success: number; failed: number }> }): React.ReactNode {
   const width = 720, height = 100, padTop = 8, padBottom = 18, padX = 12
   const innerH = height - padTop - padBottom
-  const stepX = (width - padX * 2) / 23  // 24 个点
+  const stepX = (width - padX * 2) / 23  // 24 point
 
-  // 计算最大值
+  // Calculate the maximum value
   let maxVal = 0
   for (let h = 0; h < 24; h++) {
     const v = byHour[h] || { success: 0, failed: 0 }
@@ -3795,14 +3795,14 @@ function HourDistributionChart({ byHour }: { byHour: Record<number, { success: n
     return [x, y]
   }
 
-  // 生成两条平滑路径
+  // Generate two smooth paths
   const buildPath = (key: 'success' | 'failed'): { line: string; area: string } => {
     const points: [number, number][] = []
     for (let h = 0; h < 24; h++) {
       const v = byHour[h] || { success: 0, failed: 0 }
       points.push(pointAt(h, v[key]))
     }
-    // 平滑曲线（Catmull-Rom 转 Bezier）
+    // smooth curve (Catmull-Rom change Bezier）
     let line = `M${points[0][0]},${points[0][1]}`
     for (let i = 0; i < points.length - 1; i++) {
       const p0 = points[i === 0 ? i : i - 1]
@@ -3815,7 +3815,7 @@ function HourDistributionChart({ byHour }: { byHour: Record<number, { success: n
       const cp2y = p2[1] - (p3[1] - p1[1]) / 6
       line += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2[0]},${p2[1]}`
     }
-    // 闭合下方区域
+    // Close the lower area
     const area = line + ` L${padX + 23 * stepX},${padTop + innerH} L${padX},${padTop + innerH} Z`
     return { line, area }
   }
@@ -3836,7 +3836,7 @@ function HourDistributionChart({ byHour }: { byHour: Record<number, { success: n
         </linearGradient>
       </defs>
 
-      {/* 网格 */}
+      {/* grid */}
       {[0.25, 0.5, 0.75].map((p) => (
         <line
           key={p}
@@ -3846,15 +3846,15 @@ function HourDistributionChart({ byHour }: { byHour: Record<number, { success: n
         />
       ))}
 
-      {/* 失败区域和线 */}
+      {/* Failure areas and lines */}
       <path d={fail.area} fill="url(#failGradient)" />
       <path d={fail.line} fill="none" stroke="rgb(239 68 68)" strokeWidth="1.5" opacity="0.8" />
 
-      {/* 成功区域和线 */}
+      {/* Success areas and lines */}
       <path d={succ.area} fill="url(#succGradient)" />
       <path d={succ.line} fill="none" stroke="rgb(34 197 94)" strokeWidth="2" />
 
-      {/* 数据点 */}
+      {/* data points */}
       {Array.from({ length: 24 }).map((_, h) => {
         const v = byHour[h] || { success: 0, failed: 0 }
         if (v.success === 0 && v.failed === 0) return null
@@ -3872,7 +3872,7 @@ function HourDistributionChart({ byHour }: { byHour: Record<number, { success: n
         )
       })}
 
-      {/* X 轴刻度 */}
+      {/* X axis scale */}
       {[0, 6, 12, 18, 23].map((h) => {
         const x = padX + h * stepX
         return (
@@ -3888,7 +3888,7 @@ function HourDistributionChart({ byHour }: { byHour: Record<number, { success: n
   )
 }
 
-/** 7 日趋势柱状图（叠加 + 渐变） */
+/** 7 Daily trend histogram (overlay + gradient) */
 function SevenDayChart({ sevenDays, byDay }: {
   sevenDays: string[]
   byDay: Record<string, { success: number; failed: number }>
@@ -3918,7 +3918,7 @@ function SevenDayChart({ sevenDays, byDay }: {
         </linearGradient>
       </defs>
 
-      {/* 网格 */}
+      {/* grid */}
       {[0.5].map((p) => (
         <line
           key={p}
@@ -3939,7 +3939,7 @@ function SevenDayChart({ sevenDays, byDay }: {
 
         return (
           <g key={day}>
-            {/* 失败（上面） */}
+            {/* Failure (above) */}
             {v.failed > 0 && (
               <rect
                 x={x} y={yBase - totalH}
@@ -3948,7 +3948,7 @@ function SevenDayChart({ sevenDays, byDay }: {
                 rx="2"
               />
             )}
-            {/* 成功（下面） */}
+            {/* Success (below) */}
             {v.success > 0 && (
               <rect
                 x={x} y={yBase - succH}
@@ -3957,7 +3957,7 @@ function SevenDayChart({ sevenDays, byDay }: {
                 rx="2"
               />
             )}
-            {/* 总数标签 */}
+            {/* total label */}
             {total > 0 && (
               <text
                 x={x + barW / 2}
@@ -3970,7 +3970,7 @@ function SevenDayChart({ sevenDays, byDay }: {
                 {total}
               </text>
             )}
-            {/* X 轴标签 */}
+            {/* X axis labels */}
             <text
               x={x + barW / 2}
               y={height - 4}
@@ -3990,8 +3990,8 @@ function SevenDayChart({ sevenDays, byDay }: {
 }
 
 /**
- * 占用邮箱黑名单管理（A5 边缘修复）
- * 用户可以查看 / 搜索 / 删除单个 / 清空黑名单中的邮箱
+ * Occupied mailbox blacklist management (A5 edge repair)
+ * Users can view / search / Delete a single / Clear the mailboxes in the blacklist
  */
 function EmailBlacklistManager(): React.ReactNode {
   const { t } = useTranslation()
@@ -4012,7 +4012,7 @@ function EmailBlacklistManager(): React.ReactNode {
   }, [refresh])
 
   const clearAll = useCallback((): void => {
-    if (!confirm(isEn ? `Clear all ${items.length} emails from blacklist?` : `确定清空黑名单中的 ${items.length} 个邮箱？`)) return
+    if (!confirm(isEn ? `Clear all ${items.length} emails from blacklist?` : `Confirm to clear the blacklist ${items.length} Email?`)) return
     clearEmailBlacklist()
     refresh()
   }, [items.length, refresh, isEn])
@@ -4035,10 +4035,10 @@ function EmailBlacklistManager(): React.ReactNode {
         >
           <CardTitle className="text-sm flex items-center gap-2">
             <XCircle className="h-4 w-4 text-amber-500" />
-            {isEn ? 'Used-email blacklist' : '占用邮箱黑名单'}
+            {isEn ? 'Used-email blacklist' : 'Occupy mailbox blacklist'}
             <Badge variant="outline" className="text-[10px]">{items.length}</Badge>
           </CardTitle>
-          <span className="text-xs text-muted-foreground">{expanded ? (isEn ? '▼ Collapse' : '▼ 收起') : (isEn ? '▶ Expand' : '▶ 展开')}</span>
+          <span className="text-xs text-muted-foreground">{expanded ? (isEn ? '▼ Collapse' : '▼ close') : (isEn ? '▶ Expand' : '▶ Expand')}</span>
         </button>
       </CardHeader>
       {expanded && (
@@ -4047,11 +4047,11 @@ function EmailBlacklistManager(): React.ReactNode {
             <Input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder={isEn ? 'Search email...' : '搜索邮箱...'}
+              placeholder={isEn ? 'Search email...' : 'Search mailbox...'}
               className="h-8 text-xs max-w-xs"
             />
             <Button size="sm" variant="ghost" onClick={refresh}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" /> {isEn ? 'Refresh' : '刷新'}
+              <RefreshCw className="h-3.5 w-3.5 mr-1" /> {isEn ? 'Refresh' : 'refresh'}
             </Button>
             <Button
               size="sm"
@@ -4060,17 +4060,17 @@ function EmailBlacklistManager(): React.ReactNode {
               onClick={clearAll}
               disabled={items.length === 0}
             >
-              <Trash2 className="h-3.5 w-3.5 mr-1" /> {isEn ? 'Clear all' : '全部清空'}
+              <Trash2 className="h-3.5 w-3.5 mr-1" /> {isEn ? 'Clear all' : 'Clear all'}
             </Button>
           </div>
 
           {items.length === 0 ? (
             <div className="py-6 text-center text-xs text-muted-foreground">
-              {isEn ? 'Blacklist is empty' : '黑名单为空'}
+              {isEn ? 'Blacklist is empty' : 'Blacklist is empty'}
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-4 text-center text-xs text-muted-foreground">
-              {isEn ? 'No matches' : '无匹配项'}
+              {isEn ? 'No matches' : 'No match'}
             </div>
           ) : (
             <div className="max-h-60 overflow-y-auto border rounded">
@@ -4083,7 +4083,7 @@ function EmailBlacklistManager(): React.ReactNode {
                   <button
                     onClick={() => removeOne(email)}
                     className="p-1 rounded hover:bg-destructive/10 text-destructive"
-                    title={isEn ? 'Remove from blacklist' : '从黑名单移除'}
+                    title={isEn ? 'Remove from blacklist' : 'Remove from blacklist'}
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -4093,8 +4093,8 @@ function EmailBlacklistManager(): React.ReactNode {
           )}
 
           <p className="text-[10px] text-muted-foreground italic">
-            黑名单基于注册失败时的「email_used」错误自动添加。被加入的邮箱在后续批量注册时会被跳过。
-            如果 Kiro 释放了过期邮箱，可在此手动移除让它重新参与注册。
+            The blacklist is based on "email_used” errors are added automatically. The added email addresses will be skipped in subsequent batch registrations.
+            if Kiro The expired mailbox is released and can be manually removed here to allow it to participate in registration again.
           </p>
         </CardContent>
       )}

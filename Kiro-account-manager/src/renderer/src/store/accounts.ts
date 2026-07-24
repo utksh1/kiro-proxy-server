@@ -25,10 +25,10 @@ import { DEFAULT_PROXY_POOL_CONFIG } from '../types/proxy'
 import { useWebhookStore, type WebhookEvent, type WebhookMessage } from './webhooks'
 
 // ============================================
-// 账号管理 Store
+// Account management Store
 // ============================================
 
-// 生成随机 64 位十六进制设备 ID
+// Generate random 64 bit hexadecimal device ID
 function generateRandomMachineId(): string {
   const bytes = new Uint8Array(32)
   crypto.getRandomValues(bytes)
@@ -37,29 +37,29 @@ function generateRandomMachineId(): string {
     .join('')
 }
 
-// 自动 Token 刷新定时器
+// automatic Token refresh timer
 let tokenRefreshTimer: ReturnType<typeof setInterval> | null = null
-// 刷新提前量必须 ≥ 2× 检查间隔，否则账号会在两次 tick 之间过期：
-// 某次 tick 时剩余刚好略超阈值会被跳过，下一次 tick（间隔分钟后）时早已过期。
-// 再叠加 IPC + OIDC 网络刷新本身的耗时，余量不足就会出现"过期才刷"。
+// The refresh advance must be ≥ 2× Check the interval, otherwise the account will be in twice tick Expires between:
+// Some time tick When the remaining value just slightly exceeds the threshold, it will be skipped. Next time tick(interval minutes later) time has expired.
+// Overlay again IPC + OIDC The network refresh itself takes time and insufficient margin will occur."Use only when expired"。
 const TOKEN_REFRESH_MIN_LEAD_MS = 10 * 60 * 1000
 function tokenRefreshLeadMs(intervalMin: number): number {
   return Math.max(intervalMin * 2 * 60 * 1000, TOKEN_REFRESH_MIN_LEAD_MS)
 }
 
-// 持久化防抖：合并连续 mutation 为单次写盘，避免后台刷新风暴时 IPC + IO 风暴
+// Persistent anti-shake: merge continuous mutation It is a single disk write to avoid background refresh storms. IPC + IO storm
 const SAVE_DEBOUNCE_MS = 500
-/** 防抖最大延迟：连续 mutation 时也最迟在此时间内落盘一次，防止风暴下数据长时间不入磁盘 */
+/** Anti-shake maximum delay: continuous mutation The disk should be downloaded once every time and at the latest within this time to prevent data from not being stored on the disk for a long time during a storm. */
 const SAVE_MAX_WAIT_MS = 5000
 let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let saveMaxWaitTimer: ReturnType<typeof setTimeout> | null = null
 let saveInFlight: Promise<void> | null = null
-/** 等待本轮防抖窗口落盘的所有调用方 resolver；批量唤醒，避免风暴时 Promise 永久挂起 */
+/** All callers waiting for the anti-shake window to be dropped in this round resolver;Wake up in batches to avoid storms Promise hang permanently */
 let savePendingResolvers: Array<() => void> = []
 
-// ============ getFilteredAccounts / getStats 引用缓存 ============
-// 大账号量场景下这两个 selector 每次 re-render 都跑 O(n) 计算（filter + sort）
-// 通过引用比较缓存输入快照，命中时直接返回上次结果，将 N×n 计算降至 1×n
+// ============ getFilteredAccounts / getStats Reference cache ============
+// In the scenario of large account volume, these two selector every time re-render All run away O(n) calculate(filter + sort）
+// Compare cached input snapshots by reference, and directly return the last result when a hit occurs. N×n The calculation reduces to 1×n
 let _filterCache: {
   accounts: unknown
   filter: unknown
@@ -74,9 +74,9 @@ let _statsCache: {
 } | null = null
 
 /**
- * 异步同步本地 SSO 缓存中的激活账号到 store。
- * 含潜在的网络请求（verifyAccountCredentials），从 loadFromStorage 中拆出来
- * 异步执行，避免阻塞首屏加载（isLoading）。
+ * asynchronous synchronous local SSO The activation account in the cache arrives store。
+ * Contains potential network requests (verifyAccountCredentials),from loadFromStorage Take it out
+ * Asynchronous execution to avoid blocking the first screen loading (isLoading）。
  */
 type SetFn = (
   partial:
@@ -95,7 +95,7 @@ async function syncLocalSsoAccountAsync(
     const localRefreshToken = localResult.data.refreshToken
     const currentAccounts = get().accounts
 
-    // 查找匹配的账号
+    // Find matching accounts
     let foundAccountId: string | null = null
     for (const [id, account] of currentAccounts) {
       if (account.credentials.refreshToken === localRefreshToken) {
@@ -105,9 +105,9 @@ async function syncLocalSsoAccountAsync(
     }
 
     if (foundAccountId) {
-      // 找到匹配的账号，更新 activeAccountId
+      // Find the matching account and update it activeAccountId
       set({ activeAccountId: foundAccountId })
-      // 同步 isActive 字段
+      // synchronous isActive Field
       set((state) => {
         const accounts = new Map(state.accounts)
         for (const [id, account] of accounts) {
@@ -123,7 +123,7 @@ async function syncLocalSsoAccountAsync(
       return
     }
 
-    // 未找到匹配账号，尝试自动导入（网络请求）
+    // No matching account found, try to import automatically (network request)
     console.log('[Store] Local account not found in app, importing...')
     const importResult = await window.api.loadKiroCredentials()
     if (!importResult.success || !importResult.data) return
@@ -192,7 +192,7 @@ async function syncLocalSsoAccountAsync(
 
     set((state) => {
       const accounts = new Map(state.accounts)
-      // 取消其它账号的激活状态
+      // Cancel the activation status of other accounts
       for (const [id, account] of accounts) {
         if (account.isActive) {
           accounts.set(id, { ...account, isActive: false })
@@ -217,16 +217,16 @@ export function isBannedAccountError(error?: string): boolean {
     lowerError.includes('temporarily_suspended') ||
     lowerError.includes('temporarily suspended') ||
     (lowerError.includes('user id is') && lowerError.includes('suspended')) ||
-    lowerError.includes('账户已封禁') ||
-    lowerError.includes('已封禁') ||
+    lowerError.includes('Account has been banned') ||
+    lowerError.includes('Banned') ||
     /\b423\b/.test(lowerError)
   if (hasSuspendedSignal) return true
   if (
     lowerError.includes('fetch failed') ||
     lowerError.includes('network') ||
     lowerError.includes('token expired') ||
-    lowerError.includes('token 过期') ||
-    lowerError.includes('刷新失败') ||
+    lowerError.includes('token Expired') ||
+    lowerError.includes('Refresh failed') ||
     lowerError.includes('unauthorizedexception')
   ) {
     return false
@@ -234,91 +234,91 @@ export function isBannedAccountError(error?: string): boolean {
   return false
 }
 
-// 自动换号定时器
+// Automatic number change timer
 let autoSwitchTimer: ReturnType<typeof setInterval> | null = null
 
-// 定时自动保存定时器（防止数据丢失）
+// Scheduled automatic save timer (to prevent data loss)
 let autoSaveTimer: ReturnType<typeof setInterval> | null = null
-const AUTO_SAVE_INTERVAL = 30 * 1000 // 每 30 秒自动保存一次
-let lastSaveHash = '' // 用于检测数据是否变化
+const AUTO_SAVE_INTERVAL = 30 * 1000 // Every 30 Automatically save once every second
+let lastSaveHash = '' // Used to detect whether data changes
 
 interface AccountsState {
-  // 应用版本号
+  // Application version number
   appVersion: string
 
-  // 数据
+  // data
   accounts: Map<string, Account>
   groups: Map<string, AccountGroup>
   tags: Map<string, AccountTag>
 
-  // 当前激活账号
+  // Currently active account
   activeAccountId: string | null
 
-  // 筛选和排序
+  // Filter and sort
   filter: AccountFilter
-  /** 当前激活的分组 Tab：'all' | 'ungrouped' | <groupId>，互斥 */
+  /** Currently active group Tab：'all' | 'ungrouped' | <groupId>, mutually exclusive */
   activeGroupTab: string
   sort: AccountSort
 
-  // 选中的账号（用于批量操作）
+  // Selected account (for batch operations)
   selectedIds: Set<string>
 
-  // 加载状态
+  // Loading status
   isLoading: boolean
   isSyncing: boolean
 
-  // 自动刷新设置
+  // Auto refresh settings
   autoRefreshEnabled: boolean
-  autoRefreshInterval: number // 分钟
-  autoRefreshConcurrency: number // 自动刷新并发数
-  autoRefreshSyncInfo: boolean // 刷新时是否同步检测账户信息（用量、订阅、封禁状态）
-  statusCheckInterval: number // 分钟
+  autoRefreshInterval: number // minute
+  autoRefreshConcurrency: number // Automatically refresh the number of concurrency
+  autoRefreshSyncInfo: boolean // Whether to synchronize the detection of account information (usage, subscription, ban status) when refreshing
+  statusCheckInterval: number // minute
 
-  // 主动续期开关（持久化在 main 进程的 electron-store；这里只是镜像，不写 saveToStorage）
+  // Active renewal switch (persistent in main process electron-store;This is just a mirror image, no writing saveToStorage）
   proactiveRenewalEnabled: boolean
   proactiveRenewalLeadMinutes: number
 
-  // 隐私模式
+  // privacy mode
   privacyMode: boolean
 
-  // 使用量显示精度
-  usagePrecision: boolean // true: 显示精确小数, false: 显示整数
+  // Usage display accuracy
+  usagePrecision: boolean // true: Show exact decimals, false: Display integer
 
-  // 代理设置
+  // proxy settings
   proxyEnabled: boolean
-  proxyUrl: string // 格式: http://host:port 或 socks5://host:port
+  proxyUrl: string // Format: http://host:port or socks5://host:port
 
-  // 自动换号设置
+  // Automatic number change settings
   autoSwitchEnabled: boolean
-  autoSwitchThreshold: number // 余额阈值，低于此值时自动切换
-  autoSwitchInterval: number // 检查间隔（分钟）
+  autoSwitchThreshold: number // Balance threshold, automatically switch when it is lower than this value
+  autoSwitchInterval: number // Check interval (minutes)
 
-  // 批量导入设置
-  batchImportConcurrency: number // 批量导入并发数
+  // Batch import settings
+  batchImportConcurrency: number // Number of concurrent batch imports
 
-  // 登录浏览器隐私模式
-  loginPrivateMode: boolean // 登录时使用浏览器隐私/无痕模式
+  // Log in to browser privacy mode
+  loginPrivateMode: boolean // Use browser privacy when logged in/Incognito mode
 
-  // 切号目标设置
-  switchTarget: 'ide' | 'cli' | 'both' // ide=仅 Kiro IDE, cli=仅 Kiro CLI, both=两者都切
+  // Number cutting target setting
+  switchTarget: 'ide' | 'cli' | 'both' // ide=only Kiro IDE, cli=only Kiro CLI, both=cut both
 
-  // 主题设置
-  theme: string // 主题名称: default, purple, emerald, orange, rose, cyan, amber
-  darkMode: boolean // 深色模式
+  // Theme settings
+  theme: string // Topic name: default, purple, emerald, orange, rose, cyan, amber
+  darkMode: boolean // dark mode
 
-  // 语言设置
-  language: 'auto' | 'en' | 'zh' // auto: 跟随系统
+  // Language settings
+  language: 'auto' | 'en' | 'zh' // auto: Follow the system
 
-  // 机器码管理
+  // Machine code management
   machineIdConfig: {
-    autoSwitchOnAccountChange: boolean // 切号时自动更换机器码
-    bindMachineIdToAccount: boolean // 账户机器码绑定
-    useBindedMachineId: boolean // 使用绑定的机器码（否则随机生成）
+    autoSwitchOnAccountChange: boolean // Automatically change the machine code when cutting numbers
+    bindMachineIdToAccount: boolean // Account machine code binding
+    useBindedMachineId: boolean // Use bound machine code (otherwise randomly generated)
   }
-  currentMachineId: string // 当前机器码
-  originalMachineId: string | null // 备份的原始机器码
-  originalBackupTime: number | null // 原始机器码备份时间
-  accountMachineIds: Record<string, string> // 账户绑定的机器码映射
+  currentMachineId: string // Current machine code
+  originalMachineId: string | null // Backup original machine code
+  originalBackupTime: number | null // Original machine code backup time
+  accountMachineIds: Record<string, string> // Machine code mapping for account binding
   machineIdHistory: Array<{
     id: string
     machineId: string
@@ -328,49 +328,49 @@ interface AccountsState {
     accountEmail?: string
   }>
 
-  // ============ 代理池（用于注册时 IP 轮换）============
-  /** 代理条目列表（Map 保证 O(1) 查找） */
+  // ============ Agent pool (used when registering IP rotation)============
+  /** Agent entry list (Map ensure O(1) Find) */
   proxyPool: Map<string, ProxyEntry>
-  /** 代理池配置（启用状态、调度策略等） */
+  /** Agent pool configuration (enablement status, scheduling policy, etc.) */
   proxyPoolConfig: ProxyPoolConfig
-  /** 轮询调度光标（仅用于 round_robin 策略） */
+  /** Poll schedule cursor (only for round_robin Strategy) */
   proxyPoolCursor: number
-  /** 账号-代理绑定映射（accountId → proxyId）；用于"反代时 N 个账号共用 1 个 IP" */
+  /** account-proxy binding map(accountId → proxyId); used for"Against the times N Shared by accounts 1 indivual IP" */
   accountProxyBindings: Record<string, string>
 }
 
 interface AccountsActions {
-  // 账号 CRUD
+  // account CRUD
   addAccount: (account: Omit<Account, 'id' | 'createdAt' | 'isActive'>) => string
   updateAccount: (id: string, updates: Partial<Account>) => void
   removeAccount: (id: string) => void
   removeAccounts: (ids: string[]) => BatchOperationResult
 
-  // 激活账号
+  // Activate account
   setActiveAccount: (id: string | null) => void
   getActiveAccount: () => Account | null
 
-  // 分组操作
+  // Grouping operations
   addGroup: (group: Omit<AccountGroup, 'id' | 'createdAt' | 'order'>) => string
   updateGroup: (id: string, updates: Partial<AccountGroup>) => void
   removeGroup: (id: string) => void
   moveAccountsToGroup: (accountIds: string[], groupId: string | undefined) => void
 
-  // 标签操作
+  // Label operations
   addTag: (tag: Omit<AccountTag, 'id'>) => string
   updateTag: (id: string, updates: Partial<AccountTag>) => void
   removeTag: (id: string) => void
   addTagToAccounts: (accountIds: string[], tagId: string) => void
   removeTagFromAccounts: (accountIds: string[], tagId: string) => void
 
-  // 筛选和排序
+  // Filter and sort
   setFilter: (filter: AccountFilter) => void
   clearFilter: () => void
   setActiveGroupTab: (tab: string) => void
   setSort: (sort: AccountSort) => void
   getFilteredAccounts: () => Account[]
 
-  // 选择操作
+  // Select action
   selectAccount: (id: string) => void
   deselectAccount: (id: string) => void
   selectAll: () => void
@@ -378,74 +378,74 @@ interface AccountsActions {
   toggleSelection: (id: string) => void
   getSelectedAccounts: () => Account[]
 
-  // 导入导出
+  // Import and export
   exportAccounts: (ids?: string[]) => AccountExportData
   importAccounts: (items: AccountImportItem[]) => BatchOperationResult
   importFromExportData: (data: AccountExportData) => BatchOperationResult
 
-  // 状态管理
+  // Status management
   updateAccountStatus: (id: string, status: AccountStatus, error?: string) => void
   refreshAccountToken: (id: string) => Promise<boolean>
   batchRefreshTokens: (ids: string[]) => Promise<BatchOperationResult>
   checkAccountStatus: (id: string) => Promise<void>
   batchCheckStatus: (ids: string[]) => Promise<BatchOperationResult>
 
-  // 统计
+  // statistics
   getStats: () => AccountStats
 
-  // 持久化
+  // persistence
   loadFromStorage: () => Promise<void>
-  /** 防抖触发持久化（推荐：高频 mutation 自动合并写盘） */
+  /** Anti-shake trigger persistence (recommended: high frequency mutation Automatically merge write disks) */
   saveToStorage: () => Promise<void>
-  /** 立即持久化（用于 beforeunload 或关键操作场景） */
+  /** Immediate persistence (for beforeunload or key operational scenarios) */
   flushSaveImmediately: () => Promise<void>
 
-  // 设置
+  // set up
   setAutoRefresh: (enabled: boolean, interval?: number) => void
   setAutoRefreshConcurrency: (concurrency: number) => void
   setAutoRefreshSyncInfo: (enabled: boolean) => void
-  /** 调 main 进程的 IPC，同步开启/关闭主动续期；成功后更新本地镜像 */
+  /** tune main process IPC, synchronization is enabled/Turn off active renewal; update the local image after success */
   setProactiveRenewalEnabled: (enabled: boolean) => Promise<{ success: boolean; error?: string }>
-  /** 从 main 进程读取主动续期开关当前状态 */
+  /** from main The process reads the current status of the active renewal switch */
   loadProactiveRenewalEnabled: () => Promise<void>
   setStatusCheckInterval: (interval: number) => void
 
-  // 隐私模式
+  // privacy mode
   setPrivacyMode: (enabled: boolean) => void
   maskEmail: (email: string) => string
   maskNickname: (nickname: string | undefined) => string
 
-  // 使用量精度
+  // Usage accuracy
   setUsagePrecision: (enabled: boolean) => void
 
-  // 代理设置
+  // proxy settings
   setProxy: (enabled: boolean, url?: string) => Promise<void>
 
-  // 主题设置
+  // Theme settings
   setTheme: (theme: string) => void
   setDarkMode: (enabled: boolean) => void
   applyTheme: () => void
 
-  // 语言设置
+  // Language settings
   setLanguage: (language: 'auto' | 'en' | 'zh') => void
 
-  // 自动换号
+  // Automatic number change
   setAutoSwitch: (enabled: boolean, threshold?: number, interval?: number) => void
 
-  // 批量导入并发数
+  // Number of concurrent batch imports
   setBatchImportConcurrency: (concurrency: number) => void
 
-  // 登录浏览器隐私模式
+  // Log in to browser privacy mode
   setLoginPrivateMode: (enabled: boolean) => void
 
-  // 切号目标设置
+  // Number cutting target setting
   setSwitchTarget: (target: 'ide' | 'cli' | 'both') => void
 
   startAutoSwitch: () => void
   stopAutoSwitch: () => void
   checkAndAutoSwitch: () => Promise<void>
 
-  // 自动 Token 刷新
+  // automatic Token refresh
   startAutoTokenRefresh: () => void
   stopAutoTokenRefresh: () => void
   checkAndRefreshExpiringTokens: () => Promise<void>
@@ -453,16 +453,16 @@ interface AccountsActions {
   triggerBackgroundRefresh: () => Promise<void>
   handleBackgroundRefreshResult: (data: { id: string; success: boolean; data?: unknown; error?: string }) => void
   handleBackgroundCheckResult: (data: { id: string; success: boolean; data?: unknown; error?: string }) => void
-  /** 批量处理后台刷新结果：一次 set 应用 N 条结果，消除 N 次 Map 全量复制 */
+  /** Batch processing background refresh results: once set application N results, eliminate N Second-rate Map Full copy */
   applyBackgroundRefreshResults: (items: Array<{ id: string; success: boolean; data?: unknown; error?: string }>) => void
-  /** 批量处理后台检查结果：一次 set 应用 N 条结果 */
+  /** Batch processing background check results: once set application N results */
   applyBackgroundCheckResults: (items: Array<{ id: string; success: boolean; data?: unknown; error?: string }>) => void
 
-  // 定时自动保存（防止数据丢失）
+  // Automatically save regularly (to prevent data loss)
   startAutoSave: () => void
   stopAutoSave: () => void
 
-  // 机器码管理
+  // Machine code management
   setMachineIdConfig: (config: Partial<{
     autoSwitchOnAccountChange: boolean
     bindMachineIdToAccount: boolean
@@ -476,65 +476,65 @@ interface AccountsActions {
   backupOriginalMachineId: () => void
   clearMachineIdHistory: () => void
 
-  // ============ 代理池操作 ============
-  /** 添加单个代理（自动解析协议/主机/端口/认证） */
+  // ============ Agent pool operations ============
+  /** Add a single proxy (automatically resolve protocols/Host/port/certification) */
   addProxy: (url: string, options?: { label?: string; source?: string; tags?: string[] }) => string | null
-  /** 批量导入（文本，每行一个，支持 http://host:port、socks5://user:pass@host:port、host:port 等） */
+  /** Batch import (text, one per line, supported http://host:port、socks5://user:pass@host:port、host:port wait) */
   importProxies: (text: string) => { added: number; skipped: number; failed: number }
-  /** 删除代理 */
+  /** Delete proxy */
   removeProxy: (id: string) => void
-  /** 批量删除 */
+  /** Batch delete */
   removeProxies: (ids: string[]) => void
-  /** 切换启用状态 */
+  /** Toggle enabled status */
   toggleProxyEnabled: (id: string, enabled?: boolean) => void
-  /** 更新代理元数据 */
+  /** Update agent metadata */
   updateProxy: (id: string, updates: Partial<ProxyEntry>) => void
-  /** 测试单个代理（异步，主进程执行） */
+  /** Testing a single agent (asynchronous, main process execution) */
   validateProxy: (id: string) => Promise<ProxyValidationResult>
-  /** 批量测试（并发） */
+  /** Batch testing (concurrency) */
   validateProxiesBatch: (ids: string[], concurrency?: number) => Promise<void>
-  /** 清空所有代理 */
+  /** Clear all proxies */
   clearProxyPool: () => void
-  /** 更新代理池配置 */
+  /** Update proxy pool configuration */
   setProxyPoolConfig: (config: Partial<ProxyPoolConfig>) => void
-  /** 按当前策略挑选下一个可用代理（注册流程内部调用） */
+  /** Select the next available agent according to the current policy (called internally in the registration process) */
   pickNextProxy: () => ProxyEntry | null
-  /** 标记代理使用结果（供注册流程上报，用于失败计数与自动停用） */
+  /** Mark agent usage results (for reporting during the registration process, for failure counting and automatic deactivation) */
   reportProxyResult: (id: string, success: boolean, boundEmail?: string, errorMsg?: string) => void
 
-  // ============ 账号-代理绑定（反代分桶）============
-  /** 把账号绑定到指定代理 */
+  // ============ account-Proxy binding (anti-generation bucketing)============
+  /** Bind the account to the designated agent */
   bindAccountToProxy: (accountId: string, proxyId: string) => void
-  /** 批量绑定（用于批量分配） */
+  /** Bulk binding (for bulk allocation) */
   bindAccountsToProxy: (accountIds: string[], proxyId: string) => void
-  /** 解除账号绑定 */
+  /** Unbind account */
   unbindAccountFromProxy: (accountId: string) => void
-  /** 清空全部账号绑定 */
+  /** Clear all account bindings */
   clearAccountProxyBindings: () => void
   /**
-   * 自动分配：把账号按 N:1 比例平均分配到当前启用的代理上
-   * @param accountsPerProxy 每个代理承载的账号数；为 0 表示尽量均分
-   * @param onlyUnbound 是否仅分配尚未绑定的账号；false 则重新分配全部
-   * @returns 分配统计
+   * Automatic allocation: press the account number N:1 The proportion is evenly distributed among the currently enabled agents.
+   * @param accountsPerProxy The number of accounts carried by each agent; is 0 Means to divide as equally as possible
+   * @param onlyUnbound Whether to assign only unbound accounts;false then reallocate all
+   * @returns Distribution statistics
    */
   autoDistributeAccountsToProxies: (params: {
     accountsPerProxy?: number
     onlyUnbound?: boolean
-    accountIds?: string[]  // 限定分配范围，不填则全部
+    accountIds?: string[]  // Limit the distribution range, if not filled in, all
   }) => { distributed: number; perProxy: Record<string, number>; skipped: number }
-  /** 读取账号绑定的代理 URL（供主进程同步用） */
+  /** Read the agent bound to the account URL(for main process synchronization) */
   getAccountProxyUrl: (accountId: string) => string | undefined
 }
 
 type AccountsStore = AccountsState & AccountsActions
 
-// 默认排序
+// Default sort
 const defaultSort: AccountSort = { field: 'lastUsedAt', order: 'desc' }
 
-// 默认筛选
+// Default filter
 const defaultFilter: AccountFilter = {}
 
-// 从 localStorage 恢复分组 Tab（遵循 Electron renderer 环境总是可用）
+// from localStorage recovery group Tab(follow Electron renderer environment is always available)
 const loadActiveGroupTab = (): string => {
   try {
     return localStorage.getItem('accounts_activeGroupTab') || 'all'
@@ -544,7 +544,7 @@ const loadActiveGroupTab = (): string => {
 }
 
 export const useAccountsStore = create<AccountsStore>()((set, get) => ({
-  // 初始状态
+  // initial state
   appVersion: '1.0.0',
   accounts: new Map(),
   groups: new Map(),
@@ -588,19 +588,19 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   accountMachineIds: {},
   machineIdHistory: [],
 
-  // 代理池初始状态
+  // Agent pool initial state
   proxyPool: new Map<string, ProxyEntry>(),
   proxyPoolConfig: { ...DEFAULT_PROXY_POOL_CONFIG },
   proxyPoolCursor: 0,
   accountProxyBindings: {},
 
-  // ==================== 账号 CRUD ====================
+  // ==================== account CRUD ====================
 
   addAccount: (accountData) => {
     const id = uuidv4()
     const now = Date.now()
 
-    // 如果没有提供 machineId，自动生成一个随机的 64 位十六进制设备 ID
+    // if not provided machineId, automatically generate a random 64 bit hexadecimal device ID
     const machineId = accountData.machineId || generateRandomMachineId()
 
     const account: Account = {
@@ -645,7 +645,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
       const activeAccountId = state.activeAccountId === id ? null : state.activeAccountId
 
-      // 同时清理账号-代理绑定
+      // Clean up the account at the same time-proxy binding
       const bindings = { ...state.accountProxyBindings }
       delete bindings[id]
 
@@ -683,7 +683,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     return result
   },
 
-  // ==================== 激活账号 ====================
+  // ==================== Activate account ====================
 
   setActiveAccount: async (id) => {
     const state = get()
@@ -691,7 +691,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     set((s) => {
       const accounts = new Map(s.accounts)
 
-      // 取消之前的激活状态
+      // Cancel previous activation status
       if (s.activeAccountId) {
         const prev = accounts.get(s.activeAccountId)
         if (prev) {
@@ -699,7 +699,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         }
       }
 
-      // 设置新的激活状态
+      // Set new activation status
       if (id) {
         const account = accounts.get(id)
         if (account) {
@@ -710,34 +710,34 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { accounts, activeAccountId: id }
     })
     
-    // 切换账号时自动更换机器码（如果启用）
+    // Automatically change the machine code when switching accounts (if enabled)
     if (id && state.machineIdConfig.autoSwitchOnAccountChange) {
       try {
         const account = state.accounts.get(id)
         
         if (state.machineIdConfig.bindMachineIdToAccount) {
-          // 使用账户绑定的机器码
+          // Use the machine code bound to the account
           let boundMachineId = state.accountMachineIds[id]
           
           if (!boundMachineId) {
-            // 如果没有绑定机器码，为该账户生成一个
+            // If there is no machine code bound, generate one for the account
             boundMachineId = await window.api.machineIdGenerateRandom()
             get().bindMachineIdToAccount(id, boundMachineId)
           }
           
           if (state.machineIdConfig.useBindedMachineId) {
-            // 使用绑定的机器码
+            // Use bound machine code
             await get().changeMachineId(boundMachineId)
           } else {
-            // 随机生成新机器码
+            // Randomly generate new machine code
             await get().changeMachineId()
           }
         } else {
-          // 每次切换都随机生成新机器码
+          // Randomly generate new machine code every time you switch
           await get().changeMachineId()
         }
         
-        // 更新历史记录
+        // Update history
         const newMachineId = get().currentMachineId
         set((s) => ({
           machineIdHistory: [
@@ -767,7 +767,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     return activeAccountId ? accounts.get(activeAccountId) ?? null : null
   },
 
-  // ==================== 分组操作 ====================
+  // ==================== Grouping operations ====================
 
   addGroup: (groupData) => {
     const id = uuidv4()
@@ -807,7 +807,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       const groups = new Map(state.groups)
       groups.delete(id)
 
-      // 移除账号的分组引用
+      // Remove account group reference
       const accounts = new Map(state.accounts)
       for (const [accountId, account] of accounts) {
         if (account.groupId === id) {
@@ -834,7 +834,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     get().saveToStorage()
   },
 
-  // ==================== 标签操作 ====================
+  // ==================== Label operations ====================
 
   addTag: (tagData) => {
     const id = uuidv4()
@@ -868,7 +868,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       const tags = new Map(state.tags)
       tags.delete(id)
 
-      // 移除账号的标签引用
+      // Remove account label reference
       const accounts = new Map(state.accounts)
       for (const [accountId, account] of accounts) {
         if (account.tags.includes(id)) {
@@ -915,7 +915,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     get().saveToStorage()
   },
 
-  // ==================== 筛选和排序 ====================
+  // ==================== Filter and sort ====================
 
   setFilter: (filter) => {
     set({ filter })
@@ -937,7 +937,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   getFilteredAccounts: () => {
     const { accounts, filter, sort, activeGroupTab } = get()
 
-    // 引用缓存命中：返回上次结果（数组同引用，便于消费方 useMemo 复用）
+    // Reference cache hit: Returns the last result (the array is the same as the reference, which is convenient for consumers useMemo multiplexing)
     if (
       _filterCache &&
       _filterCache.accounts === accounts &&
@@ -950,14 +950,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     let result = Array.from(accounts.values())
 
-    // 优先按分组 Tab 互斥过滤（与 filter.groupIds 独立）
+    // Prioritize by group Tab Mutually exclusive filtering (with filter.groupIds independent)
     if (activeGroupTab === 'ungrouped') {
       result = result.filter((a) => !a.groupId)
     } else if (activeGroupTab !== 'all') {
       result = result.filter((a) => a.groupId === activeGroupTab)
     }
 
-    // 应用筛选
+    // Apply filters
     if (filter.search) {
       const search = filter.search.toLowerCase()
       result = result.filter(
@@ -1018,12 +1018,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       )
     }
 
-    // 封禁筛选
+    // ban filter
     if (filter.bannedOnly) {
       result = result.filter((a) => isBannedAccountError(a.lastError))
     }
 
-    // 应用排序
+    // Apply sorting
     result.sort((a, b) => {
       let cmp = 0
 
@@ -1057,12 +1057,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return sort.order === 'desc' ? -cmp : cmp
     })
 
-    // 写入缓存：下次相同输入直接命中
+    // Write cache: The same input will hit directly next time
     _filterCache = { accounts, filter, sort, activeGroupTab, output: result }
     return result
   },
 
-  // ==================== 选择操作 ====================
+  // ==================== Select action ====================
 
   selectAccount: (id) => {
     set((state) => {
@@ -1108,7 +1108,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       .filter((a): a is Account => a !== undefined)
   },
 
-  // ==================== 导入导出 ====================
+  // ==================== Import and export ====================
 
   exportAccounts: (ids) => {
     const { accounts, groups, tags } = get()
@@ -1137,7 +1137,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   importAccounts: (items) => {
     const result: BatchOperationResult = { success: 0, failed: 0, errors: [] }
 
-    // 验证 idp 是否有效
+    // verify idp Is it valid?
     const validIdps = ['Google', 'Github', 'BuilderId'] as const
     const normalizeIdp = (idp?: string): IdpType => {
       if (!idp) return 'Google'
@@ -1145,7 +1145,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return normalized || 'Google'
     }
 
-    // 批量构造账号对象 + 一次 set，避免 N 次 new Map(O(n²)) 与 N 次 re-render
+    // Construct account objects in batches + once set,avoid N Second-rate new Map(O(n²)) and N Second-rate re-render
     const newAccounts: Account[] = []
     for (const item of items) {
       try {
@@ -1198,14 +1198,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     if (newAccounts.length > 0) {
       set((state) => {
-        // 仅一次完整 Map 复制
+        // complete only once Map copy
         const accounts = new Map(state.accounts)
         for (const account of newAccounts) {
           accounts.set(account.id, account)
         }
         return { accounts }
       })
-      // 防抖触发一次持久化
+      // Anti-shake triggers one-time persistence
       get().saveToStorage()
     }
 
@@ -1216,18 +1216,18 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     const result: BatchOperationResult = { success: 0, failed: 0, errors: [] }
     const { accounts: existingAccounts } = get()
     
-    // 检查账户是否已存在（同邮箱+同provider 或 同userId 才算重复）
+    // Check if the account already exists (same email address+sameprovider or sameuserId Only if it is repeated)
     const isAccountExists = (email: string, userId?: string, provider?: string): boolean => {
       return Array.from(existingAccounts.values()).some(acc => {
-        // userId 相同则重复
+        // userId Repeat if same
         if (userId && acc.userId === userId) return true
-        // email 相同且 provider 相同则重复（允许同邮箱不同登录方式）
+        // email same and provider If the same, it will be repeated (different login methods for the same email address are allowed)
         if (acc.email === email && acc.credentials.provider === provider) return true
         return false
       })
     }
     
-    // 去重：文件内部去重
+    // Deduplication: Deduplication within files
     const seenEmails = new Set<string>()
     const seenUserIds = new Set<string>()
     const uniqueAccounts = data.accounts.filter(acc => {
@@ -1239,12 +1239,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return true
     })
 
-    // 收集所有变更，一次性 set，避免 N 次 new Map（O(n²)）
+    // Collect all changes, once set,avoid N Second-rate new Map（O(n²)）
     let skipped = 0
     const accountsToAdd: Account[] = []
 
     for (const accountData of uniqueAccounts) {
-      // 检查本地是否已存在（传入 provider 参数）
+      // Check if local already exists (pass in provider parameter)
       if (isAccountExists(accountData.email, accountData.userId, accountData.credentials?.provider)) {
         skipped++
         continue
@@ -1261,7 +1261,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       }
     }
 
-    // 一次 set 应用所有分组、标签、账号 — 单次 re-render
+    // once set Apply all groups, labels, accounts — Single re-render
     if (data.groups.length > 0 || data.tags.length > 0 || accountsToAdd.length > 0) {
       set((state) => {
         const groups = data.groups.length > 0 ? new Map(state.groups) : state.groups
@@ -1280,11 +1280,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       })
     }
 
-    // 记录跳过数量
+    // Record skip count
     if (skipped > 0) {
       result.errors.push({
         id: 'skipped',
-        error: `跳过 ${skipped} 个已存在的账号`
+        error: `jump over ${skipped} existing accounts`
       })
     }
 
@@ -1292,7 +1292,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     return result
   },
 
-  // ==================== 状态管理 ====================
+  // ==================== Status management ====================
 
   updateAccountStatus: (id, status, error) => {
     const wasBanned = isBannedAccountError(get().accounts.get(id)?.lastError)
@@ -1311,14 +1311,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { accounts }
     })
     get().saveToStorage()
-    // 触发 webhook：账号刚被封禁时通知（已封禁的不重复）
+    // trigger webhook: Notification when the account has just been banned (those already banned will not be repeated)
     if (isBanned && !wasBanned) {
       const acc = get().accounts.get(id)
       triggerWebhook('account-banned', {
-        title: '账号被封禁',
-        message: `账号 ${acc?.email || id} 状态变为封禁`,
+        title: 'Account banned',
+        message: `account ${acc?.email || id} Status changed to banned`,
         level: 'error',
-        fields: { 邮箱: acc?.email || '-', 错误: error || '-' }
+        fields: { Mail: acc?.email || '-', mistake: error || '-' }
       })
     }
   },
@@ -1332,12 +1332,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     updateAccountStatus(id, 'refreshing')
 
     try {
-      // 通过主进程调用 Kiro API 刷新 Token（避免 CORS）
+      // Called through the main process Kiro API refresh Token(avoid CORS）
       const result = await window.api.refreshAccountToken(account)
 
       if (result.success && result.data) {
-        // 当 refresh 后 main 进程检测到该账号是 IDE 当前激活账号，会自动同步到磁盘 token 文件；
-        // 否则只更新反代 store，IDE 仍用旧 token —— 提醒用户避免误以为"刷新对 IDE 也生效了"
+        // when refresh back main The process detects that the account is IDE The currently activated account will be automatically synchronized to disk. token document;
+        // Otherwise only update the reverse generation store，IDE Still used token —— Remind users to avoid mistaking"refresh pair IDE Also effective"
         if (result.data.syncedToIde) {
           console.log(`[refreshAccountToken] Token refreshed AND synced to Kiro IDE (account=${account.email})`)
         } else {
@@ -1352,7 +1352,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           const accounts = new Map(state.accounts)
           const acc = accounts.get(id)
           if (acc) {
-            // Enterprise 账号刷新时主进程会返回真实 profileArn，持久化避免后续重复获取
+            // Enterprise When the account is refreshed, the main process will return true profileArn, persistence to avoid subsequent repeated acquisitions
             const resolvedProfileArn = result.data!.profileArn || acc.credentials.profileArn || acc.profileArn
             accounts.set(id, {
               ...acc,
@@ -1360,7 +1360,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
               credentials: {
                 ...acc.credentials,
                 accessToken: result.data!.accessToken,
-                // 如果返回了新的 refreshToken，更新它
+                // If a new one is returned refreshToken, update it
                 refreshToken: result.data!.refreshToken || acc.credentials.refreshToken,
                 expiresAt: Date.now() + result.data!.expiresIn * 1000,
                 profileArn: resolvedProfileArn
@@ -1376,12 +1376,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         return true
       } else {
         updateAccountStatus(id, 'error', result.error?.message)
-        // 触发 webhook：Token 刷新失败
+        // trigger webhook：Token Refresh failed
         triggerWebhook('token-expired', {
-          title: 'Token 刷新失败',
-          message: `账号 ${account.email} Token 刷新失败`,
+          title: 'Token Refresh failed',
+          message: `account ${account.email} Token Refresh failed`,
           level: 'warn',
-          fields: { 邮箱: account.email, 错误: result.error?.message || '-' }
+          fields: { Mail: account.email, mistake: result.error?.message || '-' }
         })
         return false
       }
@@ -1394,7 +1394,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   batchRefreshTokens: async (ids) => {
     const { accounts, autoRefreshConcurrency } = get()
     
-    // 收集需要刷新的账号
+    // Collect accounts that need to be refreshed
     const accountsToRefresh: Array<{
       id: string
       email: string
@@ -1438,7 +1438,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[BatchRefresh] Triggering background refresh for ${accountsToRefresh.length} accounts...`)
     
-    // 使用后台刷新 API（不阻塞 UI）
+    // Use background refresh API(not blocking UI）
     const result = await window.api.backgroundBatchRefresh(accountsToRefresh, autoRefreshConcurrency)
     
     return { 
@@ -1454,11 +1454,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     if (!account) return
 
-    // 设置刷新状态，提供视觉反馈
+    // Set refresh status and provide visual feedback
     updateAccountStatus(id, 'refreshing')
 
     try {
-      // 通过主进程调用 Kiro API 获取状态（避免 CORS）
+      // Called through the main process Kiro API Get status (avoid CORS）
       const result = await window.api.checkAccountStatus(account)
 
       if (result.success && result.data) {
@@ -1466,7 +1466,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           const accounts = new Map(state.accounts)
           const acc = accounts.get(id)
           if (acc) {
-            // 如果 token 被刷新，更新凭证
+            // if token Refreshed, update credentials
             const updatedCredentials = result.data!.newCredentials 
               ? {
                   ...acc.credentials,
@@ -1476,7 +1476,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
                 }
               : acc.credentials
 
-            // 合并 usage 数据，确保包含所有必要字段
+            // merge usage data, making sure to include all necessary fields
             const apiUsage = result.data!.usage
             const mergedUsage = apiUsage ? {
               current: apiUsage.current ?? acc.usage.current,
@@ -1493,14 +1493,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
               resourceDetail: apiUsage.resourceDetail
             } : acc.usage
 
-            // 合并订阅信息
+            // Merge subscription information
             const apiSub = result.data!.subscription
             const mergedSubscription = apiSub ? {
               ...acc.subscription,
               ...apiSub
             } : acc.subscription
 
-            // 转换 IDP 类型（保持原值优先，只有明确匹配时才更新）
+            // Convert IDP Type (keep the original value first, update only when there is a clear match)
             const apiIdp = result.data!.idp
             let idpType = acc.idp
             if (apiIdp) {
@@ -1509,12 +1509,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
               else if (apiIdp === 'Github') idpType = 'Github'
               else if (apiIdp === 'AWSIdC') idpType = 'AWSIdC'
               else if (apiIdp === 'Enterprise' || apiIdp === 'Internal') idpType = 'Enterprise'
-              // 未知类型保持原值，不强制改为 Internal
+              // Unknown types keep their original values ​​and are not forced to change to Internal
             }
 
             accounts.set(id, {
               ...acc,
-              // 更新邮箱（如果 API 返回了）
+              // Update email (if API returned)
               email: result.data!.email ?? acc.email,
               userId: result.data!.userId ?? acc.userId,
               idp: idpType,
@@ -1530,16 +1530,16 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         })
         get().saveToStorage()
         
-        // 如果刷新了 token，打印日志
+        // If refreshed token, print log
         if (result.data.newCredentials) {
           console.log(`[Account] Token refreshed for ${account?.email}`)
         }
       } else {
-        // 检查是否是封禁错误
+        // Check if it is a ban error
         const isBanned = (result.error as { isBanned?: boolean })?.isBanned
         if (isBanned) {
-          // 封禁账户：设置错误状态并标记为封禁
-          updateAccountStatus(id, 'error', `账户已封禁: ${result.error?.message}`)
+          // Ban account: Set error status and mark as banned
+          updateAccountStatus(id, 'error', `Account has been banned: ${result.error?.message}`)
         } else {
           updateAccountStatus(id, 'error', result.error?.message)
         }
@@ -1552,7 +1552,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   batchCheckStatus: async (ids) => {
     const { accounts, autoRefreshConcurrency } = get()
     
-    // 收集需要检查的账号（使用批量检查 API，不刷新 Token）
+    // Collect accounts that need to be checked (use batch check API, do not refresh Token）
     const accountsToCheck: Array<{
       id: string
       email: string
@@ -1594,7 +1594,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[BatchCheck] Triggering background check for ${accountsToCheck.length} accounts...`)
     
-    // 使用后台检查 API（只检查状态，不刷新 Token）
+    // Use background checks API(Only check status, do not refresh Token）
     const result = await window.api.backgroundBatchCheck(accountsToCheck, autoRefreshConcurrency)
     
     return { 
@@ -1604,12 +1604,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
   },
 
-  // ==================== 统计 ====================
+  // ==================== statistics ====================
 
   getStats: () => {
     const { accounts } = get()
 
-    // 引用缓存命中：避免每次重渲染重新 O(n) 遍历
+    // Reference cache hit: avoid re-rendering every time O(n) Traverse
     if (_statsCache && _statsCache.accounts === accounts) {
       return _statsCache.output
     }
@@ -1656,7 +1656,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           account.subscription.daysRemaining <= 7) {
         stats.expiringSoonCount++
       }
-      // 统计封禁账号
+      // Statistics of banned accounts
       if (isBannedAccountError(account.lastError)) {
         stats.bannedCount++
       }
@@ -1666,13 +1666,13 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     return stats
   },
 
-  // ==================== 持久化 ====================
+  // ==================== persistence ====================
 
   loadFromStorage: async () => {
     set({ isLoading: true })
 
     try {
-      // 获取应用版本号
+      // Get application version number
       const appVersion = await window.api.getAppVersion()
       set({ appVersion })
 
@@ -1682,7 +1682,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         const accounts = new Map(Object.entries(data.accounts ?? {}) as [string, Account][])
         const activeAccountId = data.activeAccountId ?? null
 
-        // 为没有 machineId 的现有账户生成一个
+        // for not having machineId Generate a
         let needsSave = false
         for (const [id, account] of accounts) {
           if (!account.machineId) {
@@ -1693,7 +1693,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           }
         }
 
-        // 根据 activeAccountId 重新同步所有账号的 isActive 状态，确保只有一个账号为激活状态
+        // according to activeAccountId Resync all accounts isActive status to ensure that only one account is active
         for (const [id, account] of accounts) {
           const shouldBeActive = id === activeAccountId
           if (account.isActive !== shouldBeActive) {
@@ -1737,30 +1737,30 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           accountProxyBindings: (data.accountProxyBindings as Record<string, string> | undefined) || {}
         })
 
-        // 应用主题
+        // Apply theme
         get().applyTheme()
 
-        // 如果代理已启用，通过 store 的 setProxy（会自动 normalize URL 并回写 UI）
+        // If the proxy is enabled, pass store of setProxy(will automatically normalize URL and write back UI）
         if (data.proxyEnabled && data.proxyUrl) {
           void get().setProxy(true, data.proxyUrl)
         }
 
-        // 如果自动换号已启用，启动定时器
+        // If automatic number change is enabled, start the timer
         if (data.autoSwitchEnabled) {
           get().startAutoSwitch()
         }
 
-        // 启动定时自动保存（防止数据丢失）
+        // Start scheduled automatic saving (to prevent data loss)
         get().startAutoSave()
 
-        // 如果生成了新的 machineId，保存到存储
+        // If a new one is generated machineId, save to storage
         if (needsSave) {
           console.log('[Store] Saving accounts with newly generated machineIds')
           get().saveToStorage()
         }
 
-        // SSO 同步（含潜在网络请求）异步执行，不阻塞首屏加载
-        // 完成后通过 set 应用结果，UI 会自然更新
+        // SSO Synchronous (including potential network requests) and asynchronous execution without blocking the loading of the first screen
+        // Pass after completion set application results,UI Will update naturally
         queueMicrotask(() => { void syncLocalSsoAccountAsync(get, set) })
       }
     } catch (error) {
@@ -1771,14 +1771,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   },
 
   /**
-   * 防抖触发持久化：连续 mutation 在 SAVE_DEBOUNCE_MS 内只写盘一次。
-   * 调用方仍可 await 该 Promise；返回的 Promise 会在防抖窗口结束并完成实际落盘后 resolve。
-   * 用于消除高频更新场景（如 1000 账号后台刷新风暴）下的 IPC/IO 抖动。
+   * Anti-shake trigger persistence: continuous mutation exist SAVE_DEBOUNCE_MS The disk is only written once.
+   * The caller can still await Should Promise;returned Promise It will end after the anti-shake window ends and the actual placement is completed. resolve。
+   * Used to eliminate high-frequency update scenarios (such as 1000 Account background refresh storm) IPC/IO Jitter.
    */
   /**
-   * 防抖触发持久化：连续 mutation 在 SAVE_DEBOUNCE_MS 内只写盘一次；
-   * 同时强制 SAVE_MAX_WAIT_MS 最大延迟，避免后台刷新风暴时一直被新调用 reset 导致永不落盘。
-   * 同窗口内的所有调用方共享一组 resolvers，实际落盘后批量唤醒。
+   * Anti-shake trigger persistence: continuous mutation exist SAVE_DEBOUNCE_MS The disk is only written once;
+   * Forced at the same time SAVE_MAX_WAIT_MS Maximum delay to avoid being called again during background refresh storm reset As a result, it will never be placed on the market.
+   * All callers in the same window share a set of resolvers, wake up in batches after the actual placement.
    */
   saveToStorage: async () => {
     return new Promise<void>((resolve) => {
@@ -1800,9 +1800,9 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   },
 
   /**
-   * 立即落盘（跳过防抖）。用于 beforeunload、关键操作前后强制持久化场景。
-   * 并发调用会自动等待同一次 in-flight 保存，避免重入。
-   * 同时会唤醒所有走 saveToStorage 在等本次窗口落盘的调用方。
+   * Immediately download (skipping anti-shake). used for beforeunload, forced persistence scenarios before and after key operations.
+   * Concurrent calls will automatically wait for the same in-flight Save to avoid re-entry.
+   * Will wake up all the walking saveToStorage The caller who is waiting for the order to be placed in this window.
    */
   flushSaveImmediately: async () => {
     if (saveDebounceTimer) { clearTimeout(saveDebounceTimer); saveDebounceTimer = null }
@@ -1888,7 +1888,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     return saveInFlight
   },
 
-  // ==================== 设置 ====================
+  // ==================== set up ====================
 
   setAutoRefresh: (enabled, interval) => {
     set({
@@ -1897,7 +1897,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     })
     get().saveToStorage()
     
-    // 重新启动定时器
+    // Restart timer
     if (enabled) {
       get().startAutoTokenRefresh()
     } else {
@@ -1946,7 +1946,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     get().saveToStorage()
   },
 
-  // ==================== 隐私模式 ====================
+  // ==================== privacy mode ====================
 
   setPrivacyMode: (enabled) => {
     set({ privacyMode: enabled })
@@ -1955,7 +1955,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
   maskEmail: (email) => {
     if (!get().privacyMode || !email) return email
-    // 生成固定长度的随机字符串作为伪装邮箱
+    // Generate a fixed-length random string as a disguised email address
     const hash = email.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
     const maskedName = `user${(hash % 100000).toString().padStart(5, '0')}`
     return `${maskedName}@***.com`
@@ -1963,19 +1963,19 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
   maskNickname: (nickname) => {
     if (!get().privacyMode || !nickname) return nickname || ''
-    // 基于原始昵称生成固定的伪装昵称
+    // Generate a fixed fake nickname based on the original nickname
     const hash = nickname.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    return `用户${(hash % 100000).toString().padStart(5, '0')}`
+    return `user${(hash % 100000).toString().padStart(5, '0')}`
   },
 
-  // ==================== 使用量精度 ====================
+  // ==================== Usage accuracy ====================
 
   setUsagePrecision: (enabled) => {
     set({ usagePrecision: enabled })
     get().saveToStorage()
   },
 
-  // ==================== 代理设置 ====================
+  // ==================== proxy settings ====================
 
   setProxy: async (enabled, url) => {
     const targetUrl = url ?? get().proxyUrl
@@ -1984,7 +1984,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       proxyUrl: targetUrl
     })
     get().saveToStorage()
-    // 通知主进程更新代理设置，并用规范化后的 URL 回写 store
+    // Notify the main process to update the proxy settings and use the normalized URL write back store
     try {
       const result = await window.api.setProxy?.(enabled, targetUrl)
       if (result?.normalizedUrl && result.normalizedUrl !== targetUrl) {
@@ -1996,7 +1996,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
   },
 
-  // ==================== 主题设置 ====================
+  // ==================== Theme settings ====================
 
   setTheme: (theme) => {
     set({ theme })
@@ -2010,12 +2010,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     get().applyTheme()
   },
 
-  // ==================== 语言设置 ====================
+  // ==================== Language settings ====================
 
   setLanguage: (language) => {
     set({ language })
     get().saveToStorage()
-    // 更新托盘菜单语言
+    // Update tray menu language
     const actualLang = language === 'auto' 
       ? (navigator.language.startsWith('zh') ? 'zh' : 'en')
       : language
@@ -2026,39 +2026,39 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     const { theme, darkMode } = get()
     const root = document.documentElement
     
-    // 移除所有主题类（包含所有 32 个主题）
+    // Remove all theme classes (including all 32 topics)
     root.classList.remove(
       'dark', 
-      // 蓝色系
+      // blue color
       'theme-indigo', 'theme-cyan', 'theme-sky', 'theme-teal',
-      // 紫红系
+      // Purple red series
       'theme-purple', 'theme-violet', 'theme-fuchsia', 'theme-pink', 'theme-rose',
-      // 暖色系
+      // Warm colors
       'theme-red', 'theme-orange', 'theme-amber', 'theme-yellow',
-      // 绿色系
+      // green system
       'theme-emerald', 'theme-green', 'theme-lime',
-      // 中性色
+      // neutral colors
       'theme-slate', 'theme-zinc', 'theme-stone', 'theme-neutral',
-      // 奢华配色
+      // Luxurious colors
       'theme-gold', 'theme-navy', 'theme-wine', 'theme-champagne',
-      // 莫兰迪
+      // Morandi
       'theme-dustyblue', 'theme-terracotta', 'theme-sage', 'theme-mauve',
-      // 自然深色
+      // Natural dark color
       'theme-coral', 'theme-forest', 'theme-ocean'
     )
     
-    // 应用深色模式
+    // Apply dark mode
     if (darkMode) {
       root.classList.add('dark')
     }
     
-    // 应用主题颜色
+    // Apply theme colors
     if (theme !== 'default') {
       root.classList.add(`theme-${theme}`)
     }
   },
 
-  // ==================== 自动换号 ====================
+  // ==================== Automatic number change ====================
 
   setAutoSwitch: (enabled, threshold, interval) => {
     set({
@@ -2068,7 +2068,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     })
     get().saveToStorage()
     
-    // 重新启动定时器
+    // Restart timer
     if (enabled) {
       get().startAutoSwitch()
     } else {
@@ -2096,15 +2096,15 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     
     if (!autoSwitchEnabled) return
     
-    // 清除现有定时器
+    // Clear existing timer
     if (autoSwitchTimer) {
       clearInterval(autoSwitchTimer)
     }
     
-    // 立即检查一次
+    // Check once now
     checkAndAutoSwitch()
     
-    // 设置定时检查
+    // Set up scheduled checks
     autoSwitchTimer = setInterval(() => {
       checkAndAutoSwitch()
     }, autoSwitchInterval * 60 * 1000)
@@ -2131,27 +2131,27 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[AutoSwitch] Checking active account: ${activeAccount.email}`)
 
-    // 刷新当前账号状态获取最新余额
+    // Refresh the current account status to get the latest balance
     await checkAccountStatus(activeAccount.id)
     
-    // 重新获取更新后的账号信息
+    // Retrieve updated account information
     const updatedAccount = get().accounts.get(activeAccount.id)
     if (!updatedAccount) return
 
     const remaining = updatedAccount.usage.limit - updatedAccount.usage.current
     console.log(`[AutoSwitch] Remaining: ${remaining}, Threshold: ${autoSwitchThreshold}`)
 
-    // 检查是否需要切换
+    // Check if you need to switch
     if (remaining <= autoSwitchThreshold) {
       console.log(`[AutoSwitch] Account ${updatedAccount.email} reached threshold, switching...`)
       
-      // 查找可用的账号
+      // Find available accounts
       const availableAccount = Array.from(accounts.values()).find(acc => {
-        // 排除当前账号
+        // Exclude current account
         if (acc.id === activeAccount.id) return false
-        // 排除被封禁的账号
+        // Exclude banned accounts
         if (isBannedAccountError(acc.lastError)) return false
-        // 排除余额不足的账号
+        // Exclude accounts with insufficient balance
         const accRemaining = acc.usage.limit - acc.usage.current
         if (accRemaining <= autoSwitchThreshold) return false
         return true
@@ -2160,7 +2160,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       if (availableAccount) {
         console.log(`[AutoSwitch] Switching to: ${availableAccount.email}`)
         setActiveAccount(availableAccount.id)
-        // 根据 switchTarget 设置决定切换目标
+        // according to switchTarget Settings determine switching target
         const { switchTarget: target } = get()
         const creds = availableAccount.credentials
         if (target === 'ide' || target === 'both') {
@@ -2176,8 +2176,8 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
             profileArn: (availableAccount as { profileArn?: string }).profileArn,
             accountId: availableAccount.id
           })
-          // 把 main 进程 refresh 后的最新 credentials 同步回 store，
-          // 否则 store 里的 refreshToken 仍是 v1（已被服务端 rotate 作废），下次任何 refresh 都会失败
+          // Bundle main process refresh Latest after credentials Sync back store，
+          // otherwise store inside refreshToken Still v1(Has been removed by the server rotate void), any next time refresh will all fail
           if (switchResult?.success && switchResult.refreshedCredentials) {
             const rc = switchResult.refreshedCredentials
             set((state) => {
@@ -2216,7 +2216,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
   },
 
-  // ==================== 自动 Token 刷新 ====================
+  // ==================== automatic Token refresh ====================
 
   checkAndRefreshExpiringTokens: async () => {
     const { accounts, refreshAccountToken, checkAccountStatus, autoSwitchEnabled, autoRefreshConcurrency, autoRefreshSyncInfo, autoRefreshInterval } = get()
@@ -2225,11 +2225,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[AutoRefresh] Checking ${accounts.size} accounts... (syncInfo: ${autoRefreshSyncInfo}, autoSwitch: ${autoSwitchEnabled})`)
 
-    // 筛选需要处理的账号
+    // Filter the accounts that need to be processed
     const accountsToProcess: Array<{ id: string; email: string; needsTokenRefresh: boolean }> = []
     
     for (const [id, account] of accounts) {
-      // 跳过已封禁或错误状态的账号
+      // Skip accounts that have been banned or have an error status
       if (isBannedAccountError(account.lastError)) {
         console.log(`[AutoRefresh] Skipping ${account.email} (banned/error)`)
         continue
@@ -2244,7 +2244,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[AutoRefresh] Processing ${accountsToProcess.length} accounts...`)
 
-    // 并发控制：使用配置的并发数，避免卡顿
+    // Concurrency control: Use the configured number of concurrencies to avoid lags
     const BATCH_SIZE = autoRefreshConcurrency
     let successCount = 0
     let failCount = 0
@@ -2258,11 +2258,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
               console.log(`[AutoRefresh] Refreshing token for ${email}...`)
               await refreshAccountToken(id)
               console.log(`[AutoRefresh] Token for ${email} refreshed`)
-              // Token 刷新后同步刷新账户信息
+              // Token Synchronously refresh account information after refreshing
               await checkAccountStatus(id)
               console.log(`[AutoRefresh] Account info for ${email} updated`)
             } else if (autoRefreshSyncInfo || autoSwitchEnabled) {
-              // 开启同步检测账户信息或自动换号时，刷新账户信息
+              // Refresh account information when synchronized detection of account information or automatic number change is enabled.
               await checkAccountStatus(id)
               console.log(`[AutoRefresh] Account info for ${email} updated`)
             }
@@ -2277,7 +2277,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       successCount += results.filter(r => r.status === 'fulfilled' && r.value.success).length
       failCount += results.length - results.filter(r => r.status === 'fulfilled' && r.value.success).length
       
-      // 批次间延迟
+      // inter-batch delay
       if (i + BATCH_SIZE < accountsToProcess.length) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
@@ -2286,17 +2286,17 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     console.log(`[AutoRefresh] Completed: ${successCount} success, ${failCount} failed`)
   },
 
-  // 仅刷新失效的 Token（不刷新账户信息）
+  // Only refresh invalid Token(Do not refresh account information)
   refreshExpiredTokensOnly: async () => {
     const { accounts, refreshAccountToken, autoRefreshConcurrency, autoRefreshInterval } = get()
     const now = Date.now()
     const refreshLeadMs = tokenRefreshLeadMs(autoRefreshInterval)
 
-    // 筛选需要刷新 Token 的账号
+    // Filter needs to be refreshed Token account
     const expiredAccounts: Array<{ id: string; email: string }> = []
     
     for (const [id, account] of accounts) {
-      // 跳过已封禁或错误状态的账号
+      // Skip accounts that have been banned or have an error status
       if (isBannedAccountError(account.lastError)) {
         continue
       }
@@ -2304,7 +2304,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       const expiresAt = account.credentials.expiresAt
       const timeUntilExpiry = expiresAt ? expiresAt - now : Infinity
       
-      // Token 已过期或即将过期
+      // Token Expired or about to expire
       if (expiresAt && timeUntilExpiry <= refreshLeadMs) {
         expiredAccounts.push({ id, email: account.email })
       }
@@ -2317,7 +2317,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[AutoRefresh] Refreshing ${expiredAccounts.length} expired tokens...`)
 
-    // 并发控制：使用配置的并发数，避免卡顿
+    // Concurrency control: Use the configured number of concurrencies to avoid lags
     const BATCH_SIZE = autoRefreshConcurrency
     for (let i = 0; i < expiredAccounts.length; i += BATCH_SIZE) {
       const batch = expiredAccounts.slice(i, i + BATCH_SIZE)
@@ -2331,7 +2331,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           }
         })
       )
-      // 批次间延迟
+      // inter-batch delay
       if (i + BATCH_SIZE < expiredAccounts.length) {
         await new Promise(resolve => setTimeout(resolve, 200))
       }
@@ -2341,22 +2341,22 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   startAutoTokenRefresh: () => {
     const { autoRefreshEnabled, autoRefreshInterval } = get()
     
-    // 如果已有定时器，先停止
+    // If there is a timer, stop it first
     if (tokenRefreshTimer) {
       clearInterval(tokenRefreshTimer)
       tokenRefreshTimer = null
     }
     
-    // 如果未启用，不启动定时器
+    // If not enabled, the timer is not started
     if (!autoRefreshEnabled) {
       console.log('[AutoRefresh] Auto-refresh is disabled')
       return
     }
 
-    // 启动时触发后台刷新（在主进程执行，不阻塞 UI）
+    // Trigger background refresh at startup (executed in the main process, without blocking UI）
     get().triggerBackgroundRefresh()
 
-    // 使用用户设置的间隔（分钟转毫秒）
+    // Use user-set interval (minutes to milliseconds)
     const intervalMs = autoRefreshInterval * 60 * 1000
     tokenRefreshTimer = setInterval(() => {
       get().triggerBackgroundRefresh()
@@ -2373,20 +2373,20 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
   },
 
-  // 触发后台刷新（在主进程执行，不阻塞 UI）
+  // Trigger background refresh (executed in the main process, without blocking UI）
   triggerBackgroundRefresh: async () => {
     const { accounts, autoRefreshConcurrency, autoRefreshSyncInfo, autoSwitchEnabled, autoRefreshInterval } = get()
     const now = Date.now()
     const refreshLeadMs = tokenRefreshLeadMs(autoRefreshInterval)
 
-    // 筛选需要处理的账号
+    // Filter the accounts that need to be processed
     const accountsToRefresh: Array<{
       id: string
       email: string
       idp?: string
       profileArn?: string
       needsTokenRefresh: boolean
-      machineId?: string  // 账户绑定的设备 ID
+      machineId?: string  // Device bound to the account ID
       credentials: {
         refreshToken: string
         clientId?: string
@@ -2400,7 +2400,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }> = []
     
     for (const [id, account] of accounts) {
-      // 跳过已封禁或错误状态的账号
+      // Skip accounts that have been banned or have an error status
       if (isBannedAccountError(account.lastError)) {
         continue
       }
@@ -2409,7 +2409,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       const timeUntilExpiry = expiresAt ? expiresAt - now : Infinity
       const needsTokenRefresh = expiresAt && timeUntilExpiry <= refreshLeadMs
       
-      // Token 即将过期需要刷新，或开启了同步检测/自动换号需要检查账户信息
+      // Token It is about to expire and needs to be refreshed, or synchronization detection is turned on./Automatic number change requires checking account information
       if (needsTokenRefresh || autoRefreshSyncInfo || autoSwitchEnabled) {
         accountsToRefresh.push({
           id,
@@ -2417,7 +2417,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           idp: account.idp,
           profileArn: account.profileArn,
           needsTokenRefresh: !!needsTokenRefresh,
-          machineId: account.machineId,  // 传递账户绑定的设备 ID
+          machineId: account.machineId,  // Pass the device bound to the account ID
           credentials: {
             refreshToken: account.credentials.refreshToken || '',
             clientId: account.credentials.clientId,
@@ -2439,21 +2439,21 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     console.log(`[BackgroundRefresh] Triggering refresh for ${accountsToRefresh.length} accounts (syncInfo: ${autoRefreshSyncInfo})...`)
     
-    // 调用主进程后台刷新，不等待结果（通过 IPC 事件接收）
+    // Call the main process background refresh without waiting for the result (via IPC event reception)
     window.api.backgroundBatchRefresh(accountsToRefresh, autoRefreshConcurrency, autoRefreshSyncInfo)
   },
 
-  // 处理后台刷新结果（兼容入口；高频场景请走 applyBackgroundRefreshResults 批量）
+  // Process background refresh results (compatible with the entrance; please leave for high-frequency scenarios) applyBackgroundRefreshResults batch)
   handleBackgroundRefreshResult: (data) => {
     get().applyBackgroundRefreshResults([data])
   },
 
-  // 批量处理后台刷新结果：合并 N 条结果到一次 set，避免 N 次 Map 全量复制
+  // Batch processing background refresh results: merge N Results arrive once set,avoid N Second-rate Map Full copy
   applyBackgroundRefreshResults: (items) => {
     if (!items || items.length === 0) return
 
     set((state) => {
-      // 仅一次完整 Map 复制
+      // complete only once Map copy
       const accounts = new Map(state.accounts)
       const now = Date.now()
 
@@ -2504,11 +2504,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         errorMessage?: string
       } | undefined
 
-      // 检测封禁状态
+      // Check ban status
       const newStatus = refreshData?.status === 'error' ? 'error' as AccountStatus : 'active' as AccountStatus
       const newError = refreshData?.errorMessage
 
-      // 后台刷新时主进程可能返回自动获取的 profileArn，持久化到顶层和 credentials
+      // During background refresh, the main process may return the automatically obtained profileArn, persisted to the top level and credentials
       const bgProfileArn = refreshData?.profileArn || account.credentials.profileArn || account.profileArn
       accounts.set(id, {
         ...account,
@@ -2561,12 +2561,12 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     })
   },
 
-  // 处理后台检查结果（兼容入口；高频场景请走 applyBackgroundCheckResults 批量）
+  // Processing background check results (compatible with the entrance; please leave for high-frequency scenarios) applyBackgroundCheckResults batch)
   handleBackgroundCheckResult: (data) => {
     get().applyBackgroundCheckResults([data])
   },
 
-  // 批量处理后台检查结果：合并 N 条结果到一次 set
+  // Batch processing background check results: merge N Results arrive once set
   applyBackgroundCheckResults: (items) => {
     if (!items || items.length === 0) return
 
@@ -2618,7 +2618,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         needsRefresh?: boolean
       } | undefined
 
-      // 检测状态
+      // detection status
       let newStatus: AccountStatus = 'active'
       if (checkData?.status === 'error') {
         newStatus = 'error'
@@ -2670,15 +2670,15 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     })
   },
 
-  // ==================== 定时自动保存 ====================
+  // ==================== Automatically save regularly ====================
 
   startAutoSave: () => {
-    // 如果已有定时器，先停止
+    // If there is a timer, stop it first
     if (autoSaveTimer) {
       clearInterval(autoSaveTimer)
     }
 
-    // 计算当前数据的哈希值
+    // Calculate the hash value of the current data
     const computeHash = () => {
       const { accounts, groups, tags, activeAccountId } = get()
       return JSON.stringify({
@@ -2689,14 +2689,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       })
     }
 
-    // 初始化哈希值
+    // Initialize hash value
     lastSaveHash = computeHash()
 
-    // 设置定时保存
+    // Set scheduled save
     autoSaveTimer = setInterval(async () => {
       const currentHash = computeHash()
       
-      // 只有数据变化时才保存
+      // Save only when data changes
       if (currentHash !== lastSaveHash) {
         console.log('[AutoSave] Data changed, saving...')
         await get().saveToStorage()
@@ -2716,7 +2716,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
   },
 
-  // ==================== 机器码管理 ====================
+  // ==================== Machine code management ====================
 
   setMachineIdConfig: (config) => {
     set((state) => ({
@@ -2731,7 +2731,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       if (result.success && result.machineId) {
         set({ currentMachineId: result.machineId })
         
-        // 首次获取时自动备份原始机器码
+        // Automatically back up the original machine code when acquiring it for the first time
         const { originalMachineId } = get()
         if (!originalMachineId) {
           get().backupOriginalMachineId()
@@ -2745,19 +2745,19 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   changeMachineId: async (newMachineId) => {
     const state = get()
     
-    // 首次更改时备份原始机器码
+    // Back up original machine code when first changed
     if (!state.originalMachineId) {
       state.backupOriginalMachineId()
     }
 
-    // 生成新机器码（如果未提供）
+    // Generate new machine code if not provided
     const machineIdToSet = newMachineId || await window.api.machineIdGenerateRandom()
     
     try {
       const result = await window.api.machineIdSet(machineIdToSet)
       
       if (result.success) {
-        // 更新状态
+        // update status
         set((s) => ({
           currentMachineId: machineIdToSet,
           machineIdHistory: [
@@ -2773,7 +2773,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         get().saveToStorage()
         return true
       } else if (result.requiresAdmin) {
-        // 需要管理员权限，主进程会处理弹窗
+        // Administrator rights are required, and the main process will handle pop-ups.
         return false
       } else {
         console.error('[MachineId] Failed to change:', result.error)
@@ -2823,7 +2823,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     const account = get().accounts.get(accountId)
     if (!account) return
 
-    // 生成或使用提供的机器码
+    // Generate or use the provided machine code
     const boundMachineId = machineId || crypto.randomUUID()
 
     set((state) => ({
@@ -2853,14 +2853,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   backupOriginalMachineId: () => {
     const { currentMachineId, originalMachineId } = get()
     
-    // 只有在没有备份且有当前机器码时才备份
+    // Only back up if there is no backup and current machine code is available
     if (!originalMachineId && currentMachineId) {
       set({
         originalMachineId: currentMachineId,
         originalBackupTime: Date.now()
       })
       
-      // 添加历史记录
+      // add history
       set((s) => ({
         machineIdHistory: [
           ...s.machineIdHistory,
@@ -2883,14 +2883,14 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     get().saveToStorage()
   },
 
-  // ==================== 代理池 ====================
+  // ==================== proxy pool ====================
 
   addProxy: (url, options) => {
     const parsed = parseProxyUrl(url)
     if (!parsed) return null
 
-    // 去重：同 host:port:protocol:username 视为重复
-    // 含 username 以支持 bestproxy 等「单入口、靠用户名区分地区/会话」的轮换代理添加多条
+    // Deduplication: same host:port:protocol:username Treat as duplicate
+    // Contains username to support bestproxy Waiting for "single entrance, distinguishing regions by user name"/Add multiple items to the rotation proxy of "Session"
     const existingPool = get().proxyPool
     for (const entry of existingPool.values()) {
       if (entry.host === parsed.host && entry.port === parsed.port && entry.protocol === parsed.protocol
@@ -2932,7 +2932,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'))
     if (lines.length === 0) return result
 
-    // 批量构造新条目，最后只 set 一次，避免 O(n²) re-render
+    // Construct new entries in batches, finally only set once, avoid O(n²) re-render
     const existingPool = get().proxyPool
     const existingKeys = new Set<string>()
     for (const entry of existingPool.values()) {
@@ -2976,20 +2976,20 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
   },
 
   removeProxy: (id) => {
-    // 收集受影响的账号（绑定到该代理的账号）
+    // Collect affected accounts (accounts bound to the agent)
     const affectedAccountIds = Object.entries(get().accountProxyBindings)
       .filter(([, pid]) => pid === id)
       .map(([aid]) => aid)
     set((state) => {
       const next = new Map(state.proxyPool)
       next.delete(id)
-      // 同步清理绑定
+      // Synchronous cleanup binding
       const bindings = { ...state.accountProxyBindings }
       for (const aid of affectedAccountIds) delete bindings[aid]
       return { proxyPool: next, accountProxyBindings: bindings }
     })
     get().saveToStorage()
-    // 通知主进程：这些账号现在无代理绑定，回退全局
+    // Notify the main process: These accounts now have no agent binding, and fall back to the global situation.
     for (const aid of affectedAccountIds) syncAccountProxyToMain(aid)
   },
 
@@ -3020,7 +3020,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { proxyPool: next }
     })
     get().saveToStorage()
-    // 通知所有绑定该代理的账号更新主进程内存（启用变化会影响是否可用）
+    // Notify all accounts bound to the agent to update the main process memory (enabling changes will affect whether it is available)
     syncAllAccountsBoundToProxy(id)
   },
 
@@ -3034,7 +3034,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { proxyPool: next }
     })
     get().saveToStorage()
-    // url / 启用状态 / 状态变化都需要同步绑定账号
+    // url / Enabled status / All status changes require simultaneous binding of accounts.
     if ('url' in updates || 'enabled' in updates || 'status' in updates) {
       syncAllAccountsBoundToProxy(id)
     }
@@ -3047,7 +3047,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     }
     const { proxyPoolConfig } = get()
 
-    // 先置为 testing 状态
+    // Set first to testing state
     set((state) => {
       const next = new Map(state.proxyPool)
       const existing = next.get(id)
@@ -3081,9 +3081,9 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           latencyMs: result.latencyMs,
           lastTestedAt: Date.now(),
           lastError: result.success ? undefined : result.error,
-          // 验活失败也累计到 failCount，但不计入 reportProxyResult 的注册失败
+          // Failed life verification also accumulates to failCount, but not included in reportProxyResult Registration failed
           failCount: result.success ? existing.failCount : existing.failCount + 1,
-          // 自动停用：累计失败超过阈值；但池中可用代理 <= 1 时保护性保留（轮换代理避免变直连）
+          // Automatic deactivation: Cumulative failures exceed threshold; but agents are available in the pool <= 1 Protective retention (rotate the proxy to avoid becoming directly connected)
           enabled: result.success
             ? existing.enabled
             : (state.proxyPoolConfig.autoDisableDead
@@ -3096,7 +3096,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { proxyPool: next }
     })
     get().saveToStorage()
-    // 同步绑定账号：状态变化（alive/slow/dead）影响代理是否可用
+    // Synchronously bind account: status change (alive/slow/dead) affects whether the agent is available
     syncAllAccountsBoundToProxy(id)
     return result
   },
@@ -3119,7 +3119,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     const affectedAccountIds = Object.keys(get().accountProxyBindings)
     set({ proxyPool: new Map(), proxyPoolCursor: 0, accountProxyBindings: {} })
     get().saveToStorage()
-    // 通知所有曾被绑定的账号回退全局
+    // Notify all previously bound accounts to return to global
     for (const aid of affectedAccountIds) syncAccountProxyToMain(aid)
   },
 
@@ -3134,7 +3134,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     const { proxyPool, proxyPoolConfig, proxyPoolCursor } = get()
     if (!proxyPoolConfig.enabled) return null
 
-    // 仅在启用且非 dead 的代理中挑选
+    // Only when enabled and not dead Choose from agents
     const candidates = Array.from(proxyPool.values())
       .filter(p => p.enabled && p.status !== 'dead')
     if (candidates.length === 0) return null
@@ -3148,7 +3148,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
         picked = candidates.reduce((min, cur) => (cur.usedCount < min.usedCount ? cur : min))
         break
       case 'fastest':
-        // 已测过的优先按延迟升序；未测过的排最后
+        // Those that have been tested are given priority in ascending order of delay; those that have not been tested are ranked last.
         picked = candidates.slice().sort((a, b) => {
           const la = a.latencyMs ?? Number.POSITIVE_INFINITY
           const lb = b.latencyMs ?? Number.POSITIVE_INFINITY
@@ -3164,7 +3164,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       }
     }
 
-    // 更新使用计数（即时反映到 UI，使用 saveToStorage 防抖）
+    // Update usage count (immediately reflected in UI,use saveToStorage anti-shake)
     set((state) => {
       const next = new Map(state.proxyPool)
       const existing = next.get(picked.id)
@@ -3183,11 +3183,11 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       const next = new Map(state.proxyPool)
       const existing = next.get(id)
       if (!existing) return state
-      // 仅「代理连接层错误」才累加 failCount；AWS 业务/风控失败（如 Portal/EOF/邮箱已注册）不计，
-      // 避免把好代理（尤其只配了一条的轮换代理）误判停用导致变直连暴露真实 IP。
+      // Only "proxy connection layer errors" are accumulated failCount；AWS business/Risk control failure (such as Portal/EOF/Email address has been registered) will not be counted,
+      // Avoid misjudgment and deactivation of a good proxy (especially a rotating proxy with only one configuration), causing the direct connection to be exposed. IP。
       const isProxyFail = !success && isProxyConnectionError(errorMsg)
       const failCount = isProxyFail ? existing.failCount + 1 : existing.failCount
-      // 轮换代理保护：池中可用代理 <= 1 时不自动停用
+      // Rotating agent protection: available agents in the pool <= 1 not automatically deactivated
       const enabledCount = Array.from(state.proxyPool.values()).filter((p) => p.enabled && p.status !== 'dead').length
       const autoDisable = isProxyFail
         && state.proxyPoolConfig.autoDisableDead
@@ -3205,20 +3205,20 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { proxyPool: next }
     })
     get().saveToStorage()
-    // 仅在代理被自动停用时通知主进程（普通 used/failCount 计数变化无需同步）
+    // The main process is only notified when the agent is automatically deactivated (normal used/failCount Count changes do not require synchronization)
     if (autoDisabled) {
       syncAllAccountsBoundToProxy(id)
     }
   },
 
-  // ==================== 账号-代理绑定 ====================
+  // ==================== account-proxy binding ====================
 
   bindAccountToProxy: (accountId, proxyId) => {
     set((state) => ({
       accountProxyBindings: { ...state.accountProxyBindings, [accountId]: proxyId }
     }))
     get().saveToStorage()
-    // 同步到主进程的账号池
+    // Synchronize to the account pool of the main process
     syncAccountProxyToMain(accountId)
   },
 
@@ -3258,7 +3258,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
       return { distributed: 0, perProxy: {}, skipped: 0 }
     }
 
-    // 候选账号
+    // Candidate account
     const candidates = accountIds
       ? accountIds.map((id) => state.accounts.get(id)).filter((a): a is Account => !!a)
       : Array.from(state.accounts.values())
@@ -3274,7 +3274,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     aliveProxies.forEach((p) => { perProxy[p.id] = 0 })
     const newBindings = { ...state.accountProxyBindings }
 
-    // 取消已绑定到失效/不存在代理的账号（仅 onlyUnbound=false 时统一重新分配）
+    // Cancel has been bound to expire/There is no agent account (only onlyUnbound=false unified redistribution)
     if (!onlyUnbound) {
       for (const id of Object.keys(newBindings)) {
         const proxyExists = aliveProxies.some((p) => p.id === newBindings[id])
@@ -3285,10 +3285,10 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
     let distributed = 0
     let cursor = 0
     for (const account of targets) {
-      // accountsPerProxy=0：均分；非 0：每代理填满 N 个再换下一个
+      // accountsPerProxy=0: equally divided; not 0: filled per agent N one and then another one
       let chosenProxyId: string
       if (accountsPerProxy > 0) {
-        // 找第一个还未填满的代理
+        // Find the first agent that is not filled yet
         let found: string | undefined
         for (let i = 0; i < aliveProxies.length; i++) {
           const pid = aliveProxies[i].id
@@ -3298,7 +3298,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
           }
         }
         if (!found) {
-          // 全部代理都满了：跳过剩余账号
+          // All agents are full: skip remaining accounts
           break
         }
         chosenProxyId = found
@@ -3313,7 +3313,7 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 
     set({ accountProxyBindings: newBindings })
     get().saveToStorage()
-    // 同步到主进程
+    // Sync to main process
     for (const id of targets.slice(0, distributed)) {
       syncAccountProxyToMain(id.id)
     }
@@ -3331,8 +3331,8 @@ export const useAccountsStore = create<AccountsStore>()((set, get) => ({
 }))
 
 /**
- * 把单个账号的代理绑定信息同步到主进程账号池
- * （主进程账号池里的 ProxyAccount.proxyUrl 由此 IPC 设置）
+ * Synchronize the agent binding information of a single account to the main process account pool
+ * (In the main process account pool ProxyAccount.proxyUrl thus IPC set up)
  */
 function syncAccountProxyToMain(accountId: string): void {
   try {
@@ -3344,8 +3344,8 @@ function syncAccountProxyToMain(accountId: string): void {
 }
 
 /**
- * 当某个代理发生变化（URL/启用状态/有效性）时，
- * 同步所有绑定到该代理的账号到主进程，确保主进程内存里的 ProxyAccount.proxyUrl 与代理池实际情况一致
+ * When an agent changes (URL/Enabled status/effectiveness),
+ * Synchronize all accounts bound to the agent to the main process to ensure that the ProxyAccount.proxyUrl Consistent with the actual situation of the proxy pool
  */
 function syncAllAccountsBoundToProxy(proxyId: string): void {
   try {
@@ -3361,7 +3361,7 @@ function syncAllAccountsBoundToProxy(proxyId: string): void {
   }
 }
 
-/** 触发 Webhook 事件（封装错误处理，不阻塞主业务流程） */
+/** trigger Webhook Event (encapsulates error handling and does not block the main business process) */
 function triggerWebhook(event: WebhookEvent, payload: WebhookMessage): void {
   try {
     void useWebhookStore.getState().triggerEvent(event, payload)
@@ -3370,7 +3370,7 @@ function triggerWebhook(event: WebhookEvent, payload: WebhookMessage): void {
   }
 }
 
-// ==================== 代理 URL 解析辅助 ====================
+// ==================== acting URL Parsing assistance ====================
 
 interface ParsedProxy {
   protocol: ProxyProtocol
@@ -3382,16 +3382,16 @@ interface ParsedProxy {
 }
 
 /**
- * 解析多种代理 URL 格式：
+ * Parse multiple proxies URL Format:
  *   - http://host:port
  *   - http://user:pass@host:port
  *   - socks5://host:port
- *   - host:port              （默认 http）
- *   - host:port:user:pass    （Stormproxies 等代理商常用格式）
- *   - user:pass@host:port    （省略 scheme）
+ *   - host:port              (default http）
+ *   - host:port:user:pass    （Stormproxies and other commonly used formats by agents)
+ *   - user:pass@host:port    (omitted scheme）
  */
-// 判断错误是否为「代理连接层」问题（而非 AWS 业务/风控失败）。
-// 仅这类错误才累加代理 failCount / 触发自动停用，避免风控失败把好代理（尤其单条轮换代理）误杀成直连。
+// Determine whether the error is a "proxy connection layer" problem (rather than AWS business/Risk control failed).
+// Only errors of this type accumulate agents failCount / Trigger automatic deactivation to avoid risk control failure and accidentally kill good agents (especially single rotation agents) into direct connections.
 function isProxyConnectionError(msg: string | undefined): boolean {
   const m = (msg || '').toLowerCase()
   if (!m) return false
@@ -3413,7 +3413,7 @@ function parseProxyUrl(raw: string): ParsedProxy | null {
   const trimmed = (raw || '').trim()
   if (!trimmed) return null
 
-  // 形式 1: scheme://...
+  // form 1: scheme://...
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
     try {
       const u = new URL(trimmed)
@@ -3434,7 +3434,7 @@ function parseProxyUrl(raw: string): ParsedProxy | null {
     }
   }
 
-  // 形式 2: host:port:user:pass（4 段冒号分隔）
+  // form 2: host:port:user:pass（4 Paragraphs separated by colon)
   const segs = trimmed.split(':')
   if (segs.length === 4 && /^\d+$/.test(segs[1])) {
     const [host, portStr, user, pass] = segs
@@ -3449,7 +3449,7 @@ function parseProxyUrl(raw: string): ParsedProxy | null {
     }
   }
 
-  // 形式 3: user:pass@host:port（缺 scheme）
+  // form 3: user:pass@host:port(lack scheme）
   if (trimmed.includes('@')) {
     const [authPart, hostPart] = trimmed.split('@')
     const [user, pass] = authPart.split(':')
@@ -3465,7 +3465,7 @@ function parseProxyUrl(raw: string): ParsedProxy | null {
     }
   }
 
-  // 形式 4: host:port（裸格式，默认 http）
+  // form 4: host:port(naked format, default http）
   if (segs.length === 2 && /^\d+$/.test(segs[1])) {
     const port = Number(segs[1])
     if (!segs[0] || !Number.isFinite(port)) return null

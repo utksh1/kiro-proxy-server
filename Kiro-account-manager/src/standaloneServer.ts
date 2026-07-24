@@ -2,6 +2,8 @@ import fs from 'fs'
 import path from 'path'
 import { ProxyServer } from './main/proxy/proxyServer'
 import type { ProxyAccount, ProxyConfig } from './main/proxy/types'
+import { Registrar } from './main/registration/registrar'
+import type { RegistrationConfig } from './main/registration/config'
 
 // Load environment variables
 const PORT = parseInt(process.env.PORT || '5580', 10)
@@ -64,6 +66,52 @@ const server = new ProxyServer(config, {
   },
   onError: (error) => {
     console.error('[ProxyServer Error]', error)
+  },
+  onCustomRoute: async (req, res) => {
+    const urlPath = req.url?.split('?')[0] || '/'
+    if (urlPath === '/register' && req.method === 'POST') {
+      try {
+        console.log('[Registration] Starting headless API registration')
+        // We already authenticated via API Key since onCustomRoute runs AFTER auth in proxyServer.ts
+        const regConfig: Partial<RegistrationConfig> = {
+          useTempMailPlus: true,
+          useGptMail: false
+        }
+        
+        const flow = new Registrar(regConfig as RegistrationConfig, (msg) => console.log(`[Registration] ${msg}`))
+        const acct = await flow.run()
+        
+        if (acct.status === 'success' && acct.accessToken) {
+          const proxyAccount: ProxyAccount = {
+            id: acct.email,
+            email: acct.email,
+            accessToken: acct.accessToken,
+            refreshToken: acct.refreshToken,
+            clientId: acct.clientId,
+            clientSecret: acct.clientSecret,
+            region: acct.region,
+            authMethod: 'IdC',
+            provider: acct.provider,
+            expiresAt: Date.now() + 3600000
+          }
+          
+          server.getAccountPool().addAccount(proxyAccount)
+          console.log(`[Registration] Successfully registered and added to pool: ${acct.email}`)
+          
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true, account: proxyAccount }))
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: false, error: acct.error || 'Registration failed' }))
+        }
+      } catch (err: any) {
+        console.error('[Registration] Failed:', err)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: err.message }))
+      }
+      return true
+    }
+    return false
   },
   onTokenRefresh: async (account) => {
     console.log(`[Token Refresh] Refreshing token for account: ${account.id}`)

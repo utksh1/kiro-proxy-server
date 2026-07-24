@@ -1,11 +1,11 @@
-// 本地中继代理链（Proxy Chaining）
+// Local relay agent chain (Proxy Chaining）
 //
-// 背景：部分目标代理（如 bestproxy）要求「来源 IP 必须为非大陆」，大陆 IP 既不能加白名单也会被拒（610）。
-// 底层 TLS 引擎只支持单层代理，因此这里在本机起一个本地中继，把链路串成：
-//   本机 → 本地中继 → 上游中转(非大陆, upstream) → 目标代理(target, bestproxy) → 目标站点
-// 这样目标代理看到的来源 IP 是上游中转的出口（非大陆），即可通过。
+// Background: Some target proxies (e.g. bestproxy) requires "source IP Must be non-mainland", mainland IP It can neither be added to the whitelist nor will it be rejected (610）。
+// Ground floor TLS The engine only supports a single-layer proxy, so here we set up a local relay on this machine and string the link into:
+//   local machine → local trunk → upstream transfer(non-continent, upstream) → target agent(target, bestproxy) → target site
+// This way the destination agent sees the source IP If it is the upstream transit exit (non-mainland), you can pass through.
 //
-// 仅实现 HTTP CONNECT 入站（注册全程为 https，足够）；上游中转支持 http / socks5(4)。
+// Only implement HTTP CONNECT Inbound (the entire registration process is https, sufficient); upstream transit support http / socks5(4)。
 
 import net from 'net'
 import { SocksClient } from 'socks'
@@ -66,7 +66,7 @@ export interface ChainDiagnose {
 
 export class ChainProxyRelay {
   private server: net.Server | null = null
-  /** 跟踪所有活跃的入站连接，stop() 时强制销毁，避免 server.close() 等 Keep-Alive 超时（~60s）*/
+  /** Track all active inbound connections,stop() Forced destruction when necessary to avoid server.close() wait Keep-Alive time out(~60s）*/
   private sockets = new Set<net.Socket>()
   private readonly upstream: ParsedChainProxy
   private readonly target: ParsedChainProxy
@@ -76,14 +76,14 @@ export class ChainProxyRelay {
   constructor(upstreamUrl: string, targetUrl: string, log?: (m: string) => void) {
     const up = parseChainProxy(upstreamUrl)
     const tg = parseChainProxy(targetUrl)
-    if (!up) throw new Error(`上游中转代理无效: ${upstreamUrl}`)
-    if (!tg) throw new Error(`目标代理无效: ${targetUrl}`)
+    if (!up) throw new Error(`The upstream relay agent is invalid: ${upstreamUrl}`)
+    if (!tg) throw new Error(`Target proxy is invalid: ${targetUrl}`)
     this.upstream = up
     this.target = tg
     this.log = log || ((): void => {})
   }
 
-  /** 启动本地中继，返回可直接作为代理使用的 http://127.0.0.1:port */
+  /** Start the local relay and return the http://127.0.0.1:port */
   start(): Promise<string> {
     return new Promise((resolve, reject) => {
       const server = net.createServer((client) => this.handleClient(client))
@@ -96,7 +96,7 @@ export class ChainProxyRelay {
           server.removeListener('error', reject)
           resolve(`http://127.0.0.1:${this.port}`)
         } else {
-          reject(new Error('本地中继启动失败：无法获取端口'))
+          reject(new Error('Local relay startup failed: Unable to get port'))
         }
       })
     })
@@ -106,8 +106,8 @@ export class ChainProxyRelay {
     return new Promise((resolve) => {
       const srv = this.server
       this.server = null
-      // 强制销毁所有活跃隧道连接：否则 server.close() 会等 DLL Go http.Transport
-      // 的 Keep-Alive 连接自然超时（~60s），导致注册结束后 cleanup 卡住一分钟
+      // Force the destruction of all active tunnel connections: otherwise server.close() Will wait DLL Go http.Transport
+      // of Keep-Alive Natural connection timeout (~60s), causing the registration to end cleanup stuck for a minute
       for (const sock of this.sockets) {
         try { sock.destroy() } catch { /* ignore */ }
       }
@@ -117,7 +117,7 @@ export class ChainProxyRelay {
         return
       }
       srv.close(() => resolve())
-      // 双保险：500ms 后无论 close 回调是否触发都 resolve
+      // Double insurance:500ms Regardless close Whether the callback is triggered or not resolve
       setTimeout(resolve, 500)
     })
   }
@@ -145,19 +145,19 @@ export class ChainProxyRelay {
           tunnel.on('error', () => { client.destroy(); tunnel.destroy() })
         })
         .catch((err: unknown) => {
-          this.log(`[ProxyChain] 隧道建立失败: ${err instanceof Error ? err.message : String(err)}`)
+          this.log(`[ProxyChain] Tunnel establishment failed: ${err instanceof Error ? err.message : String(err)}`)
           if (!client.destroyed) client.end('HTTP/1.1 502 Bad Gateway\r\n\r\n')
         })
     })
   }
 
-  /** 经上游中转连到目标代理入口，再在该连接上对目标代理做 CONNECT 抵达最终目标 */
+  /** Connect to the target proxy entrance through the upstream relay, and then perform operations on the target proxy on this connection. CONNECT reach final goal */
   private async dialChain(host: string, port: number): Promise<net.Socket> {
     const sock = await this.connectViaUpstream(this.target.host, this.target.port)
     try {
       const resp = await this.sendConnectRequest(sock, host, port, this.target)
       if (resp.status !== 200) {
-        throw new Error(this.formatConnectError('目标代理', resp))
+        throw new Error(this.formatConnectError('target agent', resp))
       }
     } catch (err) {
       sock.destroy()
@@ -177,7 +177,7 @@ export class ChainProxyRelay {
     return new Promise((resolve, reject) => {
       const sock = net.connect(this.upstream.port, this.upstream.host)
       sock.setTimeout(20000)
-      sock.once('timeout', () => { sock.destroy(); reject(new Error('上游中转连接超时')) })
+      sock.once('timeout', () => { sock.destroy(); reject(new Error('Upstream transit connection timeout')) })
       sock.once('error', reject)
       sock.once('connect', () => {
         sock.setNoDelay(true)
@@ -185,7 +185,7 @@ export class ChainProxyRelay {
           .then((resp) => {
             sock.setTimeout(0)
             if (resp.status === 200) resolve(sock)
-            else { sock.destroy(); reject(new Error(this.formatConnectError('上游中转', resp))) }
+            else { sock.destroy(); reject(new Error(this.formatConnectError('upstream transfer', resp))) }
           })
           .catch((err: Error) => { sock.destroy(); reject(err) })
       })
@@ -207,7 +207,7 @@ export class ChainProxyRelay {
         timeout: 20000
       })
         .then(({ socket }) => {
-          // socks 包返回的 socket 默认开启了 30s timeout，会在空闲后触发 'end'，导致我们误判为"被对端关闭"
+          // socks package returned socket Enabled by default 30s timeout, will be triggered after idle 'end', leading us to misjudge that"Closed by peer"
           socket.setTimeout(0)
           socket.setNoDelay(true)
           socket.setKeepAlive(true, 30000)
@@ -218,13 +218,13 @@ export class ChainProxyRelay {
   }
 
   /**
-   * 通用 CONNECT：发送请求 + 解析响应。
+   * Universal CONNECT:Send request + Parse the response.
    *
-   * 关键容错：
-   *   - 部分代理返回错误时只发状态行就 close，**不补 \r\n\r\n**（如 bestproxy 的 610），
-   *     旧实现会等空行等到 FIN 触发 'end' 然后误报「代理连接被对端关闭」，错误状态码被丢。
-   *     新实现：'end' 事件触发时若 buf 已含状态行，尽力解析；只有空 buf 才报「关闭」。
-   *   - 附带常见兼容头（Proxy-Connection / User-Agent），减少代理服务端的策略性拒绝。
+   * Key fault tolerance:
+   *   - Some agents only send a status line when returning an error. close，**Not to make up for \r\n\r\n**(like bestproxy of 610），
+   *     The old implementation would wait for an empty line until FIN trigger 'end' Then it falsely reports "the proxy connection was closed by the peer" and the error status code is lost.
+   *     New implementation:'end' If the event is triggered buf Status line included, best effort to parse; only empty buf It just reported "closed".
+   *   - Comes with common compatible headers (Proxy-Connection / User-Agent) to reduce strategic rejection on the proxy server.
    */
   private sendConnectRequest(
     sock: net.Socket,
@@ -250,7 +250,7 @@ export class ChainProxyRelay {
     })
   }
 
-  /** 读取 HTTP 响应：直到 \r\n\r\n 完整、或对端关闭/出错时尽力解析。返回结构化结果。 */
+  /** read HTTP Response: until \r\n\r\n Complete, or peer closed/Try to resolve errors when they occur. Return structured results. */
   private readHttpResponse(sock: net.Socket): Promise<ConnectResponse> {
     return new Promise((resolve, reject) => {
       let buf = ''
@@ -285,7 +285,7 @@ export class ChainProxyRelay {
           }
           resolve(parsed)
         } else if (viaClose) {
-          reject(new Error(raw ? `代理返回不可解析: ${raw.slice(0, 120)}` : '代理连接被对端关闭（无任何响应）'))
+          reject(new Error(raw ? `Proxy returns unresolvable: ${raw.slice(0, 120)}` : 'The proxy connection was closed by the peer (no response)'))
         }
       }
       const onData = (d: Buffer): void => {
@@ -304,15 +304,15 @@ export class ChainProxyRelay {
 
   private formatConnectError(stage: string, resp: ConnectResponse): string {
     const suffix = resp.bodySnippet ? ` body=${resp.bodySnippet.replace(/[\r\n]/g, ' ').slice(0, 120)}` : ''
-    return `${stage} CONNECT 失败: HTTP ${resp.status} ${resp.statusText}${suffix}`
+    return `${stage} CONNECT fail: HTTP ${resp.status} ${resp.statusText}${suffix}`
   }
 
   /**
-   * 分阶段诊断：
-   *   A) 上游中转 TCP 连通
-   *   B) 经上游 CONNECT 到目标代理入口
-   *   C) 经完整链路 CONNECT 到 testHost:testPort
-   * 不依赖本地 server，独立可用；定位问题精确到哪一层。
+   * Staged diagnosis:
+   *   A) upstream transfer TCP connected
+   *   B) via upstream CONNECT To the target agent entrance
+   *   C) via complete link CONNECT arrive testHost:testPort
+   * Does not rely on local server, available independently; locate the problem to which layer it is accurate.
    */
   async diagnose(testHost = 'www.gstatic.com', testPort = 443): Promise<ChainDiagnose> {
     const result: ChainDiagnose = { upstreamReachable: false, targetReachable: false }
@@ -344,7 +344,7 @@ export class ChainProxyRelay {
       result.endToEndOk = resp.status === 200
       result.endToEndRtMs = Date.now() - t2
       if (resp.status !== 200) {
-        result.endToEndError = `目标代理拒绝: HTTP ${resp.status} ${resp.statusText}`
+        result.endToEndError = `target agent rejects: HTTP ${resp.status} ${resp.statusText}`
       }
     } catch (err) {
       result.endToEndOk = false
@@ -358,7 +358,7 @@ export class ChainProxyRelay {
   private tcpProbe(host: string, port: number, timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const sock = net.connect(port, host)
-      const timer = setTimeout(() => { sock.destroy(); reject(new Error(`TCP 连接超时 ${host}:${port}`)) }, timeoutMs)
+      const timer = setTimeout(() => { sock.destroy(); reject(new Error(`TCP Connection timeout ${host}:${port}`)) }, timeoutMs)
       sock.once('connect', () => { clearTimeout(timer); sock.destroy(); resolve() })
       sock.once('error', (err) => { clearTimeout(timer); reject(err) })
     })
