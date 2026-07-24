@@ -3,7 +3,7 @@ import path from 'path'
 import { ProxyServer } from './main/proxy/proxyServer'
 import type { ProxyAccount, ProxyConfig } from './main/proxy/types'
 import { Registrar } from './main/registration/registrar'
-import type { RegistrationConfig } from './main/registration/config'
+import { newConfig, type RegistrationConfig } from './main/registration/config'
 
 // Load environment variables
 const PORT = parseInt(process.env.PORT || '5580', 10)
@@ -78,7 +78,7 @@ const server = new ProxyServer(config, {
           useGptMail: false
         }
         
-        const flow = new Registrar(regConfig as RegistrationConfig, (msg) => console.log(`[Registration] ${msg}`))
+        const flow = new Registrar(newConfig(regConfig), (msg) => console.log(`[Registration] ${msg}`))
         const acct = await flow.run()
         
         if (acct.status === 'success' && acct.accessToken) {
