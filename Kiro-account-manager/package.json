@@ -15,7 +15,7 @@
     "start": "electron-vite preview",
     "dev": "chcp 65001 >nul && electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "node -e \"if (!process.env.RENDER) { try { require('child_process').execSync('npx electron-builder install-app-deps', { stdio: 'inherit' }); } catch(e){} }\"",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
