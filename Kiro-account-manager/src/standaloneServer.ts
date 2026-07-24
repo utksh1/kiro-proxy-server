@@ -114,6 +114,51 @@ const server = new ProxyServer(config, {
       }
       return true
     }
+    if (urlPath === '/admin/accounts/import' && req.method === 'POST') {
+      try {
+        console.log('[Accounts] Importing accounts via API')
+        let body = ''
+        req.on('data', chunk => body += chunk.toString())
+        await new Promise(resolve => req.on('end', resolve))
+        
+        let parsed = JSON.parse(body) as any
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) {
+          parsed = parsed.accounts
+        }
+        const accounts = Array.isArray(parsed) ? parsed : [parsed]
+        let addedCount = 0
+        
+        for (const rawAcc of accounts) {
+          const credentials = rawAcc.credentials || {}
+          const acc = {
+            id: rawAcc.id || rawAcc.email,
+            email: rawAcc.email,
+            accessToken: credentials.accessToken || rawAcc.accessToken,
+            refreshToken: credentials.refreshToken || rawAcc.refreshToken,
+            clientId: credentials.clientId || rawAcc.clientId,
+            clientSecret: credentials.clientSecret || rawAcc.clientSecret,
+            region: credentials.region || rawAcc.region,
+            authMethod: credentials.authMethod || rawAcc.authMethod,
+            provider: credentials.provider || rawAcc.provider,
+            expiresAt: credentials.expiresAt || rawAcc.expiresAt,
+            machineId: rawAcc.machineId
+          }
+          if (acc.id && acc.accessToken) {
+            server.getAccountPool().addAccount(acc as any)
+            addedCount++
+          }
+        }
+        
+        console.log(`[Accounts] Successfully imported ${addedCount} accounts`)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true, added: addedCount, total: server.getAccountPool().getAllAccounts().length }))
+      } catch (err: any) {
+        console.error('[Accounts] Import failed:', err)
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: false, error: err.message }))
+      }
+      return true
+    }
     return false
   },
   onTokenRefresh: async (account) => {
