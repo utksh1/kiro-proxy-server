@@ -77,7 +77,10 @@ let loadedAccountsCount = 0
 
 if (ACCOUNTS_JSON) {
   try {
-    const parsed = JSON.parse(ACCOUNTS_JSON) as ProxyAccount[]
+    let parsed = JSON.parse(ACCOUNTS_JSON) as any
+    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) {
+      parsed = parsed.accounts
+    }
     const accounts = Array.isArray(parsed) ? parsed : [parsed]
     for (const acc of accounts) {
       if (acc.id && acc.accessToken) {
@@ -94,7 +97,10 @@ if (ACCOUNTS_JSON) {
 if (loadedAccountsCount === 0 && fs.existsSync(ACCOUNTS_FILE)) {
   try {
     const content = fs.readFileSync(ACCOUNTS_FILE, 'utf-8')
-    const parsed = JSON.parse(content) as ProxyAccount[]
+    let parsed = JSON.parse(content) as any
+    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.accounts)) {
+      parsed = parsed.accounts
+    }
     const accounts = Array.isArray(parsed) ? parsed : [parsed]
     for (const acc of accounts) {
       if (acc.id && acc.accessToken) {
