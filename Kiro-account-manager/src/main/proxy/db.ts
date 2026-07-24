@@ -22,7 +22,6 @@ export async function initDB() {
     CREATE TABLE IF NOT EXISTS accounts (
       id VARCHAR PRIMARY KEY,
       email VARCHAR,
-      password VARCHAR,
       "machineId" VARCHAR,
       "accessToken" TEXT,
       "refreshToken" TEXT,
@@ -32,7 +31,6 @@ export async function initDB() {
       "authMethod" VARCHAR,
       provider VARCHAR,
       "expiresAt" BIGINT,
-      status VARCHAR,
       "isAvailable" BOOLEAN,
       "errorCount" INT,
       "lastUsed" BIGINT,
@@ -82,19 +80,18 @@ export async function upsertAccountToDB(acc: ProxyAccount): Promise<void> {
   if (!pool) return
   const query = `
     INSERT INTO accounts (
-      id, email, password, "machineId", "accessToken", "refreshToken", "clientId", "clientSecret",
-      region, "authMethod", provider, "expiresAt", status, "isAvailable", "errorCount", "lastUsed",
+      id, email, "machineId", "accessToken", "refreshToken", "clientId", "clientSecret",
+      region, "authMethod", provider, "expiresAt", "isAvailable", "errorCount", "lastUsed",
       "cooldownUntil", "quotaUsed", "quotaLimit", "quotaResetAt", "quotaExhaustedAt",
       "suspendedAt", "suspendReason", "suspendMessage"
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8,
-      $9, $10, $11, $12, $13, $14, $15, $16,
-      $17, $18, $19, $20, $21,
-      $22, $23, $24
+      $1, $2, $3, $4, $5, $6, $7,
+      $8, $9, $10, $11, $12, $13, $14,
+      $15, $16, $17, $18, $19,
+      $20, $21, $22
     )
     ON CONFLICT (id) DO UPDATE SET
       email = EXCLUDED.email,
-      password = EXCLUDED.password,
       "machineId" = EXCLUDED."machineId",
       "accessToken" = EXCLUDED."accessToken",
       "refreshToken" = EXCLUDED."refreshToken",
@@ -104,7 +101,6 @@ export async function upsertAccountToDB(acc: ProxyAccount): Promise<void> {
       "authMethod" = EXCLUDED."authMethod",
       provider = EXCLUDED.provider,
       "expiresAt" = EXCLUDED."expiresAt",
-      status = EXCLUDED.status,
       "isAvailable" = EXCLUDED."isAvailable",
       "errorCount" = EXCLUDED."errorCount",
       "lastUsed" = EXCLUDED."lastUsed",
@@ -118,8 +114,8 @@ export async function upsertAccountToDB(acc: ProxyAccount): Promise<void> {
       "suspendMessage" = EXCLUDED."suspendMessage"
   `
   const values = [
-    acc.id, acc.email, acc.password, acc.machineId, acc.accessToken, acc.refreshToken, acc.clientId, acc.clientSecret,
-    acc.region, acc.authMethod, acc.provider, acc.expiresAt, acc.status, acc.isAvailable, acc.errorCount, acc.lastUsed,
+    acc.id, acc.email, acc.machineId, acc.accessToken, acc.refreshToken, acc.clientId, acc.clientSecret,
+    acc.region, acc.authMethod, acc.provider, acc.expiresAt, acc.isAvailable, acc.errorCount, acc.lastUsed,
     acc.cooldownUntil, acc.quotaUsed, acc.quotaLimit, acc.quotaResetAt, acc.quotaExhaustedAt,
     acc.suspendedAt, acc.suspendReason, acc.suspendMessage
   ]

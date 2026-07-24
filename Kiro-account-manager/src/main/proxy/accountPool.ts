@@ -279,7 +279,7 @@ export class AccountPool {
   clearSuspended(accountId: string): void {
     const account = this.accounts.get(accountId)
     if (!account || !this.isSuspended(account)) return
-    this.accounts.set(accountId, {
+    const updated = {
       ...account,
       suspendedAt: undefined,
       suspendReason: undefined,
