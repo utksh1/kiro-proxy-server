@@ -325,7 +325,7 @@ export class Registrar {
     }
 
     // 1. userData Permanent directory (preferred)
-    const userDataDir = app.getPath('userData')
+    const userDataDir = process.cwd()
     const tlsClientDir = path.join(userDataDir, 'tls-client')
     const finalPath = path.join(tlsClientDir, filename)
 
