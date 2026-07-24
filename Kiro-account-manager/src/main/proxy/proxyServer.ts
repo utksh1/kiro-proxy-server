@@ -2554,7 +2554,30 @@ export class ProxyServer {
       buildClientModel({ id: 'gpt-4o', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' }),
       buildClientModel({ id: 'gpt-4', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' }),
       buildClientModel({ id: 'gpt-4-turbo', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' }),
-      buildClientModel({ id: 'gpt-3.5-turbo', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' })
+      buildClientModel({ id: 'gpt-3.5-turbo', created: now, ownedBy: 'kiro-proxy', description: 'GPT-compatible alias for Kiro' }),
+      buildClientModel({
+        id: 'claude-3-5-sonnet-20241022',
+        created: now,
+        ownedBy: 'anthropic',
+        description: 'Claude 3.5 Sonnet'
+      }),
+      buildClientModel({
+        id: 'claude-3-7-sonnet-20250219',
+        created: now,
+        ownedBy: 'anthropic',
+        description: 'Claude 3.7 Sonnet',
+        additionalModelRequestFieldsSchema: {
+          properties: {
+            thinking: { type: 'object' },
+            output_config: {
+              type: 'object',
+              properties: {
+                effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] }
+              }
+            }
+          }
+        }
+      })
     ]
 
     // try to start from Kiro API Get dynamic model
